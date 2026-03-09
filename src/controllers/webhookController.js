@@ -2,9 +2,14 @@
 
 const pool = require("../config/db");
 
+// Webhook bodies arrive as raw bytes; convert to JSON once in a shared helper.
+function parseWebhookOrder(req) {
+  return JSON.parse(req.body.toString("utf8"));
+}
+
 async function handleOrderCreated(req, res) {
   try {
-    const order = JSON.parse(req.body.toString("utf8"));
+    const order = parseWebhookOrder(req);
 
     const shopifyOrderId = order.id;
     const orderNumber = order.name || String(order.order_number || "");
@@ -83,6 +88,68 @@ async function handleOrderCreated(req, res) {
   }
 }
 
+async function handleOrderCancelled(req, res) {
+  try {
+    const order = parseWebhookOrder(req);
+    const shopifyOrderId = order.id;
+
+    if (!shopifyOrderId) {
+      // Return 200 to prevent Shopify retries for invalid payloads.
+      return res.status(200).send("Missing order id");
+    }
+
+    // Keep existing DB values when Shopify omits these optional fields.
+    await pool.query(
+      `
+      UPDATE orders
+      SET
+        order_status = 'canceled',
+        financial_status = COALESCE($2, financial_status),
+        fulfillment_status = COALESCE($3, fulfillment_status)
+      WHERE shopify_order_id = $1
+      `,
+      [
+        shopifyOrderId,
+        order.financial_status || null,
+        order.fulfillment_status || null,
+      ]
+    );
+
+    return res.status(200).send("Webhook received");
+  } catch (error) {
+    console.error("Webhook cancel error:", error);
+    return res.status(500).send("Server error");
+  }
+}
+
+async function handleOrderDeleted(req, res) {
+  try {
+    const order = parseWebhookOrder(req);
+    const shopifyOrderId = order.id;
+
+    if (!shopifyOrderId) {
+      // Return 200 to prevent Shopify retries for invalid payloads.
+      return res.status(200).send("Missing order id");
+    }
+
+    // Hard-delete the local order when Shopify sends orders/delete.
+    await pool.query(
+      `
+      DELETE FROM orders
+      WHERE shopify_order_id = $1
+      `,
+      [shopifyOrderId]
+    );
+
+    return res.status(200).send("Webhook received");
+  } catch (error) {
+    console.error("Webhook delete error:", error);
+    return res.status(500).send("Server error");
+  }
+}
+
 module.exports = {
   handleOrderCreated,
+  handleOrderCancelled,
+  handleOrderDeleted,
 };
