@@ -23,8 +23,24 @@ router.post(
   handleOrderCancelled
 );
 
+// Compatibility alias in case webhook URL is configured with US spelling.
+router.post(
+  "/orders/canceled",
+  express.raw({ type: "*/*" }),
+  verifyShopifyWebhook,
+  handleOrderCancelled
+);
+
 router.post(
   "/orders/delete",
+  express.raw({ type: "*/*" }),
+  verifyShopifyWebhook,
+  handleOrderDeleted
+);
+
+// Compatibility alias in case webhook URL is configured as /orders/deleted.
+router.post(
+  "/orders/deleted",
   express.raw({ type: "*/*" }),
   verifyShopifyWebhook,
   handleOrderDeleted
