@@ -1,7 +1,12 @@
 const express = require("express");
 const router = express.Router();
-const { getAllOrders } = require("../controllers/orderController");
+const {
+  getOrders,
+  assignDriver,
+  changeOrderStatus,
+} = require("../controllers/orderController");
 
-router.get("/", getAllOrders);
-
+router.get("/", getOrders);
+router.patch("/:id/assign-driver", assignDriver);
+router.patch("/:id/status", changeOrderStatus);
 module.exports = router;
