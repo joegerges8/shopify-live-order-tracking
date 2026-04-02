@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dispatcher Dashboard</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Dispatcher</h2>
+      <nav>
+        <a href="index.html">Orders</a>
+        <a href="drivers.html">Drivers</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <h1>Orders</h1>
+
+      <div class="table-container">
+        <table id="ordersTable">
+          <thead>
+            <tr>
+              <th>Order #</th>
+              <th>Customer</th>
+              <th>City</th>
+              <th>Total</th>
+              <th>Financial Status</th>
+              <th>Order Status</th>
+              <th>Assigned Driver</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="js/orders.js"></script>
+</body>
+</html>
