@@ -72,6 +72,7 @@ async function changeOrderStatus(req, res) {
       "PENDING",
       "ASSIGNED",
       "PICKED_UP",
+      "OUT_FOR_DELIVERY",
       "DELIVERED",
       "CANCELLED",
     ];
@@ -96,14 +97,16 @@ async function changeOrderStatus(req, res) {
       });
     }
 
-        if (
-      (status === "PICKED_UP" || status === "DELIVERED") &&
-      !order.assigned_driver_id
-    ) {
-      return res.status(400).json({
-        error: "Cannot update status to PICKED_UP or DELIVERED without assigning a driver first",
-      });
-    }
+    if (
+    (status === "PICKED_UP" ||
+      status === "OUT_FOR_DELIVERY" ||
+      status === "DELIVERED") &&
+    !order.assigned_driver_id
+  ) {
+    return res.status(400).json({
+      error: "Cannot update status to PICKED_UP, OUT_FOR_DELIVERY, or DELIVERED without assigning a driver first",
+    });
+  }
 
     const updatedOrder = await updateOrderStatus(orderId, status);
 

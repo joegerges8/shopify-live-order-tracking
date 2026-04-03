@@ -21,7 +21,7 @@ CREATE TABLE orders (
     total_price NUMERIC(10,2),
     financial_status VARCHAR(50),
     fulfillment_status VARCHAR(50),
-    order_status VARCHAR(30) DEFAULT 'CREATED',
+    order_status VARCHAR(30) DEFAULT 'PENDING',
     assigned_driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
     tracking_token TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
