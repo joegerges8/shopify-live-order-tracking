@@ -1,34 +1,14 @@
-const BASE_URL = "http://localhost:3000/api";
+const BASE_URL = "https://shopify-live-order-tracking-production.up.railway.app/api";
 
 export async function getOrders() {
   const response = await fetch(`${BASE_URL}/orders`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch orders");
-  }
+  if (!response.ok) throw new Error("Failed to fetch orders");
   return response.json();
 }
 
 export async function getDrivers() {
   const response = await fetch(`${BASE_URL}/drivers`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch drivers");
-  }
-  return response.json();
-}
-
-export async function createDriver(driverData) {
-  const response = await fetch(`${BASE_URL}/drivers`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(driverData),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to create driver");
-  }
-
+  if (!response.ok) throw new Error("Failed to fetch drivers");
   return response.json();
 }
 
@@ -41,10 +21,7 @@ export async function assignDriver(orderId, driverId) {
     body: JSON.stringify({ driverId }),
   });
 
-  if (!response.ok) {
-    throw new Error("Failed to assign driver");
-  }
-
+  if (!response.ok) throw new Error("Failed to assign driver");
   return response.json();
 }
 
@@ -57,11 +34,6 @@ export async function updateOrderStatus(orderId, status) {
     body: JSON.stringify({ status }),
   });
 
-  if (!response.ok) {
-    throw new Error("Failed to update status");
-  }
-
+  if (!response.ok) throw new Error("Failed to update status");
   return response.json();
 }
-
-
