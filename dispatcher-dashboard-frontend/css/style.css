@@ -256,3 +256,17 @@ button:hover {
   outline: none;
   border-color: #1e3a8a;
 }
+
+.status-assigned {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.danger-btn {
+  background: #dc2626;
+  color: white;
+}
+
+.danger-btn:hover {
+  background: #b91c1c;
+}

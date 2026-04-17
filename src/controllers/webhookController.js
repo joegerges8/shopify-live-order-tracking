@@ -2,9 +2,22 @@
 
 const pool = require("../config/db");
 
-// Webhook bodies arrive as raw bytes; convert to JSON once in a shared helper.
 function parseWebhookOrder(req) {
   return JSON.parse(req.body.toString("utf8"));
+}
+
+function getNoteAttribute(order, key) {
+  const noteAttributes = order.note_attributes || [];
+  const match = noteAttributes.find((item) => item.name === key);
+  return match ? match.value : null;
+}
+
+function parseNullableNumber(value) {
+  if (value === null || value === undefined) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed.length) return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
 }
 
 async function handleOrderCreated(req, res) {
@@ -16,9 +29,6 @@ async function handleOrderCreated(req, res) {
     const customerFirstName = order.customer?.first_name || null;
     const customerLastName = order.customer?.last_name || null;
 
-    // Try all common Shopify locations for a customer's phone number.
-    // Some stores only store phone on shipping/billing/default address,
-    // so we fall back through each of these fields before saving null.
     const customerPhone =
       order.phone ||
       order.customer?.phone ||
@@ -44,6 +54,14 @@ async function handleOrderCreated(req, res) {
     const financialStatus = order.financial_status || null;
     const fulfillmentStatus = order.fulfillment_status || null;
 
+    const customerLatitude = parseNullableNumber(getNoteAttribute(order, "latitude"));
+    const customerLongitude = parseNullableNumber(getNoteAttribute(order, "longitude"));
+    const customerAltitude = parseNullableNumber(getNoteAttribute(order, "altitude"));
+    const googleMapsLink =
+      getNoteAttribute(order, "google_maps_link") ||
+      getNoteAttribute(order, "manual_google_maps_link");
+    const addressNotes = getNoteAttribute(order, "address_notes");
+
     await pool.query(
       `
       INSERT INTO orders (
@@ -58,10 +76,15 @@ async function handleOrderCreated(req, res) {
         country,
         total_price,
         financial_status,
-        fulfillment_status
+        fulfillment_status,
+        customer_latitude,
+        customer_longitude,
+        customer_altitude,
+        google_maps_link,
+        address_notes
       )
       VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
       )
       ON CONFLICT (shopify_order_id) DO NOTHING
       `,
@@ -78,6 +101,11 @@ async function handleOrderCreated(req, res) {
         totalPrice,
         financialStatus,
         fulfillmentStatus,
+        customerLatitude,
+        customerLongitude,
+        customerAltitude,
+        googleMapsLink,
+        addressNotes,
       ]
     );
 
@@ -98,7 +126,6 @@ async function handleOrderCancelled(req, res) {
       return res.status(200).send("Missing order id");
     }
 
-    // Keep existing DB values when Shopify omits these optional fields.
     await pool.query(
       `
       UPDATE orders
@@ -132,7 +159,6 @@ async function handleOrderDeleted(req, res) {
       return res.status(200).send("Missing order id");
     }
 
-    // Hard-delete the local order when Shopify sends orders/delete.
     await pool.query(
       `
       DELETE FROM orders

@@ -37,3 +37,19 @@ export async function updateOrderStatus(orderId, status) {
   if (!response.ok) throw new Error("Failed to update status");
   return response.json();
 }
+
+export async function unassignDriver(orderId) {
+  const response = await fetch(`${API_BASE_URL}/orders/${orderId}/assign-driver`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ driver_id: null }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to unassign driver");
+  }
+
+  return response.json();
+}

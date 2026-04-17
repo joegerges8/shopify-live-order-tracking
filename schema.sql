@@ -24,7 +24,12 @@ CREATE TABLE orders (
     order_status VARCHAR(30) DEFAULT 'PENDING',
     assigned_driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
     tracking_token TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    customer_latitude NUMERIC(10,7),
+    customer_longitude NUMERIC(10,7),
+    customer_altitude NUMERIC(10,2),
+    google_maps_link TEXT,
+    address_notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 );
 
 CREATE TABLE location_updates (

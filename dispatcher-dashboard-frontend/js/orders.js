@@ -1,4 +1,4 @@
-import { getOrders, getDrivers, assignDriver, updateOrderStatus } from "./api.js";
+import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus } from "./api.js";
 
 const tableBody = document.querySelector("#ordersTable tbody");
 
@@ -14,31 +14,62 @@ const cityFilterEl = document.getElementById("cityFilter");
 let allOrders = [];
 let allDrivers = [];
 
+/* ===========================
+   DRIVER LOGIC
+=========================== */
+
+function getDriverActiveOrders(driverId, orders) {
+  return orders.filter(
+    (order) =>
+      Number(order.assigned_driver_id) === Number(driverId) &&
+      !["DELIVERED", "CANCELLED"].includes(order.order_status)
+  );
+}
+
+function isDriverBusy(driverId, orders) {
+  return getDriverActiveOrders(driverId, orders).length > 0;
+}
+
 function getDriverNameById(driverId, drivers) {
   if (!driverId) return "Not assigned";
 
-  const driver = drivers.find((d) => d.id === driverId);
+  const driver = drivers.find((d) => Number(d.id) === Number(driverId));
   return driver ? driver.full_name : `Driver #${driverId}`;
 }
 
-function createDriverOptions(drivers, selectedDriverId = null) {
+function createDriverOptions(drivers, orders, selectedDriverId = null) {
   let options = `<option value="">Select driver</option>`;
 
   drivers.forEach((driver) => {
-    const selected = driver.id === selectedDriverId ? "selected" : "";
-    options += `<option value="${driver.id}" ${selected}>${driver.full_name}</option>`;
+    const activeOrders = getDriverActiveOrders(driver.id, orders);
+    const activeCount = activeOrders.length;
+
+    const isSelected = Number(driver.id) === Number(selectedDriverId);
+
+    let label = `${driver.full_name} (Available)`;
+
+    if (activeCount > 0) {
+      label = `${driver.full_name} (Assigned to ${activeCount} order${activeCount > 1 ? "s" : ""})`;
+    }
+
+    options += `<option value="${driver.id}" ${isSelected ? "selected" : ""}>${label}</option>`;
   });
 
   return options;
 }
 
+/* ===========================
+   STATUS + UI
+=========================== */
+
 function createStatusOptions(currentStatus) {
   const statuses = [
     "PENDING",
+    "ASSIGNED",
     "PICKED_UP",
     "OUT_FOR_DELIVERY",
     "DELIVERED",
-    "CANCELLED"
+    "CANCELLED",
   ];
 
   let options = `<option value="">Select status</option>`;
@@ -57,17 +88,25 @@ function createStatusBadge(status) {
   return `<span class="status-badge status-${normalized}">${status}</span>`;
 }
 
+/* ===========================
+   STATS
+=========================== */
+
 function updateStats(orders, drivers) {
   const totalOrders = orders.length;
   const pendingOrders = orders.filter((order) => order.order_status === "PENDING").length;
   const deliveredOrders = orders.filter((order) => order.order_status === "DELIVERED").length;
-  const availableDrivers = drivers.filter((driver) => driver.status === "AVAILABLE").length;
+  const availableDrivers = drivers.filter((driver) => !isDriverBusy(driver.id, orders)).length;
 
   totalOrdersEl.textContent = totalOrders;
   pendingOrdersEl.textContent = pendingOrders;
   deliveredOrdersEl.textContent = deliveredOrders;
   availableDriversEl.textContent = availableDrivers;
 }
+
+/* ===========================
+   FILTERS
+=========================== */
 
 function populateCityFilter(orders) {
   const uniqueCities = [...new Set(orders.map((order) => order.city).filter(Boolean))];
@@ -80,55 +119,6 @@ function populateCityFilter(orders) {
     option.textContent = city;
     cityFilterEl.appendChild(option);
   });
-}
-
-function renderOrders(orders, drivers) {
-  tableBody.innerHTML = "";
-
-  if (!orders || orders.length === 0) {
-    tableBody.innerHTML = `
-      <tr>
-        <td colspan="9">No orders found.</td>
-      </tr>
-    `;
-    return;
-  }
-
-  orders.forEach((order) => {
-    const row = document.createElement("tr");
-
-    const assignedDriverName = getDriverNameById(order.assigned_driver_id, drivers);
-
-    row.innerHTML = `
-      <td>${order.order_number ?? ""}</td>
-      <td>${order.customer_first_name ?? ""} ${order.customer_last_name ?? ""}</td>
-      <td>${order.city ?? ""}</td>
-      <td>${order.total_price ?? ""}</td>
-      <td>${order.financial_status ?? ""}</td>
-      <td>${createStatusBadge(order.order_status)}</td>
-      <td>${assignedDriverName}</td>
-      <td>
-        <div class="action-group">
-          <select id="driver-${order.id}">
-            ${createDriverOptions(drivers, order.assigned_driver_id)}
-          </select>
-          <button class="small-btn" data-assign-order-id="${order.id}">Assign</button>
-        </div>
-      </td>
-      <td>
-        <div class="action-group">
-          <select id="status-${order.id}">
-            ${createStatusOptions(order.order_status)}
-          </select>
-          <button class="small-btn" data-status-order-id="${order.id}">Update</button>
-        </div>
-      </td>
-    `;
-
-    tableBody.appendChild(row);
-  });
-
-  attachEventListeners();
 }
 
 function applyFilters() {
@@ -151,15 +141,73 @@ function applyFilters() {
   renderOrders(filteredOrders, allDrivers);
 }
 
+/* ===========================
+   RENDER
+=========================== */
+
+function renderOrders(orders, drivers) {
+  tableBody.innerHTML = "";
+
+  if (!orders || orders.length === 0) {
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="9">No orders found.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  orders.forEach((order) => {
+    const row = document.createElement("tr");
+    const assignedDriverName = getDriverNameById(order.assigned_driver_id, drivers);
+
+    row.innerHTML = `
+      <td>${order.order_number ?? ""}</td>
+      <td>${order.customer_first_name ?? ""} ${order.customer_last_name ?? ""}</td>
+      <td>${order.city ?? ""}</td>
+      <td>${order.total_price ?? ""}</td>
+      <td>${order.financial_status ?? ""}</td>
+      <td>${createStatusBadge(order.order_status)}</td>
+      <td>${assignedDriverName}</td>
+      <td>
+        <div class="action-group">
+          <select id="driver-${order.id}">
+            ${createDriverOptions(drivers, allOrders, order.assigned_driver_id)}
+          </select>
+          <button class="small-btn" data-assign-order-id="${order.id}">Assign</button>
+          ${
+            order.assigned_driver_id
+              ? `<button class="small-btn danger-btn" data-unassign-order-id="${order.id}">Unassign</button>`
+              : ""
+          }
+        </div>
+      </td>
+      <td>
+        <div class="action-group">
+          <select id="status-${order.id}">
+            ${createStatusOptions(order.order_status)}
+          </select>
+          <button class="small-btn" data-status-order-id="${order.id}">Update</button>
+        </div>
+      </td>
+    `;
+
+    tableBody.appendChild(row);
+  });
+
+  attachEventListeners();
+}
+
+/* ===========================
+   LOAD DATA
+=========================== */
+
 async function loadOrders() {
   try {
     const [orders, drivers] = await Promise.all([getOrders(), getDrivers()]);
 
     allOrders = orders;
     allDrivers = drivers;
-
-    console.log("Orders:", orders);
-    console.log("Drivers:", drivers);
 
     updateStats(orders, drivers);
     populateCityFilter(orders);
@@ -174,8 +222,13 @@ async function loadOrders() {
   }
 }
 
+/* ===========================
+   EVENTS
+=========================== */
+
 function attachEventListeners() {
   const assignButtons = document.querySelectorAll("[data-assign-order-id]");
+  const unassignButtons = document.querySelectorAll("[data-unassign-order-id]");
   const statusButtons = document.querySelectorAll("[data-status-order-id]");
 
   assignButtons.forEach((button) => {
@@ -196,6 +249,21 @@ function attachEventListeners() {
       } catch (error) {
         console.error("Error assigning driver:", error);
         alert("Failed to assign driver.");
+      }
+    });
+  });
+
+  unassignButtons.forEach((button) => {
+    button.addEventListener("click", async () => {
+      const orderId = button.getAttribute("data-unassign-order-id");
+
+      try {
+        await unassignDriver(orderId);
+        alert("Driver unassigned successfully.");
+        await loadOrders();
+      } catch (error) {
+        console.error("Error unassigning driver:", error);
+        alert("Failed to unassign driver.");
       }
     });
   });
@@ -222,6 +290,10 @@ function attachEventListeners() {
     });
   });
 }
+
+/* ===========================
+   INIT
+=========================== */
 
 searchOrderEl.addEventListener("input", applyFilters);
 statusFilterEl.addEventListener("change", applyFilters);
