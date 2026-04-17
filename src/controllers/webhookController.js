@@ -60,7 +60,6 @@ async function handleOrderCreated(req, res) {
     const googleMapsLink =
       getNoteAttribute(order, "google_maps_link") ||
       getNoteAttribute(order, "manual_google_maps_link");
-    const addressNotes = getNoteAttribute(order, "address_notes");
 
     await pool.query(
       `
@@ -80,11 +79,10 @@ async function handleOrderCreated(req, res) {
         customer_latitude,
         customer_longitude,
         customer_altitude,
-        google_maps_link,
-        address_notes
+        google_maps_link
       )
       VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
       )
       ON CONFLICT (shopify_order_id) DO NOTHING
       `,
@@ -105,7 +103,6 @@ async function handleOrderCreated(req, res) {
         customerLongitude,
         customerAltitude,
         googleMapsLink,
-        addressNotes,
       ]
     );
 

@@ -28,8 +28,7 @@ CREATE TABLE orders (
     customer_longitude NUMERIC(10,7),
     customer_altitude NUMERIC(10,2),
     google_maps_link TEXT,
-    address_notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE location_updates (
