@@ -37,8 +37,26 @@ async function createDriver({ full_name, phone, password_hash, status = "AVAILAB
   return result.rows[0];
 }
 
+// Added in this change:
+// Used by /api/drivers/me to return a safe subset of driver fields
+// without returning password_hash.
+async function getPublicDriverById(driverId) {
+  const result = await pool.query(
+    `
+    SELECT id, full_name, phone, status, created_at
+    FROM drivers
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [driverId]
+  );
+
+  return result.rows[0];
+}
+
 module.exports = {
   getAllDrivers,
   getDriverByPhone,
   createDriver,
+  getPublicDriverById,
 };

@@ -53,9 +53,43 @@ async function updateOrderStatus(orderId, status) {
   return result.rows[0];
 }
 
+// Added in this change:
+// Driver app endpoints need to fetch only the orders assigned to the
+// authenticated driver.
+async function getOrdersByDriverId(driverId) {
+  const result = await pool.query(
+    `
+    SELECT *
+    FROM orders
+    WHERE assigned_driver_id = $1
+    ORDER BY created_at DESC
+    `,
+    [driverId]
+  );
+
+  return result.rows;
+}
+
+// Added in this change:
+// Stores a driver's live GPS ping for an order in the location_updates table.
+async function createLocationUpdate({ order_id, driver_id, latitude, longitude }) {
+  const result = await pool.query(
+    `
+    INSERT INTO location_updates (order_id, driver_id, latitude, longitude)
+    VALUES ($1, $2, $3, $4)
+    RETURNING *
+    `,
+    [order_id, driver_id, latitude, longitude]
+  );
+
+  return result.rows[0];
+}
+
 module.exports = {
   getAllOrders,
   getOrderById,
   assignDriverToOrder,
-  updateOrderStatus
+  updateOrderStatus,
+  getOrdersByDriverId,
+  createLocationUpdate,
 };
