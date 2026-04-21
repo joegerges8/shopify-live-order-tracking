@@ -42,6 +42,15 @@ app.use(
 );
 app.use(morgan("dev"));
 
+// Simple landing + health endpoints (useful for Railway/browser checks)
+app.get("/", (req, res) => {
+   res.status(200).type("text").send("OK");
+});
+
+app.get("/health", (req, res) => {
+   res.status(200).json({ status: "ok" });
+});
+
 // Shopify webhook route needs raw body for HMAC verification
 app.use("/webhooks/shopify", webhookRoutes);
 
