@@ -1,4 +1,8 @@
-const BASE_URL = "https://shopify-live-order-tracking-production.up.railway.app/api";
+// If served from Railway (recommended): use same-origin API.
+// If opened as a local file (file://): fall back to your Railway API domain.
+const FALLBACK_API_ORIGIN = "https://shopify-live-order-tracking-production.up.railway.app";
+const API_ORIGIN = window.location.protocol === "file:" ? FALLBACK_API_ORIGIN : window.location.origin;
+const BASE_URL = `${API_ORIGIN}/api`;
 
 export async function getOrders() {
   const response = await fetch(`${BASE_URL}/orders`);
@@ -39,12 +43,8 @@ export async function updateOrderStatus(orderId, status) {
 }
 
 export async function unassignDriver(orderId) {
-  const response = await fetch(`${API_BASE_URL}/orders/${orderId}/assign-driver`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ driver_id: null }),
+  const response = await fetch(`${BASE_URL}/orders/${orderId}/unassign-driver`, {
+    method: "PATCH",
   });
 
   if (!response.ok) {

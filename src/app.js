@@ -2,6 +2,8 @@
 //import Express framework (HTTP requests, routing, middleware,  responses)
 const express = require("express");
 
+const path = require("path");
+
 //Cross-Origin Resource Sharing, allows frontend apps to communicate with the backend.
 const cors = require("cors");
 
@@ -41,6 +43,11 @@ app.use(
    })
 );
 app.use(morgan("dev"));
+
+// Serve dispatcher dashboard static frontend from the same Railway domain.
+// Visit: https://<your-railway-domain>/dashboard/
+const dashboardDir = path.join(__dirname, "../dispatcher-dashboard-frontend");
+app.use("/dashboard", express.static(dashboardDir));
 
 // Simple landing + health endpoints (useful for Railway/browser checks)
 app.get("/", (req, res) => {
