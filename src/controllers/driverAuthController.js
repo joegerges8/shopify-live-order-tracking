@@ -16,7 +16,7 @@ const {
 function signDriverToken(driverId) {
   const secret = (process.env.JWT_SECRET || "").trim();
   if (!secret) {
-    throw new Error("Missing JWT_SECRET");
+    throw new Error("Server misconfigured: missing JWT_SECRET");
   }
 
   return jwt.sign(
@@ -63,7 +63,11 @@ async function signupDriver(req, res) {
     });
   } catch (error) {
     console.error("Error signing up driver:", error);
-    return res.status(500).json({ error: "Failed to sign up" });
+    const msg =
+      (error && error.message === "Server misconfigured: missing JWT_SECRET")
+        ? error.message
+        : "Failed to sign up";
+    return res.status(500).json({ error: msg });
   }
 }
 
@@ -99,7 +103,11 @@ async function loginDriver(req, res) {
     });
   } catch (error) {
     console.error("Error logging in driver:", error);
-    return res.status(500).json({ error: "Failed to log in" });
+    const msg =
+      (error && error.message === "Server misconfigured: missing JWT_SECRET")
+        ? error.message
+        : "Failed to log in";
+    return res.status(500).json({ error: msg });
   }
 }
 
