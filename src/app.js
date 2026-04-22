@@ -16,6 +16,7 @@ const morgan = require("morgan");
 const webhookRoutes = require("./routes/webhookRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const driverRoutes = require("./routes/driverRoutes");
+const mapsRoutes = require("./routes/mapsRoutes");
 //Create the Express application instance. This is the main app object that we will configure with middleware and routes.
 const app = express();
 
@@ -68,6 +69,7 @@ console.log("typeof orderRoutes =", typeof orderRoutes);
 //This sets up the routes for handling API requests related to orders. Any request to /api/orders will be handled by the orderRoutes router, which we imported at the top of the file.
 app.use("/api/orders", orderRoutes);
 app.use("/api/drivers", driverRoutes);
+app.use("/api/maps", mapsRoutes);
 //Export the configured Express app so it can be used by the server (e.g., in server.js).
 //This allows server.js to import the Express application and start the server.
 module.exports = app;
