@@ -2,6 +2,7 @@ const {
   getAllOrders,
   getOrderById,
   assignDriverToOrder,
+  unassignDriverFromOrder,
   updateOrderStatus,
 } = require("../services/orderService");
 
@@ -60,6 +61,26 @@ async function assignDriver(req, res) {
   } catch (error) {
     console.error("Error assigning driver:", error);
     return res.status(500).json({ error: "Failed to assign driver" });
+  }
+}
+
+async function unassignDriver(req, res) {
+  try {
+    const orderId = req.params.id;
+
+    const order = await getOrderById(orderId);
+
+    if (!order) {
+      return res.status(404).json({
+        error: "Order not found",
+      });
+    }
+
+    const updatedOrder = await unassignDriverFromOrder(orderId);
+    return res.json(updatedOrder);
+  } catch (error) {
+    console.error("Error unassigning driver:", error);
+    return res.status(500).json({ error: "Failed to unassign driver" });
   }
 }
 
@@ -123,5 +144,6 @@ async function changeOrderStatus(req, res) {
 module.exports = {
   getOrders,
   assignDriver,
+  unassignDriver,
   changeOrderStatus,
 };

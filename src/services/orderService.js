@@ -39,6 +39,21 @@ async function assignDriverToOrder(orderId, driverId) {
   return result.rows[0];
 }
 
+async function unassignDriverFromOrder(orderId) {
+  const result = await pool.query(
+    `
+    UPDATE orders
+    SET assigned_driver_id = NULL,
+        order_status = 'PENDING'
+    WHERE id = $1
+    RETURNING *
+    `,
+    [orderId]
+  );
+
+  return result.rows[0];
+}
+
 async function updateOrderStatus(orderId, status) {
   const result = await pool.query(
     `
@@ -89,6 +104,7 @@ module.exports = {
   getAllOrders,
   getOrderById,
   assignDriverToOrder,
+  unassignDriverFromOrder,
   updateOrderStatus,
   getOrdersByDriverId,
   createLocationUpdate,
