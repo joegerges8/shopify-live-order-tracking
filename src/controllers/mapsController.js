@@ -25,6 +25,8 @@ async function getDirections(req, res) {
     url.searchParams.set('origin', `${originLat},${originLng}`);
     url.searchParams.set('destination', `${destLat},${destLng}`);
     url.searchParams.set('mode', 'driving');
+    url.searchParams.set('departure_time', 'now');
+    url.searchParams.set('traffic_model', 'best_guess');
     url.searchParams.set('key', key);
 
     const controller = new AbortController();
@@ -53,12 +55,22 @@ async function getDirections(req, res) {
       });
     }
 
-    const polyline = data.routes[0]?.overview_polyline?.points;
+    const route = data.routes[0];
+    const polyline = route?.overview_polyline?.points;
     if (!polyline || typeof polyline !== 'string') {
       return res.status(400).json({ error: 'Missing polyline in Directions response' });
     }
 
-    return res.status(200).json({ polyline });
+    const leg = route?.legs?.[0];
+    return res.status(200).json({
+      polyline,
+      distanceText: leg?.distance?.text ?? '',
+      distanceMeters: leg?.distance?.value ?? 0,
+      durationText: leg?.duration?.text ?? '',
+      durationSeconds: leg?.duration?.value ?? 0,
+      durationInTrafficText: leg?.duration_in_traffic?.text ?? leg?.duration?.text ?? '',
+      durationInTrafficSeconds: leg?.duration_in_traffic?.value ?? leg?.duration?.value ?? 0,
+    });
   } catch (e) {
     return res.status(500).json({ error: 'Failed to get directions' });
   }
