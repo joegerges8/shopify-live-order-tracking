@@ -1,14 +1,14 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// Added in this change:
 // Driver authentication controller.
-// - POST /api/drivers/signup: creates a driver and returns a JWT
-// - POST /api/drivers/login: validates credentials and returns a JWT
-// - GET  /api/drivers/me: returns the authenticated driver's public profile
+// - POST /api/drivers/signup: creates a driver with email + phone + password and returns a JWT
+// - POST /api/drivers/login: validates phone + password credentials and returns a JWT
+// - GET  /api/drivers/me: returns the authenticated driver's public profile (no password_hash)
 
 const {
   getDriverByPhone,
+  getDriverByEmail,
   createDriver,
   getPublicDriverById,
 } = require("../services/driverService");
@@ -29,6 +29,9 @@ function signDriverToken(driverId) {
   );
 }
 
+// Added email as a required signup field.
+// Validates format here so we return a clear 400 before touching the DB,
+// rather than letting Postgres throw a constraint error the client can't parse.
 async function signupDriver(req, res) {
   try {
     const { full_name, email, phone, password } = req.body || {};
@@ -39,7 +42,7 @@ async function signupDriver(req, res) {
         .json({ error: "full_name, email, phone, and password are required" });
     }
 
-    // Basic email format check before hitting the database.
+    // Regex catches obvious typos (missing @, missing domain) before the DB unique check.
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "Invalid email address" });
     }
@@ -77,15 +80,17 @@ async function signupDriver(req, res) {
   }
 }
 
+// Login now uses email + password. Phone is no longer accepted here
+// (signup still collects phone for delivery/contact purposes).
 async function loginDriver(req, res) {
   try {
-    const { phone, password } = req.body || {};
+    const { email, password } = req.body || {};
 
-    if (!phone || !password) {
-      return res.status(400).json({ error: "phone and password are required" });
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
     }
 
-    const driver = await getDriverByPhone(phone);
+    const driver = await getDriverByEmail(email);
     if (!driver) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -97,6 +102,8 @@ async function loginDriver(req, res) {
 
     const token = signDriverToken(driver.id);
 
+    // email included so the profile screen can display it after login
+    // without needing a separate GET /me call.
     return res.json({
       token,
       driver: {

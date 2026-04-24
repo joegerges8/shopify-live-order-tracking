@@ -24,6 +24,24 @@ async function getDriverByPhone(phone) {
   return result.rows[0];
 }
 
+// Used by loginDriver — looks up the driver by email so the login form
+// can use email + password instead of phone + password.
+async function getDriverByEmail(email) {
+  const result = await pool.query(
+    `
+    SELECT *
+    FROM drivers
+    WHERE email = $1
+    LIMIT 1
+    `,
+    [email]
+  );
+
+  return result.rows[0];
+}
+
+// email is optional at the DB level (existing rows have NULL) but required by the
+// signup controller. Passing null explicitly avoids the column being omitted entirely.
 async function createDriver({ full_name, email, phone, password_hash, status = "AVAILABLE" }) {
   const result = await pool.query(
     `
@@ -37,9 +55,8 @@ async function createDriver({ full_name, email, phone, password_hash, status = "
   return result.rows[0];
 }
 
-// Added in this change:
-// Used by /api/drivers/me to return a safe subset of driver fields
-// without returning password_hash.
+// Used by GET /api/drivers/me — returns a safe subset of fields, never password_hash.
+// email is included so the profile screen can display it after a refresh.
 async function getPublicDriverById(driverId) {
   const result = await pool.query(
     `
@@ -57,6 +74,7 @@ async function getPublicDriverById(driverId) {
 module.exports = {
   getAllDrivers,
   getDriverByPhone,
+  getDriverByEmail,
   createDriver,
   getPublicDriverById,
 };
