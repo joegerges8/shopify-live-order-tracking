@@ -1,11 +1,13 @@
 CREATE TABLE drivers (
     id SERIAL PRIMARY KEY,
     full_name VARCHAR(150) NOT NULL,
+    email VARCHAR(150) UNIQUE,
     phone VARCHAR(30) UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     status VARCHAR(30) DEFAULT 'AVAILABLE',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+-- Migration for existing databases: ALTER TABLE drivers ADD COLUMN email VARCHAR(150) UNIQUE;
 
 CREATE TABLE orders (
     id SERIAL PRIMARY KEY,

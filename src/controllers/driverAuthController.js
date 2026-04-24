@@ -31,12 +31,17 @@ function signDriverToken(driverId) {
 
 async function signupDriver(req, res) {
   try {
-    const { full_name, phone, password } = req.body || {};
+    const { full_name, email, phone, password } = req.body || {};
 
-    if (!full_name || !phone || !password) {
+    if (!full_name || !email || !phone || !password) {
       return res
         .status(400)
-        .json({ error: "full_name, phone, and password are required" });
+        .json({ error: "full_name, email, phone, and password are required" });
+    }
+
+    // Basic email format check before hitting the database.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Invalid email address" });
     }
 
     const existing = await getDriverByPhone(phone);
@@ -50,6 +55,7 @@ async function signupDriver(req, res) {
 
     const created = await createDriver({
       full_name,
+      email,
       phone,
       password_hash,
       status: "AVAILABLE",
@@ -96,6 +102,7 @@ async function loginDriver(req, res) {
       driver: {
         id: driver.id,
         full_name: driver.full_name,
+        email: driver.email,
         phone: driver.phone,
         status: driver.status,
         created_at: driver.created_at,

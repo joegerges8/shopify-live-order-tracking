@@ -2,7 +2,7 @@ const pool = require("../config/db");
 
 async function getAllDrivers() {
   const result = await pool.query(`
-    SELECT id, full_name, phone, status, created_at
+    SELECT id, full_name, email, phone, status, created_at
     FROM drivers
     ORDER BY created_at DESC
   `);
@@ -24,14 +24,14 @@ async function getDriverByPhone(phone) {
   return result.rows[0];
 }
 
-async function createDriver({ full_name, phone, password_hash, status = "AVAILABLE" }) {
+async function createDriver({ full_name, email, phone, password_hash, status = "AVAILABLE" }) {
   const result = await pool.query(
     `
-    INSERT INTO drivers (full_name, phone, password_hash, status)
-    VALUES ($1, $2, $3, $4)
-    RETURNING id, full_name, phone, status, created_at
+    INSERT INTO drivers (full_name, email, phone, password_hash, status)
+    VALUES ($1, $2, $3, $4, $5)
+    RETURNING id, full_name, email, phone, status, created_at
     `,
-    [full_name, phone, password_hash, status]
+    [full_name, email || null, phone, password_hash, status]
   );
 
   return result.rows[0];
@@ -43,7 +43,7 @@ async function createDriver({ full_name, phone, password_hash, status = "AVAILAB
 async function getPublicDriverById(driverId) {
   const result = await pool.query(
     `
-    SELECT id, full_name, phone, status, created_at
+    SELECT id, full_name, email, phone, status, created_at
     FROM drivers
     WHERE id = $1
     LIMIT 1
