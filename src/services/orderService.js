@@ -78,17 +78,15 @@ async function unassignDriverFromOrder(orderId) {
 // record of when each delivery was completed. For any other status change
 // delivered_at is left unchanged (it keeps its previous value or stays NULL).
 async function updateOrderStatus(orderId, status) {
-  const result = await pool.query(
-    `
-    UPDATE orders
-    SET order_status = $1,
-        delivered_at = CASE WHEN $1 = 'DELIVERED' THEN NOW() ELSE delivered_at END
-    WHERE id = $2
-    RETURNING *
-    `,
-    [status, orderId]
-  );
+  // Only touch delivered_at when marking DELIVERED so non-DELIVERED updates
+  // don't reference the column at all (guards against missing-column errors
+  // on databases that haven't yet had the migration applied).
+  const query =
+    status === "DELIVERED"
+      ? `UPDATE orders SET order_status = $1, delivered_at = NOW() WHERE id = $2 RETURNING *`
+      : `UPDATE orders SET order_status = $1 WHERE id = $2 RETURNING *`;
 
+  const result = await pool.query(query, [status, orderId]);
   return result.rows[0];
 }
 
