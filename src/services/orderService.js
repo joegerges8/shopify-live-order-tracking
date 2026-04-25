@@ -91,8 +91,8 @@ async function getCompletedOrdersByDriverId(driverId) {
     FROM orders
     WHERE assigned_driver_id = $1
       AND order_status = 'DELIVERED'
-      AND delivered_at::date = CURRENT_DATE
-    ORDER BY delivered_at DESC
+    ORDER BY COALESCE(delivered_at, created_at) DESC
+    LIMIT 100
     `,
     [driverId]
   );
