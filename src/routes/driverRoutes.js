@@ -20,6 +20,7 @@ const {
 
 const {
   getMyOrders,
+  getMyCompletedOrders,
   postMyOrderLocation,
   patchMyOrderStatus,
 } = require("../controllers/driverSelfController");
@@ -34,6 +35,7 @@ router.post("/login", loginDriver);
 router.get("/me", requireDriverAuth, getMe);
 router.post("/me/password", requireDriverAuth, changePassword);
 router.get("/me/orders", requireDriverAuth, getMyOrders);
+router.get("/me/orders/completed", requireDriverAuth, getMyCompletedOrders);
 router.post("/me/orders/:id/location", requireDriverAuth, postMyOrderLocation);
 router.patch("/me/orders/:id/status", requireDriverAuth, patchMyOrderStatus);
 

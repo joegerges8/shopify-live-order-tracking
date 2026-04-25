@@ -1,5 +1,6 @@
 const {
   getOrdersByDriverId,
+  getCompletedOrdersByDriverId,
   getOrderById,
   updateOrderStatus,
   createLocationUpdate,
@@ -18,6 +19,16 @@ async function getMyOrders(req, res) {
   } catch (error) {
     console.error("Error fetching driver orders:", error);
     return res.status(500).json({ error: "Failed to fetch orders" });
+  }
+}
+
+async function getMyCompletedOrders(req, res) {
+  try {
+    const orders = await getCompletedOrdersByDriverId(req.driverId);
+    return res.json(orders);
+  } catch (error) {
+    console.error("Error fetching completed orders:", error);
+    return res.status(500).json({ error: "Failed to fetch completed orders" });
   }
 }
 
@@ -106,6 +117,7 @@ async function patchMyOrderStatus(req, res) {
 
 module.exports = {
   getMyOrders,
+  getMyCompletedOrders,
   postMyOrderLocation,
   patchMyOrderStatus,
 };

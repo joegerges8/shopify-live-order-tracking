@@ -30,8 +30,10 @@ CREATE TABLE orders (
     customer_longitude NUMERIC(10,7),
     customer_altitude NUMERIC(10,2),
     google_maps_link TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    delivered_at TIMESTAMP
 );
+-- Migration for existing databases: ALTER TABLE orders ADD COLUMN delivered_at TIMESTAMP;
 
 CREATE TABLE location_updates (
     id SERIAL PRIMARY KEY,

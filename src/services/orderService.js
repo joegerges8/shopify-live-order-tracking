@@ -58,7 +58,8 @@ async function updateOrderStatus(orderId, status) {
   const result = await pool.query(
     `
     UPDATE orders
-    SET order_status = $1
+    SET order_status = $1,
+        delivered_at = CASE WHEN $1 = 'DELIVERED' THEN NOW() ELSE delivered_at END
     WHERE id = $2
     RETURNING *
     `,
@@ -68,16 +69,30 @@ async function updateOrderStatus(orderId, status) {
   return result.rows[0];
 }
 
-// Added in this change:
-// Driver app endpoints need to fetch only the orders assigned to the
-// authenticated driver.
 async function getOrdersByDriverId(driverId) {
   const result = await pool.query(
     `
     SELECT *
     FROM orders
     WHERE assigned_driver_id = $1
+      AND order_status NOT IN ('DELIVERED', 'CANCELLED')
     ORDER BY created_at DESC
+    `,
+    [driverId]
+  );
+
+  return result.rows;
+}
+
+async function getCompletedOrdersByDriverId(driverId) {
+  const result = await pool.query(
+    `
+    SELECT *
+    FROM orders
+    WHERE assigned_driver_id = $1
+      AND order_status = 'DELIVERED'
+      AND delivered_at::date = CURRENT_DATE
+    ORDER BY delivered_at DESC
     `,
     [driverId]
   );
@@ -107,5 +122,6 @@ module.exports = {
   unassignDriverFromOrder,
   updateOrderStatus,
   getOrdersByDriverId,
+  getCompletedOrdersByDriverId,
   createLocationUpdate,
 };
