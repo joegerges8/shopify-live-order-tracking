@@ -300,3 +300,7 @@ statusFilterEl.addEventListener("change", applyFilters);
 cityFilterEl.addEventListener("change", applyFilters);
 
 loadOrders();
+
+// Auto-refresh every 30 seconds so dispatchers see status changes
+// pushed by the driver app (PICKED_UP, DELIVERED) without a manual page reload.
+setInterval(loadOrders, 30_000);
