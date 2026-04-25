@@ -48,10 +48,16 @@ async function getDirections(req, res) {
     }
 
     if (!data || data.status !== 'OK' || !Array.isArray(data.routes) || data.routes.length === 0) {
+      // Include Google's own status and error_message so the client can show a
+      // meaningful reason (e.g. REQUEST_DENIED means the API key is wrong or
+      // the Directions API is not enabled; ZERO_RESULTS means no road route exists).
+      const googleStatus = data?.status ?? 'UNKNOWN';
+      const googleMsg = data?.error_message ?? '';
+      const detail = googleMsg ? ` (${googleStatus}: ${googleMsg})` : ` (${googleStatus})`;
       return res.status(400).json({
-        error: 'No route returned from Google Directions API',
-        status: data?.status,
-        message: data?.error_message,
+        error: `No route returned from Google Directions API${detail}`,
+        status: googleStatus,
+        message: googleMsg,
       });
     }
 
