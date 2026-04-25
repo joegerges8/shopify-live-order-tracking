@@ -83,7 +83,7 @@ async function updateOrderStatus(orderId, status) {
   // on databases that haven't yet had the migration applied).
   const query =
     status === "DELIVERED"
-      ? `UPDATE orders SET order_status = $1, delivered_at = NOW() WHERE id = $2 RETURNING *`
+      ? `UPDATE orders SET order_status = $1, delivered_at = NOW(), financial_status = 'paid' WHERE id = $2 RETURNING *`
       : `UPDATE orders SET order_status = $1 WHERE id = $2 RETURNING *`;
 
   const result = await pool.query(query, [status, orderId]);
