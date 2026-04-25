@@ -5,6 +5,9 @@ const jwt = require("jsonwebtoken");
 // - POST /api/drivers/signup: creates a driver with email + phone + password and returns a JWT
 // - POST /api/drivers/login: validates phone + password credentials and returns a JWT
 // - GET  /api/drivers/me: returns the authenticated driver's public profile (no password_hash)
+// - POST /api/drivers/me/password: allows a logged-in driver to change their password (added to fix
+//   the broken change-password feature — previously the UI showed a fake success without calling
+//   any API, and no backend endpoint existed, so the password was never actually updated)
 
 const {
   getDriverByPhone,
@@ -142,10 +145,24 @@ async function getMe(req, res) {
   }
 }
 
+// Added to fix the change-password feature.
+// Root cause of the bug: the Flutter UI had a TODO stub that showed a fake "Password updated"
+// success message after an 800 ms delay without ever calling the backend, and this endpoint
+// did not exist at all, so the password in the database was never changed.
+//
+// Fix — this handler does four things in order:
+//   1. Validates that both current_password and new_password were sent in the request body.
+//   2. Looks up the driver's full database row (which includes the stored bcrypt hash) using
+//      their driver ID from the JWT token that requireDriverAuth already verified.
+//   3. Uses bcrypt.compare() to check that current_password matches the stored hash — this
+//      prevents any logged-in driver from changing to a new password without knowing the old one.
+//   4. Hashes the new password with bcrypt (salt rounds = 10, same as signup) and saves it to
+//      the database via updateDriverPassword(), so future logins use the new hash correctly.
 async function changePassword(req, res) {
   try {
     const { current_password, new_password } = req.body || {};
 
+    // Step 1: reject the request early if either field is missing.
     if (!current_password || !new_password) {
       return res.status(400).json({ error: "current_password and new_password are required" });
     }
@@ -154,18 +171,26 @@ async function changePassword(req, res) {
       return res.status(400).json({ error: "new_password must be at least 6 characters" });
     }
 
+    // Step 2: get the driver's public profile first (to retrieve their email),
+    // then re-fetch the full row so we have the password_hash for comparison.
+    // getPublicDriverById intentionally omits password_hash for safety, so we need
+    // a second query via getDriverByEmail to get the full row.
     const driver = await getPublicDriverById(req.driverId);
     if (!driver) {
       return res.status(404).json({ error: "Driver not found" });
     }
 
-    // Fetch the full row (including password_hash) to verify current password.
+    // Step 3: verify the current password against the stored bcrypt hash.
+    // bcrypt.compare() is safe even if the hash is from a different salt round
+    // because the salt is embedded inside the hash string itself.
     const fullDriver = await getDriverByEmail(driver.email);
     const ok = await bcrypt.compare(current_password, fullDriver.password_hash);
     if (!ok) {
       return res.status(401).json({ error: "Current password is incorrect" });
     }
 
+    // Step 4: hash the new password and persist it.
+    // Using the same salt rounds (10) as signup so the stored format stays consistent.
     const newHash = await bcrypt.hash(new_password, 10);
     await updateDriverPassword(req.driverId, newHash);
 

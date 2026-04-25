@@ -71,6 +71,10 @@ async function getPublicDriverById(driverId) {
   return result.rows[0];
 }
 
+// Added to support the changePassword controller.
+// Overwrites the password_hash column for the given driver with a new bcrypt hash.
+// The caller (changePassword in driverAuthController) is responsible for verifying
+// the current password and hashing the new one before calling this function.
 async function updateDriverPassword(driverId, newPasswordHash) {
   await pool.query(
     `UPDATE drivers SET password_hash = $1 WHERE id = $2`,
