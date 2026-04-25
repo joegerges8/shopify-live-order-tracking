@@ -71,10 +71,18 @@ async function getPublicDriverById(driverId) {
   return result.rows[0];
 }
 
+async function updateDriverPassword(driverId, newPasswordHash) {
+  await pool.query(
+    `UPDATE drivers SET password_hash = $1 WHERE id = $2`,
+    [newPasswordHash, driverId]
+  );
+}
+
 module.exports = {
   getAllDrivers,
   getDriverByPhone,
   getDriverByEmail,
   createDriver,
   getPublicDriverById,
+  updateDriverPassword,
 };

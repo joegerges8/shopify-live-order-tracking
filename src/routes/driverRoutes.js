@@ -13,6 +13,7 @@ const {
   signupDriver,
   loginDriver,
   getMe,
+  changePassword,
 } = require("../controllers/driverAuthController");
 
 const {
@@ -29,6 +30,7 @@ const {
 router.post("/signup", signupDriver);
 router.post("/login", loginDriver);
 router.get("/me", requireDriverAuth, getMe);
+router.post("/me/password", requireDriverAuth, changePassword);
 router.get("/me/orders", requireDriverAuth, getMyOrders);
 router.post("/me/orders/:id/location", requireDriverAuth, postMyOrderLocation);
 router.patch("/me/orders/:id/status", requireDriverAuth, patchMyOrderStatus);

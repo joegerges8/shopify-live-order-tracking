@@ -11,6 +11,7 @@ const {
   getDriverByEmail,
   createDriver,
   getPublicDriverById,
+  updateDriverPassword,
 } = require("../services/driverService");
 
 function signDriverToken(driverId) {
@@ -141,8 +142,43 @@ async function getMe(req, res) {
   }
 }
 
+async function changePassword(req, res) {
+  try {
+    const { current_password, new_password } = req.body || {};
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: "current_password and new_password are required" });
+    }
+
+    if (new_password.length < 6) {
+      return res.status(400).json({ error: "new_password must be at least 6 characters" });
+    }
+
+    const driver = await getPublicDriverById(req.driverId);
+    if (!driver) {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+
+    // Fetch the full row (including password_hash) to verify current password.
+    const fullDriver = await getDriverByEmail(driver.email);
+    const ok = await bcrypt.compare(current_password, fullDriver.password_hash);
+    if (!ok) {
+      return res.status(401).json({ error: "Current password is incorrect" });
+    }
+
+    const newHash = await bcrypt.hash(new_password, 10);
+    await updateDriverPassword(req.driverId, newHash);
+
+    return res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    console.error("Error changing password:", error);
+    return res.status(500).json({ error: "Failed to change password" });
+  }
+}
+
 module.exports = {
   signupDriver,
   loginDriver,
   getMe,
+  changePassword,
 };
