@@ -1,5 +1,17 @@
+// orderService.js
+//
+// Data-access layer for the orders table in the PostgreSQL database.
+// All SQL queries go here — controllers call these functions instead of
+// writing SQL directly, which keeps the query logic in one place and makes
+// it easier to test or swap the database in future.
+//
+// Uses a connection pool (pg Pool) so the app can handle many concurrent
+// requests without opening a new database connection for every query.
+
 const pool = require("../config/db");
 
+// Returns every order in the system, newest first.
+// Used by the dispatcher/admin panel to see all orders.
 async function getAllOrders() {
   const result = await pool.query(`
     SELECT *
@@ -10,6 +22,8 @@ async function getAllOrders() {
   return result.rows;
 }
 
+// Returns a single order by its primary key.
+// Used for ownership checks before allowing status updates or location posts.
 async function getOrderById(orderId) {
   const result = await pool.query(
     `
@@ -21,9 +35,11 @@ async function getOrderById(orderId) {
     [orderId]
   );
 
-  return result.rows[0];
+  return result.rows[0]; // undefined if not found — callers check for this.
 }
 
+// Assigns a driver to an order and sets status to ASSIGNED.
+// Called by the dispatcher when they choose which driver handles an order.
 async function assignDriverToOrder(orderId, driverId) {
   const result = await pool.query(
     `
@@ -39,6 +55,8 @@ async function assignDriverToOrder(orderId, driverId) {
   return result.rows[0];
 }
 
+// Removes the driver assignment and resets the order to PENDING.
+// Called by the dispatcher if a driver needs to be swapped out.
 async function unassignDriverFromOrder(orderId) {
   const result = await pool.query(
     `
@@ -54,6 +72,11 @@ async function unassignDriverFromOrder(orderId) {
   return result.rows[0];
 }
 
+// Updates the status of an order (e.g. PICKED_UP → DELIVERED).
+// The CASE expression automatically stamps the delivered_at timestamp
+// the moment the status changes to 'DELIVERED', so we have an accurate
+// record of when each delivery was completed. For any other status change
+// delivered_at is left unchanged (it keeps its previous value or stays NULL).
 async function updateOrderStatus(orderId, status) {
   const result = await pool.query(
     `
@@ -69,6 +92,10 @@ async function updateOrderStatus(orderId, status) {
   return result.rows[0];
 }
 
+// Returns all orders that are still active (not yet delivered or cancelled)
+// for a given driver. This powers the All / Pending / Active tabs in the
+// driver app. Excluding DELIVERED and CANCELLED orders keeps the list clean —
+// completed orders are fetched separately by getCompletedOrdersByDriverId.
 async function getOrdersByDriverId(driverId) {
   const result = await pool.query(
     `
@@ -84,6 +111,16 @@ async function getOrdersByDriverId(driverId) {
   return result.rows;
 }
 
+// Returns all orders that have been successfully delivered by this driver,
+// ordered by the most recently delivered first.
+//
+// COALESCE(delivered_at, created_at) is used for ordering so that orders
+// delivered before the delivered_at column was added to the database (via the
+// migration: ALTER TABLE orders ADD COLUMN delivered_at TIMESTAMP) still sort
+// sensibly by their creation date instead of failing.
+//
+// LIMIT 100 prevents the query from returning an unbounded result set if a
+// driver has been working for a very long time.
 async function getCompletedOrdersByDriverId(driverId) {
   const result = await pool.query(
     `
@@ -100,8 +137,9 @@ async function getCompletedOrdersByDriverId(driverId) {
   return result.rows;
 }
 
-// Added in this change:
-// Stores a driver's live GPS ping for an order in the location_updates table.
+// Inserts a GPS coordinate ping into the location_updates table.
+// Called by the driver app periodically while a delivery is in progress so
+// the customer's live-tracking page can show the driver's current position.
 async function createLocationUpdate({ order_id, driver_id, latitude, longitude }) {
   const result = await pool.query(
     `
