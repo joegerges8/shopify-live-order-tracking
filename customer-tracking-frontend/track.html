@@ -360,14 +360,14 @@
       }
     }
 
-    // ── Bootstrap: data loading starts immediately, independent of Maps ────
-
-    document.addEventListener('DOMContentLoaded', async () => {
+    // ── Bootstrap: script is at bottom of <body> so DOM is already ready.
+    // Using an IIFE instead of DOMContentLoaded which may have already fired.
+    (async () => {
       if (!token) { showError(); return; }
       await fetchTracking();
       hideLoading();
       pollInterval = setInterval(fetchTracking, 10_000);
-    });
+    })();
 
     // Called by Google Maps when its script is ready.
     // Initialises the map and applies whatever data was already fetched.
