@@ -168,22 +168,7 @@
       color: #000;
     }
 
-    #driver-phone-row {
-      display: flex;
-      align-items: center;
-      margin-top: 3px;
-    }
-
-    #driver-phone {
-      font-size: 14px;
-      color: #6b6b6b;
-      font-weight: 400;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .driver-actions {
+.driver-actions {
       display: flex;
       gap: 10px;
       flex-shrink: 0;
@@ -356,9 +341,6 @@
       </div>
       <div class="driver-info">
         <div id="driver-name">Waiting for driver...</div>
-        <div id="driver-phone-row">
-          <span id="driver-phone"></span>
-        </div>
       </div>
       <div class="driver-actions">
         <a id="driver-phone-link" href="#" aria-label="Call driver">
@@ -662,18 +644,15 @@
 
       document.getElementById('driver-name').textContent =
         data.driver ? `Driver name: ${data.driver.name}` : 'Waiting for driver...';
-      const phoneSpan      = document.getElementById('driver-phone');
-      const phoneLink      = document.getElementById('driver-phone-link');
-      const whatsappLink   = document.getElementById('driver-whatsapp-link');
+      const phoneLink    = document.getElementById('driver-phone-link');
+      const whatsappLink = document.getElementById('driver-whatsapp-link');
       if (data.driver && data.driver.phone) {
         const rawPhone = data.driver.phone.replace(/\D/g, '');
-        phoneSpan.textContent    = `Phone number: ${data.driver.phone}`;
-        phoneLink.href           = `tel:${data.driver.phone}`;
-        whatsappLink.href        = `https://wa.me/${rawPhone}`;
+        phoneLink.href             = `tel:${data.driver.phone}`;
+        whatsappLink.href          = `https://wa.me/${rawPhone}`;
         phoneLink.style.display    = 'inline-flex';
         whatsappLink.style.display = 'inline-flex';
       } else {
-        phoneSpan.textContent      = '';
         phoneLink.style.display    = 'none';
         whatsappLink.style.display = 'none';
       }
