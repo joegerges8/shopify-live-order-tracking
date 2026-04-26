@@ -78,9 +78,17 @@ async function unassignDriverFromOrder(orderId) {
 // record of when each delivery was completed. For any other status change
 // delivered_at is left unchanged (it keeps its previous value or stays NULL).
 async function updateOrderStatus(orderId, status) {
-  // Only touch delivered_at when marking DELIVERED so non-DELIVERED updates
-  // don't reference the column at all (guards against missing-column errors
-  // on databases that haven't yet had the migration applied).
+  // COD (Cash on Delivery) payment logic:
+  // When the driver marks an order as DELIVERED, it means they have physically
+  // collected the cash from the customer at the door. At that exact moment,
+  // the order transitions from financially "pending" (unpaid) to "paid".
+  // We therefore update financial_status = 'paid' in the same SQL statement
+  // as the delivery confirmation — this keeps the two state changes atomic
+  // (both happen together or neither does), so the database is never in an
+  // inconsistent state where an order is DELIVERED but still shows as unpaid.
+  //
+  // For any other status change (e.g. PICKED_UP), we only update order_status
+  // and leave financial_status untouched.
   const query =
     status === "DELIVERED"
       ? `UPDATE orders SET order_status = $1, delivered_at = NOW(), financial_status = 'paid' WHERE id = $2 RETURNING *`
@@ -151,6 +159,46 @@ async function createLocationUpdate({ order_id, driver_id, latitude, longitude }
   return result.rows[0];
 }
 
+// Returns order info + latest driver GPS ping for the customer tracking page.
+// The token acts as a bearer credential — no login required.
+// Uses a LATERAL join to get the single most recent location_updates row
+// without a separate query round-trip.
+async function getOrderByTrackingToken(token) {
+  const result = await pool.query(
+    `
+    SELECT
+      o.id,
+      o.order_number,
+      o.order_status,
+      o.customer_first_name,
+      o.customer_last_name,
+      o.shipping_address,
+      o.city,
+      o.customer_latitude,
+      o.customer_longitude,
+      o.delivered_at,
+      d.full_name  AS driver_name,
+      lu.latitude  AS driver_lat,
+      lu.longitude AS driver_lng,
+      lu.created_at AS location_updated_at
+    FROM orders o
+    LEFT JOIN drivers d ON d.id = o.assigned_driver_id
+    LEFT JOIN LATERAL (
+      SELECT latitude, longitude, created_at
+      FROM location_updates
+      WHERE order_id = o.id
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) lu ON TRUE
+    WHERE o.tracking_token = $1
+    LIMIT 1
+    `,
+    [token]
+  );
+
+  return result.rows[0];
+}
+
 module.exports = {
   getAllOrders,
   getOrderById,
@@ -160,4 +208,5 @@ module.exports = {
   getOrdersByDriverId,
   getCompletedOrdersByDriverId,
   createLocationUpdate,
+  getOrderByTrackingToken,
 };

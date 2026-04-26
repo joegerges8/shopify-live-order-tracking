@@ -17,6 +17,7 @@ const webhookRoutes = require("./routes/webhookRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const driverRoutes = require("./routes/driverRoutes");
 const mapsRoutes = require("./routes/mapsRoutes");
+const trackingRoutes = require("./routes/trackingRoutes");
 //Create the Express application instance. This is the main app object that we will configure with middleware and routes.
 const app = express();
 
@@ -70,6 +71,11 @@ console.log("typeof orderRoutes =", typeof orderRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/drivers", driverRoutes);
 app.use("/api/maps", mapsRoutes);
+app.use("/api/track", trackingRoutes);
+
+// Serve customer tracking page at /track/
+const trackingDir = path.join(__dirname, "../customer-tracking-frontend");
+app.use("/track", express.static(trackingDir));
 //Export the configured Express app so it can be used by the server (e.g., in server.js).
 //This allows server.js to import the Express application and start the server.
 module.exports = app;
