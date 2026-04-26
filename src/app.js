@@ -42,6 +42,35 @@ app.use(cors());
 app.use(
    helmet({
       frameguard: false,
+      contentSecurityPolicy: {
+         directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: [
+               "'self'",
+               "'unsafe-inline'",
+               "https://maps.googleapis.com",
+               "https://maps.gstatic.com",
+            ],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: [
+               "'self'",
+               "data:",
+               "https://maps.googleapis.com",
+               "https://maps.gstatic.com",
+               "https://maps.google.com",
+               "https://*.google.com",
+               "https://*.googleapis.com",
+               "https://*.gstatic.com",
+            ],
+            connectSrc: [
+               "'self'",
+               "https://maps.googleapis.com",
+               "https://*.googleapis.com",
+               "https://*.gstatic.com",
+            ],
+            fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+         },
+      },
    })
 );
 app.use(morgan("dev"));

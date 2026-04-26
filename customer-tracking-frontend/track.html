@@ -276,7 +276,7 @@
     function applyMapData(data) {
       if (!map) return;
 
-      if (data.customer_latitude && data.customer_longitude) {
+      if (data.customer_latitude != null && data.customer_longitude != null) {
         const destPos = { lat: Number(data.customer_latitude), lng: Number(data.customer_longitude) };
         if (!destinationMarker) {
           destinationMarker = new google.maps.Marker({
@@ -285,6 +285,10 @@
             title: 'Your address',
             icon: { url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' },
           });
+        }
+        if (!driverMarker && !data.driver_location) {
+          map.setCenter(destPos);
+          map.setZoom(15);
         }
       }
 
