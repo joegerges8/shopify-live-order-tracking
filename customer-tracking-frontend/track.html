@@ -152,18 +152,33 @@
     .driver-info { flex: 1; overflow: hidden; }
 
     #driver-name {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 600;
       color: #111827;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    }
+
+    #driver-phone-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 3px;
     }
 
     #driver-phone {
       font-size: 13px;
       color: #6b7280;
-      margin-top: 2px;
+    }
+
+    #driver-phone-link {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      background: #16a34a;
+      border-radius: 50%;
+      flex-shrink: 0;
+      text-decoration: none;
     }
 
     /* ── Loading ── */
@@ -296,7 +311,14 @@
       </div>
       <div class="driver-info">
         <div id="driver-name">Waiting for driver...</div>
-        <div id="driver-phone"></div>
+        <div id="driver-phone-row">
+          <span id="driver-phone"></span>
+          <a id="driver-phone-link" href="#" aria-label="Call driver">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.61 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.08 6.08l.97-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+          </a>
+        </div>
       </div>
     </div>
   </div>
@@ -414,61 +436,43 @@
       }
     }
 
-    // ── Car SVG marker ─────────────────────────────────────────────────────
+    // ── Motorcycle SVG marker ──────────────────────────────────────────────
 
     function makeCarIcon(rotation) {
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
         <g transform="rotate(${rotation} 32 32)">
-          <!-- Drop shadow -->
-          <ellipse cx="32" cy="55" rx="13" ry="4" fill="rgba(0,0,0,0.18)"/>
-          <!-- Body -->
-          <path d="M22 8 Q32 5 42 8 L44 16 L45 42 Q45 52 32 54 Q19 52 19 42 L20 16 Z" fill="#1d4ed8"/>
-          <!-- Hood panel -->
-          <path d="M23 8 Q32 5.5 41 8 L43 15 L38 18 Q32 16 26 18 L21 15 Z" fill="#2563eb"/>
-          <!-- Windshield -->
-          <path d="M26 18 Q32 16 38 18 L39 28 Q32 26 25 28 Z" fill="#bfdbfe" opacity="0.9"/>
-          <!-- Cabin roof -->
-          <rect x="25" y="28" width="14" height="12" rx="1" fill="#1e3a8a"/>
-          <!-- Rear window -->
-          <path d="M26 40 Q32 41.5 38 40 L39 48 Q32 50 25 48 Z" fill="#bfdbfe" opacity="0.75"/>
-          <!-- Trunk -->
-          <path d="M23 48 Q32 50.5 41 48 L43 54 Q32 57 21 54 Z" fill="#1d4ed8"/>
-          <!-- Left mirror -->
-          <path d="M20 20 L15 22 L15 25 L19 24 Z" fill="#1d4ed8"/>
-          <!-- Right mirror -->
-          <path d="M44 20 L49 22 L49 25 L45 24 Z" fill="#1d4ed8"/>
-          <!-- Headlights left -->
-          <rect x="22" y="6"  width="6" height="4" rx="1.5" fill="#fef9c3"/>
-          <!-- Headlights right -->
-          <rect x="36" y="6"  width="6" height="4" rx="1.5" fill="#fef9c3"/>
-          <!-- Headlight glow left -->
-          <rect x="23" y="7"  width="4" height="2" rx="1" fill="#fde047"/>
-          <!-- Headlight glow right -->
-          <rect x="37" y="7"  width="4" height="2" rx="1" fill="#fde047"/>
-          <!-- Taillights left -->
-          <rect x="22" y="53" width="6" height="4" rx="1.5" fill="#991b1b"/>
-          <!-- Taillights right -->
-          <rect x="36" y="53" width="6" height="4" rx="1.5" fill="#991b1b"/>
-          <!-- Taillight glow left -->
-          <rect x="23" y="54" width="4" height="2" rx="1" fill="#ef4444"/>
-          <!-- Taillight glow right -->
-          <rect x="37" y="54" width="4" height="2" rx="1" fill="#ef4444"/>
-          <!-- Wheel FL -->
-          <rect x="11" y="14" width="8" height="13" rx="3" fill="#111827"/>
-          <rect x="13" y="16" width="4" height="9"  rx="1.5" fill="#374151"/>
-          <circle cx="15" cy="20.5" r="2" fill="#6b7280"/>
-          <!-- Wheel FR -->
-          <rect x="45" y="14" width="8" height="13" rx="3" fill="#111827"/>
-          <rect x="47" y="16" width="4" height="9"  rx="1.5" fill="#374151"/>
-          <circle cx="49" cy="20.5" r="2" fill="#6b7280"/>
-          <!-- Wheel RL -->
-          <rect x="11" y="37" width="8" height="13" rx="3" fill="#111827"/>
-          <rect x="13" y="39" width="4" height="9"  rx="1.5" fill="#374151"/>
-          <circle cx="15" cy="43.5" r="2" fill="#6b7280"/>
-          <!-- Wheel RR -->
-          <rect x="45" y="37" width="8" height="13" rx="3" fill="#111827"/>
-          <rect x="47" y="39" width="4" height="9"  rx="1.5" fill="#374151"/>
-          <circle cx="49" cy="43.5" r="2" fill="#6b7280"/>
+          <!-- Shadow -->
+          <ellipse cx="32" cy="57" rx="9" ry="3" fill="rgba(0,0,0,0.18)"/>
+          <!-- Rear wheel -->
+          <rect x="27" y="44" width="10" height="17" rx="5" fill="#111827"/>
+          <rect x="29" y="46" width="6" height="13" rx="3" fill="#374151"/>
+          <circle cx="32" cy="52" r="2.5" fill="#6b7280"/>
+          <!-- Rear frame -->
+          <rect x="30" y="36" width="4" height="12" rx="2" fill="#b91c1c"/>
+          <!-- Engine / main body -->
+          <rect x="27" y="26" width="10" height="14" rx="3" fill="#7f1d1d"/>
+          <!-- Fuel tank -->
+          <rect x="28" y="18" width="8" height="12" rx="3" fill="#dc2626"/>
+          <!-- Rider helmet (top view) -->
+          <circle cx="32" cy="22" r="7" fill="#1f2937"/>
+          <ellipse cx="32" cy="19" rx="4.5" ry="3" fill="#374151"/>
+          <rect x="29" y="19" width="6" height="2" rx="1" fill="#60a5fa" opacity="0.7"/>
+          <!-- Front fork -->
+          <rect x="30" y="10" width="4" height="10" rx="2" fill="#6b7280"/>
+          <!-- Handlebars -->
+          <rect x="18" y="13" width="28" height="4" rx="2" fill="#374151"/>
+          <!-- Handlebar grips -->
+          <rect x="17" y="12" width="5" height="6" rx="2.5" fill="#111827"/>
+          <rect x="42" y="12" width="5" height="6" rx="2.5" fill="#111827"/>
+          <!-- Front wheel -->
+          <rect x="27" y="3"  width="10" height="17" rx="5" fill="#111827"/>
+          <rect x="29" y="5"  width="6" height="13" rx="3" fill="#374151"/>
+          <circle cx="32" cy="11" r="2.5" fill="#6b7280"/>
+          <!-- Headlight -->
+          <ellipse cx="32" cy="4" rx="3.5" ry="2" fill="#fef9c3"/>
+          <ellipse cx="32" cy="4" rx="2.2" ry="1.2" fill="#fde047"/>
+          <!-- Taillight -->
+          <rect x="29" y="59" width="6" height="3" rx="1.5" fill="#ef4444"/>
         </g>
       </svg>`;
       return {
@@ -619,9 +623,17 @@
       updateProgressSteps(status);
 
       document.getElementById('driver-name').textContent =
-        data.driver ? data.driver.name : 'Waiting for driver...';
-      document.getElementById('driver-phone').textContent =
-        data.driver && data.driver.phone ? data.driver.phone : '';
+        data.driver ? `Driver name: ${data.driver.name}` : 'Waiting for driver...';
+      const phoneSpan = document.getElementById('driver-phone');
+      const phoneLink = document.getElementById('driver-phone-link');
+      if (data.driver && data.driver.phone) {
+        phoneSpan.textContent = `Phone number: ${data.driver.phone}`;
+        phoneLink.href = `tel:${data.driver.phone}`;
+        phoneLink.style.display = 'inline-flex';
+      } else {
+        phoneSpan.textContent = '';
+        phoneLink.style.display = 'none';
+      }
 
       if (status === 'DELIVERED') cleanup();
     }
