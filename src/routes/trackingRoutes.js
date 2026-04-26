@@ -21,7 +21,7 @@ router.get("/:token", async (req, res) => {
       customer_latitude: order.customer_latitude,
       customer_longitude: order.customer_longitude,
       delivered_at: order.delivered_at,
-      driver: order.driver_name ? { name: order.driver_name } : null,
+      driver: order.driver_name ? { name: order.driver_name, phone: order.driver_phone || null } : null,
       driver_location:
         order.driver_lat != null
           ? {

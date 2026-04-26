@@ -160,13 +160,10 @@
       text-overflow: ellipsis;
     }
 
-    #delivery-address {
-      font-size: 12px;
-      color: #9ca3af;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin-top: 1px;
+    #driver-phone {
+      font-size: 13px;
+      color: #6b7280;
+      margin-top: 2px;
     }
 
     /* ── Loading ── */
@@ -291,10 +288,15 @@
     </div>
 
     <div class="driver-row">
-      <div class="driver-avatar">🚗</div>
+      <div class="driver-avatar">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="36" height="36">
+          <circle cx="20" cy="14" r="8" fill="#6b7280"/>
+          <path d="M4 36 Q4 26 20 26 Q36 26 36 36" fill="#6b7280"/>
+        </svg>
+      </div>
       <div class="driver-info">
         <div id="driver-name">Waiting for driver...</div>
-        <div id="delivery-address"></div>
+        <div id="driver-phone"></div>
       </div>
     </div>
   </div>
@@ -415,25 +417,64 @@
     // ── Car SVG marker ─────────────────────────────────────────────────────
 
     function makeCarIcon(rotation) {
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-        <g transform="rotate(${rotation} 24 24)">
-          <rect x="14" y="8" width="20" height="32" rx="7" fill="#1f2937"/>
-          <rect x="17" y="11" width="14" height="10" rx="2" fill="#bfdbfe"/>
-          <rect x="17" y="27" width="14" height="7"  rx="2" fill="#bfdbfe"/>
-          <rect x="16" y="8"  width="5"  height="4"  rx="1" fill="#fde68a"/>
-          <rect x="27" y="8"  width="5"  height="4"  rx="1" fill="#fde68a"/>
-          <rect x="17" y="36" width="5"  height="3"  rx="1" fill="#ef4444"/>
-          <rect x="26" y="36" width="5"  height="3"  rx="1" fill="#ef4444"/>
-          <rect x="9"  y="14" width="5"  height="9"  rx="2.5" fill="#374151"/>
-          <rect x="9"  y="27" width="5"  height="9"  rx="2.5" fill="#374151"/>
-          <rect x="34" y="14" width="5"  height="9"  rx="2.5" fill="#374151"/>
-          <rect x="34" y="27" width="5"  height="9"  rx="2.5" fill="#374151"/>
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+        <g transform="rotate(${rotation} 32 32)">
+          <!-- Drop shadow -->
+          <ellipse cx="32" cy="55" rx="13" ry="4" fill="rgba(0,0,0,0.18)"/>
+          <!-- Body -->
+          <path d="M22 8 Q32 5 42 8 L44 16 L45 42 Q45 52 32 54 Q19 52 19 42 L20 16 Z" fill="#1d4ed8"/>
+          <!-- Hood panel -->
+          <path d="M23 8 Q32 5.5 41 8 L43 15 L38 18 Q32 16 26 18 L21 15 Z" fill="#2563eb"/>
+          <!-- Windshield -->
+          <path d="M26 18 Q32 16 38 18 L39 28 Q32 26 25 28 Z" fill="#bfdbfe" opacity="0.9"/>
+          <!-- Cabin roof -->
+          <rect x="25" y="28" width="14" height="12" rx="1" fill="#1e3a8a"/>
+          <!-- Rear window -->
+          <path d="M26 40 Q32 41.5 38 40 L39 48 Q32 50 25 48 Z" fill="#bfdbfe" opacity="0.75"/>
+          <!-- Trunk -->
+          <path d="M23 48 Q32 50.5 41 48 L43 54 Q32 57 21 54 Z" fill="#1d4ed8"/>
+          <!-- Left mirror -->
+          <path d="M20 20 L15 22 L15 25 L19 24 Z" fill="#1d4ed8"/>
+          <!-- Right mirror -->
+          <path d="M44 20 L49 22 L49 25 L45 24 Z" fill="#1d4ed8"/>
+          <!-- Headlights left -->
+          <rect x="22" y="6"  width="6" height="4" rx="1.5" fill="#fef9c3"/>
+          <!-- Headlights right -->
+          <rect x="36" y="6"  width="6" height="4" rx="1.5" fill="#fef9c3"/>
+          <!-- Headlight glow left -->
+          <rect x="23" y="7"  width="4" height="2" rx="1" fill="#fde047"/>
+          <!-- Headlight glow right -->
+          <rect x="37" y="7"  width="4" height="2" rx="1" fill="#fde047"/>
+          <!-- Taillights left -->
+          <rect x="22" y="53" width="6" height="4" rx="1.5" fill="#991b1b"/>
+          <!-- Taillights right -->
+          <rect x="36" y="53" width="6" height="4" rx="1.5" fill="#991b1b"/>
+          <!-- Taillight glow left -->
+          <rect x="23" y="54" width="4" height="2" rx="1" fill="#ef4444"/>
+          <!-- Taillight glow right -->
+          <rect x="37" y="54" width="4" height="2" rx="1" fill="#ef4444"/>
+          <!-- Wheel FL -->
+          <rect x="11" y="14" width="8" height="13" rx="3" fill="#111827"/>
+          <rect x="13" y="16" width="4" height="9"  rx="1.5" fill="#374151"/>
+          <circle cx="15" cy="20.5" r="2" fill="#6b7280"/>
+          <!-- Wheel FR -->
+          <rect x="45" y="14" width="8" height="13" rx="3" fill="#111827"/>
+          <rect x="47" y="16" width="4" height="9"  rx="1.5" fill="#374151"/>
+          <circle cx="49" cy="20.5" r="2" fill="#6b7280"/>
+          <!-- Wheel RL -->
+          <rect x="11" y="37" width="8" height="13" rx="3" fill="#111827"/>
+          <rect x="13" y="39" width="4" height="9"  rx="1.5" fill="#374151"/>
+          <circle cx="15" cy="43.5" r="2" fill="#6b7280"/>
+          <!-- Wheel RR -->
+          <rect x="45" y="37" width="8" height="13" rx="3" fill="#111827"/>
+          <rect x="47" y="39" width="4" height="9"  rx="1.5" fill="#374151"/>
+          <circle cx="49" cy="43.5" r="2" fill="#6b7280"/>
         </g>
       </svg>`;
       return {
         url: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
-        scaledSize: new google.maps.Size(48, 48),
-        anchor:     new google.maps.Point(24, 24),
+        scaledSize: new google.maps.Size(64, 64),
+        anchor:     new google.maps.Point(32, 32),
       };
     }
 
@@ -579,7 +620,8 @@
 
       document.getElementById('driver-name').textContent =
         data.driver ? data.driver.name : 'Waiting for driver...';
-      document.getElementById('delivery-address').textContent = data.delivery_address || '';
+      document.getElementById('driver-phone').textContent =
+        data.driver && data.driver.phone ? data.driver.phone : '';
 
       if (status === 'DELIVERED') cleanup();
     }

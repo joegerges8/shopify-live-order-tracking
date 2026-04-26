@@ -178,6 +178,7 @@ async function getOrderByTrackingToken(token) {
       o.customer_longitude,
       o.delivered_at,
       d.full_name  AS driver_name,
+      d.phone      AS driver_phone,
       lu.latitude  AS driver_lat,
       lu.longitude AS driver_lng,
       lu.created_at AS location_updated_at
