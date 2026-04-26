@@ -356,6 +356,7 @@
     let lastEtaFetch      = 0;
     let currentData       = null;
     let pollInterval      = null;
+    let bikeIconBase64    = null;
 
     // ── Socket.io ──────────────────────────────────────────────────────────
 
@@ -436,49 +437,34 @@
       }
     }
 
-    // ── Motorcycle SVG marker ──────────────────────────────────────────────
+    // ── Delivery bike image marker ─────────────────────────────────────────
+    // Uses the PNG from assets/delivery-bike.png, embedded as base64 inside
+    // an SVG so we can mirror it when the driver is heading west.
 
-    function makeCarIcon(rotation) {
+    function makeCarIcon(bearing) {
+      if (!bikeIconBase64) {
+        // Fallback dot until the image has loaded
+        return {
+          path:        google.maps.SymbolPath.CIRCLE,
+          scale:       10,
+          fillColor:   '#dc2626',
+          fillOpacity: 1,
+          strokeColor: '#fff',
+          strokeWeight: 2,
+        };
+      }
+      // Flip horizontally when heading west (bearing 180–360)
+      const flip      = bearing > 180;
+      const transform = flip ? 'translate(64,0) scale(-1,1)' : '';
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-        <g transform="rotate(${rotation} 32 32)">
-          <!-- Shadow -->
-          <ellipse cx="32" cy="57" rx="9" ry="3" fill="rgba(0,0,0,0.18)"/>
-          <!-- Rear wheel -->
-          <rect x="27" y="44" width="10" height="17" rx="5" fill="#111827"/>
-          <rect x="29" y="46" width="6" height="13" rx="3" fill="#374151"/>
-          <circle cx="32" cy="52" r="2.5" fill="#6b7280"/>
-          <!-- Rear frame -->
-          <rect x="30" y="36" width="4" height="12" rx="2" fill="#b91c1c"/>
-          <!-- Engine / main body -->
-          <rect x="27" y="26" width="10" height="14" rx="3" fill="#7f1d1d"/>
-          <!-- Fuel tank -->
-          <rect x="28" y="18" width="8" height="12" rx="3" fill="#dc2626"/>
-          <!-- Rider helmet (top view) -->
-          <circle cx="32" cy="22" r="7" fill="#1f2937"/>
-          <ellipse cx="32" cy="19" rx="4.5" ry="3" fill="#374151"/>
-          <rect x="29" y="19" width="6" height="2" rx="1" fill="#60a5fa" opacity="0.7"/>
-          <!-- Front fork -->
-          <rect x="30" y="10" width="4" height="10" rx="2" fill="#6b7280"/>
-          <!-- Handlebars -->
-          <rect x="18" y="13" width="28" height="4" rx="2" fill="#374151"/>
-          <!-- Handlebar grips -->
-          <rect x="17" y="12" width="5" height="6" rx="2.5" fill="#111827"/>
-          <rect x="42" y="12" width="5" height="6" rx="2.5" fill="#111827"/>
-          <!-- Front wheel -->
-          <rect x="27" y="3"  width="10" height="17" rx="5" fill="#111827"/>
-          <rect x="29" y="5"  width="6" height="13" rx="3" fill="#374151"/>
-          <circle cx="32" cy="11" r="2.5" fill="#6b7280"/>
-          <!-- Headlight -->
-          <ellipse cx="32" cy="4" rx="3.5" ry="2" fill="#fef9c3"/>
-          <ellipse cx="32" cy="4" rx="2.2" ry="1.2" fill="#fde047"/>
-          <!-- Taillight -->
-          <rect x="29" y="59" width="6" height="3" rx="1.5" fill="#ef4444"/>
+        <g transform="${transform}">
+          <image href="${bikeIconBase64}" x="0" y="0" width="64" height="64"/>
         </g>
       </svg>`;
       return {
-        url: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
+        url:        'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
         scaledSize: new google.maps.Size(64, 64),
-        anchor:     new google.maps.Point(32, 32),
+        anchor:     new google.maps.Point(32, 40),
       };
     }
 
@@ -661,6 +647,18 @@
 
     (async () => {
       if (!token) { showError(); return; }
+
+      // Preload the bike icon so makeCarIcon has the base64 ready
+      try {
+        const res  = await fetch('assets/delivery-bike.png');
+        const blob = await res.blob();
+        bikeIconBase64 = await new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+      } catch (_) { /* icon load failed — fallback dot will be used */ }
+
       await fetchTracking();
       hideLoading();
       // Slower poll as safety net — socket handles real-time updates
