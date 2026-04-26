@@ -212,10 +212,13 @@
     const API_BASE = window.location.origin;
     const token = new URLSearchParams(window.location.search).get('token');
 
-    let map, driverMarker, destinationMarker;
+    let map = null;           // set when Maps JS API is ready
+    let driverMarker = null;
+    let destinationMarker = null;
     let pollInterval = null;
     let prevDriverPos = null;
     let animFrame = null;
+    let lastData = null;      // most recent fetch result, applied to map on Maps ready
 
     // ── Utilities ─────────────────────────────────────────────────────────
 
@@ -229,7 +232,7 @@
     }
 
     function statusLabel(s) {
-      const map = {
+      const labels = {
         PENDING: 'Pending',
         ASSIGNED: 'Assigned',
         PICKED_UP: 'Picked Up',
@@ -237,7 +240,7 @@
         DELIVERED: 'Delivered',
         CANCELLED: 'Cancelled',
       };
-      return map[s] || s;
+      return labels[s] || s;
     }
 
     function statusClass(s) {
@@ -268,26 +271,56 @@
       animFrame = requestAnimationFrame(step);
     }
 
-    // ── Map init ──────────────────────────────────────────────────────────
+    // ── Map markers (only called when map is ready) ────────────────────────
 
-    function initMap() {
-      map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 14,
-        center: { lat: 33.8938, lng: 35.5018 }, // fallback centre
-        disableDefaultUI: true,
-        zoomControl: true,
-        gestureHandling: 'greedy',
-        styles: [
-          { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-          { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-        ],
-      });
+    function applyMapData(data) {
+      if (!map) return;
+
+      if (data.customer_latitude && data.customer_longitude) {
+        const destPos = { lat: Number(data.customer_latitude), lng: Number(data.customer_longitude) };
+        if (!destinationMarker) {
+          destinationMarker = new google.maps.Marker({
+            position: destPos,
+            map,
+            title: 'Your address',
+            icon: { url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' },
+          });
+        }
+      }
+
+      if (data.driver_location) {
+        const newPos = {
+          lat: Number(data.driver_location.latitude),
+          lng: Number(data.driver_location.longitude),
+        };
+
+        if (!driverMarker) {
+          driverMarker = new google.maps.Marker({
+            position: newPos,
+            map,
+            title: 'Driver',
+            icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' },
+            zIndex: 10,
+          });
+          if (destinationMarker) {
+            const bounds = new google.maps.LatLngBounds();
+            bounds.extend(newPos);
+            bounds.extend(destinationMarker.getPosition());
+            map.fitBounds(bounds, { top: 40, right: 40, bottom: 160, left: 40 });
+          } else {
+            map.setCenter(newPos);
+          }
+          prevDriverPos = newPos;
+        } else {
+          animateMarker(driverMarker, prevDriverPos || newPos, newPos, 1000);
+          prevDriverPos = newPos;
+        }
+      }
     }
 
-    // ── Update UI from tracking data ───────────────────────────────────────
+    // ── Update status card (no Maps dependency) ────────────────────────────
 
-    function applyData(data) {
-      // Order info
+    function applyCardData(data) {
       document.getElementById('order-number').textContent =
         'Order ' + (data.order_number || '#—');
 
@@ -301,68 +334,13 @@
       document.getElementById('delivery-address').textContent =
         data.delivery_address || '';
 
-      // Destination marker (static)
-      if (data.customer_latitude && data.customer_longitude) {
-        const destPos = { lat: Number(data.customer_latitude), lng: Number(data.customer_longitude) };
-        if (!destinationMarker) {
-          destinationMarker = new google.maps.Marker({
-            position: destPos,
-            map,
-            title: 'Your address',
-            icon: {
-              url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
-            },
-          });
-        }
-      }
+      document.getElementById('location-age').textContent = data.driver_location
+        ? 'Driver location: ' + timeAgo(data.driver_location.updated_at)
+        : data.driver ? 'Waiting for driver location...' : '';
 
-      // Driver marker (animated)
-      if (data.driver_location) {
-        const newPos = {
-          lat: Number(data.driver_location.latitude),
-          lng: Number(data.driver_location.longitude),
-        };
-
-        document.getElementById('location-age').textContent =
-          'Driver location: ' + timeAgo(data.driver_location.updated_at);
-
-        if (!driverMarker) {
-          driverMarker = new google.maps.Marker({
-            position: newPos,
-            map,
-            title: 'Driver',
-            icon: {
-              url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
-            },
-            zIndex: 10,
-          });
-          // First time: centre map between driver and destination
-          if (destinationMarker) {
-            const bounds = new google.maps.LatLngBounds();
-            bounds.extend(newPos);
-            bounds.extend(destinationMarker.getPosition());
-            map.fitBounds(bounds, { top: 40, right: 40, bottom: 160, left: 40 });
-          } else {
-            map.setCenter(newPos);
-          }
-          prevDriverPos = newPos;
-        } else {
-          // Animate from last known position to new position
-          animateMarker(driverMarker, prevDriverPos || newPos, newPos, 1000);
-          prevDriverPos = newPos;
-        }
-      } else {
-        document.getElementById('location-age').textContent =
-          data.driver ? 'Waiting for driver location...' : '';
-      }
-
-      // Delivered state — show banner, stop polling
       if (data.order_status === 'DELIVERED') {
         document.getElementById('delivered-banner').classList.add('show');
-        if (pollInterval) {
-          clearInterval(pollInterval);
-          pollInterval = null;
-        }
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
       }
     }
 
@@ -372,29 +350,41 @@
       try {
         const res = await fetch(`${API_BASE}/api/track/${token}`);
         if (res.status === 404) { showError(); return; }
-        if (!res.ok) return; // transient error — keep polling
+        if (!res.ok) return;
         const data = await res.json();
-        applyData(data);
+        lastData = data;
+        applyCardData(data);
+        applyMapData(data);   // no-op if map not ready yet
       } catch (_) {
         // Network error — keep polling silently
       }
     }
 
-    // ── Bootstrap ─────────────────────────────────────────────────────────
+    // ── Bootstrap: data loading starts immediately, independent of Maps ────
 
-    async function bootstrap() {
+    document.addEventListener('DOMContentLoaded', async () => {
       if (!token) { showError(); return; }
-
-      initMap();
-
       await fetchTracking();
       hideLoading();
-
       pollInterval = setInterval(fetchTracking, 10_000);
-    }
+    });
 
-    // Called by the Google Maps script tag once the API is ready
-    window.initTrackingMap = bootstrap;
+    // Called by Google Maps when its script is ready.
+    // Initialises the map and applies whatever data was already fetched.
+    window.initTrackingMap = function () {
+      map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 14,
+        center: { lat: 33.8938, lng: 35.5018 },
+        disableDefaultUI: true,
+        zoomControl: true,
+        gestureHandling: 'greedy',
+        styles: [
+          { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+          { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+        ],
+      });
+      if (lastData) applyMapData(lastData);
+    };
   </script>
 
   <!--
