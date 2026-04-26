@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Track Your Order</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f3f4f6;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #map {
+      flex: 1;
+      width: 100%;
+    }
+
+    /* ── Status card ── */
+    #status-card {
+      background: #fff;
+      border-radius: 20px 20px 0 0;
+      padding: 20px 20px 28px;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    #status-card .drag-handle {
+      width: 40px;
+      height: 4px;
+      background: #d1d5db;
+      border-radius: 2px;
+      margin: 0 auto 6px;
+    }
+
+    #status-card .order-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #order-number {
+      font-size: 17px;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .status-badge {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .status-pending, .status-assigned   { background: #fef3c7; color: #92400e; }
+    .status-picked_up                   { background: #dbeafe; color: #1e40af; }
+    .status-out_for_delivery            { background: #ede9fe; color: #5b21b6; }
+    .status-delivered                   { background: #d1fae5; color: #065f46; }
+    .status-cancelled                   { background: #fee2e2; color: #991b1b; }
+
+    #driver-name {
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    #delivery-address {
+      font-size: 13px;
+      color: #9ca3af;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #location-age {
+      font-size: 12px;
+      color: #9ca3af;
+      text-align: right;
+    }
+
+    /* ── Delivered banner ── */
+    #delivered-banner {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+
+    #delivered-banner.show { display: flex; }
+
+    .delivered-card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 36px 28px;
+      text-align: center;
+      max-width: 320px;
+      width: 90%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .delivered-card .check {
+      font-size: 64px;
+      line-height: 1;
+      margin-bottom: 16px;
+    }
+
+    .delivered-card h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 8px;
+    }
+
+    .delivered-card p {
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    /* ── Error screen ── */
+    #error-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #f3f4f6;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      text-align: center;
+      padding: 24px;
+      z-index: 998;
+    }
+
+    #error-screen.show { display: flex; }
+
+    #error-screen .emoji { font-size: 48px; }
+    #error-screen h2 { font-size: 20px; font-weight: 700; color: #111827; }
+    #error-screen p  { font-size: 14px; color: #6b7280; }
+
+    /* ── Loading ── */
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      z-index: 997;
+    }
+
+    #loading.hidden { display: none; }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #e5e7eb;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <p style="color:#6b7280;font-size:14px;">Loading your delivery...</p>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="status-card">
+    <div class="drag-handle"></div>
+    <div class="order-row">
+      <span id="order-number">Order #—</span>
+      <span id="status-badge" class="status-badge">—</span>
+    </div>
+    <div id="driver-name">Waiting for driver...</div>
+    <div id="delivery-address"></div>
+    <div id="location-age"></div>
+  </div>
+
+  <div id="delivered-banner">
+    <div class="delivered-card">
+      <div class="check">✅</div>
+      <h2>Order Delivered!</h2>
+      <p>Your order has been successfully delivered. Enjoy!</p>
+    </div>
+  </div>
+
+  <div id="error-screen">
+    <div class="emoji">🔍</div>
+    <h2>Tracking link not found</h2>
+    <p>This link may be invalid or has expired.<br>Please contact the store for help.</p>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+    const token = new URLSearchParams(window.location.search).get('token');
+
+    let map, driverMarker, destinationMarker;
+    let pollInterval = null;
+    let prevDriverPos = null;
+    let animFrame = null;
+
+    // ── Utilities ─────────────────────────────────────────────────────────
+
+    function showError() {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('error-screen').classList.add('show');
+    }
+
+    function hideLoading() {
+      document.getElementById('loading').classList.add('hidden');
+    }
+
+    function statusLabel(s) {
+      const map = {
+        PENDING: 'Pending',
+        ASSIGNED: 'Assigned',
+        PICKED_UP: 'Picked Up',
+        OUT_FOR_DELIVERY: 'On the Way',
+        DELIVERED: 'Delivered',
+        CANCELLED: 'Cancelled',
+      };
+      return map[s] || s;
+    }
+
+    function statusClass(s) {
+      return 'status-' + (s || '').toLowerCase();
+    }
+
+    function timeAgo(isoString) {
+      if (!isoString) return '';
+      const diff = Math.round((Date.now() - new Date(isoString)) / 1000);
+      if (diff < 10) return 'Just now';
+      if (diff < 60) return `${diff}s ago`;
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      return `${Math.floor(diff / 3600)}h ago`;
+    }
+
+    // ── Smooth marker animation ────────────────────────────────────────────
+
+    function animateMarker(marker, from, to, durationMs) {
+      if (animFrame) cancelAnimationFrame(animFrame);
+      const start = performance.now();
+      function step(now) {
+        const t = Math.min((now - start) / durationMs, 1);
+        const lat = from.lat + (to.lat - from.lat) * t;
+        const lng = from.lng + (to.lng - from.lng) * t;
+        marker.setPosition({ lat, lng });
+        if (t < 1) animFrame = requestAnimationFrame(step);
+      }
+      animFrame = requestAnimationFrame(step);
+    }
+
+    // ── Map init ──────────────────────────────────────────────────────────
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 14,
+        center: { lat: 33.8938, lng: 35.5018 }, // fallback centre
+        disableDefaultUI: true,
+        zoomControl: true,
+        gestureHandling: 'greedy',
+        styles: [
+          { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+          { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+        ],
+      });
+    }
+
+    // ── Update UI from tracking data ───────────────────────────────────────
+
+    function applyData(data) {
+      // Order info
+      document.getElementById('order-number').textContent =
+        'Order ' + (data.order_number || '#—');
+
+      const badge = document.getElementById('status-badge');
+      badge.textContent = statusLabel(data.order_status);
+      badge.className = 'status-badge ' + statusClass(data.order_status);
+
+      document.getElementById('driver-name').textContent =
+        data.driver ? '🚗 ' + data.driver.name : 'Driver en route...';
+
+      document.getElementById('delivery-address').textContent =
+        data.delivery_address || '';
+
+      // Destination marker (static)
+      if (data.customer_latitude && data.customer_longitude) {
+        const destPos = { lat: Number(data.customer_latitude), lng: Number(data.customer_longitude) };
+        if (!destinationMarker) {
+          destinationMarker = new google.maps.Marker({
+            position: destPos,
+            map,
+            title: 'Your address',
+            icon: {
+              url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
+            },
+          });
+        }
+      }
+
+      // Driver marker (animated)
+      if (data.driver_location) {
+        const newPos = {
+          lat: Number(data.driver_location.latitude),
+          lng: Number(data.driver_location.longitude),
+        };
+
+        document.getElementById('location-age').textContent =
+          'Driver location: ' + timeAgo(data.driver_location.updated_at);
+
+        if (!driverMarker) {
+          driverMarker = new google.maps.Marker({
+            position: newPos,
+            map,
+            title: 'Driver',
+            icon: {
+              url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+            },
+            zIndex: 10,
+          });
+          // First time: centre map between driver and destination
+          if (destinationMarker) {
+            const bounds = new google.maps.LatLngBounds();
+            bounds.extend(newPos);
+            bounds.extend(destinationMarker.getPosition());
+            map.fitBounds(bounds, { top: 40, right: 40, bottom: 160, left: 40 });
+          } else {
+            map.setCenter(newPos);
+          }
+          prevDriverPos = newPos;
+        } else {
+          // Animate from last known position to new position
+          animateMarker(driverMarker, prevDriverPos || newPos, newPos, 1000);
+          prevDriverPos = newPos;
+        }
+      } else {
+        document.getElementById('location-age').textContent =
+          data.driver ? 'Waiting for driver location...' : '';
+      }
+
+      // Delivered state — show banner, stop polling
+      if (data.order_status === 'DELIVERED') {
+        document.getElementById('delivered-banner').classList.add('show');
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+      }
+    }
+
+    // ── Fetch tracking data ────────────────────────────────────────────────
+
+    async function fetchTracking() {
+      try {
+        const res = await fetch(`${API_BASE}/api/track/${token}`);
+        if (res.status === 404) { showError(); return; }
+        if (!res.ok) return; // transient error — keep polling
+        const data = await res.json();
+        applyData(data);
+      } catch (_) {
+        // Network error — keep polling silently
+      }
+    }
+
+    // ── Bootstrap ─────────────────────────────────────────────────────────
+
+    async function bootstrap() {
+      if (!token) { showError(); return; }
+
+      initMap();
+
+      await fetchTracking();
+      hideLoading();
+
+      pollInterval = setInterval(fetchTracking, 10_000);
+    }
+
+    // Called by the Google Maps script tag once the API is ready
+    window.initTrackingMap = bootstrap;
+  </script>
+
+  <!--
+    Replace YOUR_GOOGLE_MAPS_API_KEY below with your actual key.
+    Restrict it to HTTP referrers (your Railway domain) in the Google Cloud Console.
+  -->
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAriVJnIv8YZpcpQOIUy-4f3Tb1i0RTfAg&callback=initTrackingMap"
+    async defer>
+  </script>
+
+</body>
+</html>

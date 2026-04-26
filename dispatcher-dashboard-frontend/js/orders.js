@@ -161,6 +161,10 @@ function renderOrders(orders, drivers) {
     const row = document.createElement("tr");
     const assignedDriverName = getDriverNameById(order.assigned_driver_id, drivers);
 
+    const trackingBtn = order.tracking_token && order.order_status !== "PENDING"
+      ? `<button class="small-btn track-btn" data-tracking-token="${order.tracking_token}" title="Copy tracking link">🔗 Track</button>`
+      : "";
+
     row.innerHTML = `
       <td>${order.order_number ?? ""}</td>
       <td>${order.customer_first_name ?? ""} ${order.customer_last_name ?? ""}</td>
@@ -180,6 +184,7 @@ function renderOrders(orders, drivers) {
               ? `<button class="small-btn danger-btn" data-unassign-order-id="${order.id}">Unassign</button>`
               : ""
           }
+          ${trackingBtn}
         </div>
       </td>
       <td>
@@ -226,10 +231,26 @@ async function loadOrders() {
    EVENTS
 =========================== */
 
+function copyTrackingLink(token) {
+  const url = `${window.location.origin}/track/track.html?token=${token}`;
+  navigator.clipboard.writeText(url).then(() => {
+    alert("Tracking link copied! Send it to the customer.");
+  }).catch(() => {
+    prompt("Copy this tracking link:", url);
+  });
+}
+
 function attachEventListeners() {
   const assignButtons = document.querySelectorAll("[data-assign-order-id]");
   const unassignButtons = document.querySelectorAll("[data-unassign-order-id]");
   const statusButtons = document.querySelectorAll("[data-status-order-id]");
+  const trackButtons = document.querySelectorAll("[data-tracking-token]");
+
+  trackButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      copyTrackingLink(button.getAttribute("data-tracking-token"));
+    });
+  });
 
   assignButtons.forEach((button) => {
     button.addEventListener("click", async () => {
