@@ -5,17 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Track Your Order</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       height: 100dvh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: #0f172a;
+      background: #ebebeb;
     }
 
     /* ── Map ── */
@@ -23,91 +21,78 @@
 
     /* ── Status card ── */
     #status-card {
-      background: #ffffff;
-      border-radius: 32px 32px 0 0;
-      box-shadow: 0 -20px 80px rgba(0,0,0,0.30);
+      background: #fff;
+      border-radius: 20px 20px 0 0;
+      box-shadow: 0 -2px 20px rgba(0,0,0,0.12);
       display: flex;
       flex-direction: column;
-      overflow: hidden;
-    }
-
-    /* Gradient header inside card */
-    .card-header {
-      background: linear-gradient(135deg, #f97316 0%, #ef4444 100%);
-      padding: 10px 22px 22px;
     }
 
     .handle {
-      width: 44px;
-      height: 5px;
-      background: rgba(255,255,255,0.35);
-      border-radius: 3px;
-      margin: 0 auto 14px;
+      width: 36px;
+      height: 4px;
+      background: #e0e0e0;
+      border-radius: 2px;
+      margin: 10px auto 0;
     }
 
-    /* Live badge */
+    /* ── Status section ── */
+    .status-section {
+      padding: 16px 22px 18px;
+    }
+
     .live-badge {
       display: none;
       align-items: center;
       gap: 6px;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
-      color: #fff;
+      color: #06C167;
       text-transform: uppercase;
-      letter-spacing: 1px;
-      background: rgba(255,255,255,0.22);
-      padding: 4px 12px;
-      border-radius: 20px;
-      width: fit-content;
-      margin-bottom: 10px;
-      backdrop-filter: blur(4px);
-      border: 1px solid rgba(255,255,255,0.3);
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
     }
     .live-badge.show { display: flex; }
     .live-dot {
-      width: 7px;
-      height: 7px;
-      background: #fff;
+      width: 8px;
+      height: 8px;
+      background: #06C167;
       border-radius: 50%;
       animation: pulse 1.4s ease-in-out infinite;
     }
     @keyframes pulse {
-      0%, 100% { opacity: 1;   transform: scale(1);   }
+      0%, 100% { opacity: 1; transform: scale(1);   }
       50%       { opacity: 0.3; transform: scale(1.6); }
     }
 
-    /* Headline + ETA */
     #status-headline {
-      font-size: 26px;
-      font-weight: 900;
-      color: #ffffff;
-      line-height: 1.15;
-      letter-spacing: -0.5px;
-      margin-bottom: 6px;
+      font-size: 24px;
+      font-weight: 800;
+      color: #000;
+      letter-spacing: -0.4px;
+      line-height: 1.2;
+      margin-bottom: 5px;
     }
 
     #eta-text {
       font-size: 15px;
-      color: rgba(255,255,255,0.82);
       font-weight: 500;
-      min-height: 20px;
+      color: #6b6b6b;
+      min-height: 0;
     }
 
-    /* ── Card body ── */
-    .card-body {
-      padding: 18px 18px 36px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
+    /* ── Divider ── */
+    .divider {
+      height: 1px;
+      background: #f0f0f0;
+      margin: 0 22px;
     }
 
     /* ── Progress steps ── */
     .progress-track {
       display: flex;
       align-items: flex-start;
-      background: #f8fafc;
-      border-radius: 22px;
-      padding: 16px 10px 14px;
+      padding: 18px 22px 16px;
     }
 
     .step {
@@ -115,158 +100,134 @@
       flex-direction: column;
       align-items: center;
       gap: 7px;
-      width: 60px;
+      width: 62px;
       flex-shrink: 0;
     }
 
     .step-dot {
-      width: 34px;
-      height: 34px;
+      width: 30px;
+      height: 30px;
       border-radius: 50%;
-      border: 2.5px solid #e2e8f0;
+      border: 2px solid #ddd;
       background: #fff;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
-      color: #cbd5e1;
-      transition: all 0.4s ease;
+      color: #ccc;
+      transition: all 0.35s ease;
     }
-    .step-dot.done {
-      background: linear-gradient(135deg, #f97316, #ef4444);
-      border-color: transparent;
-      color: #fff;
-      box-shadow: 0 4px 12px rgba(249,115,22,0.35);
-    }
-    .step-dot.active {
-      background: linear-gradient(135deg, #f97316, #ef4444);
-      border-color: transparent;
-      color: #fff;
-      box-shadow: 0 0 0 6px rgba(249,115,22,0.18), 0 4px 12px rgba(249,115,22,0.4);
-    }
+    .step-dot.done   { background: #000; border-color: #000; color: #fff; }
+    .step-dot.active { background: #000; border-color: #000; color: #fff; box-shadow: 0 0 0 5px rgba(0,0,0,0.10); }
 
     .step-label {
       font-size: 11px;
-      color: #94a3b8;
+      color: #bbb;
       font-weight: 500;
       text-align: center;
       line-height: 1.3;
     }
-    .step-label.done   { color: #64748b; font-weight: 600; }
-    .step-label.active { color: #f97316; font-weight: 700; }
+    .step-label.done   { color: #555; font-weight: 600; }
+    .step-label.active { color: #000; font-weight: 700; }
 
     .step-connector {
       flex: 1;
-      height: 3px;
-      background: #e2e8f0;
-      margin-top: 15px;
+      height: 2px;
+      background: #e8e8e8;
+      margin-top: 14px;
       border-radius: 2px;
-      transition: background 0.4s ease;
+      transition: background 0.35s ease;
     }
-    .step-connector.done { background: linear-gradient(90deg, #f97316, #ef4444); }
+    .step-connector.done { background: #000; }
 
-    /* ── Driver card ── */
+    /* ── Driver row ── */
     .driver-row {
       display: flex;
       align-items: center;
       gap: 14px;
-      background: linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%);
-      border-radius: 22px;
-      padding: 16px;
-      border: 1.5px solid #fed7aa;
+      padding: 16px 22px 30px;
     }
 
     .driver-avatar {
-      width: 54px;
-      height: 54px;
+      width: 52px;
+      height: 52px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #f97316, #ef4444);
+      background: #f0f0f0;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      box-shadow: 0 6px 18px rgba(249,115,22,0.40);
     }
 
-    .driver-info { flex: 1; }
+    .driver-info { flex: 1; min-width: 0; }
 
     #driver-name {
-      font-size: 16px;
+      font-size: 17px;
       font-weight: 700;
-      color: #1e293b;
-      line-height: 1.3;
+      color: #000;
     }
 
     #driver-phone-row {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-top: 5px;
+      margin-top: 3px;
     }
 
     #driver-phone {
       font-size: 14px;
-      color: #64748b;
-      font-weight: 500;
+      color: #6b6b6b;
+      font-weight: 400;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     #driver-phone-link {
       display: none;
       align-items: center;
       justify-content: center;
-      width: 32px;
-      height: 32px;
-      background: linear-gradient(135deg, #f97316, #ef4444);
+      width: 48px;
+      height: 48px;
+      background: #06C167;
       border-radius: 50%;
       flex-shrink: 0;
       text-decoration: none;
-      box-shadow: 0 4px 12px rgba(249,115,22,0.45);
     }
 
     /* ── Loading ── */
     #loading {
       position: fixed;
       inset: 0;
-      background: linear-gradient(160deg, #fff7ed 0%, #ffffff 50%);
+      background: #fff;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 20px;
+      gap: 18px;
       z-index: 1000;
     }
     #loading.hidden { display: none; }
 
-    .loading-icon {
-      font-size: 56px;
-      animation: bob 1.6s ease-in-out infinite;
-    }
-    @keyframes bob {
-      0%, 100% { transform: translateY(0);   }
-      50%       { transform: translateY(-8px); }
-    }
-
     .spinner {
-      width: 52px;
-      height: 52px;
-      border: 5px solid #fed7aa;
-      border-top-color: #f97316;
+      width: 44px;
+      height: 44px;
+      border: 4px solid #e8e8e8;
+      border-top-color: #000;
       border-radius: 50%;
       animation: spin 0.75s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .loading-text {
-      font-size: 17px;
-      font-weight: 600;
-      color: #f97316;
-      letter-spacing: -0.2px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #000;
     }
     .loading-sub {
-      font-size: 13px;
-      color: #94a3b8;
-      margin-top: -12px;
+      font-size: 14px;
+      color: #999;
+      margin-top: -10px;
     }
 
     /* ── Delivered overlay ── */
@@ -274,55 +235,48 @@
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.65);
+      background: rgba(0,0,0,0.6);
       align-items: center;
       justify-content: center;
       z-index: 999;
-      backdrop-filter: blur(8px);
+      backdrop-filter: blur(6px);
     }
     #delivered-overlay.show { display: flex; }
 
     .delivered-card {
       background: #fff;
-      border-radius: 36px;
-      padding: 48px 36px;
+      border-radius: 24px;
+      padding: 44px 36px;
       text-align: center;
       width: 88%;
       max-width: 340px;
-      box-shadow: 0 40px 100px rgba(0,0,0,0.35);
-      animation: popIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.3);
+      animation: popIn 0.35s cubic-bezier(0.175,0.885,0.32,1.275);
     }
     @keyframes popIn {
-      from { transform: scale(0.7); opacity: 0; }
-      to   { transform: scale(1);   opacity: 1; }
+      from { transform: scale(0.75); opacity: 0; }
+      to   { transform: scale(1);    opacity: 1; }
     }
     .delivered-icon {
-      width: 96px;
-      height: 96px;
-      background: linear-gradient(135deg, #f97316, #ef4444);
+      width: 88px;
+      height: 88px;
+      background: #06C167;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin: 0 auto 24px;
-      font-size: 46px;
-      box-shadow: 0 16px 48px rgba(249,115,22,0.45);
+      margin: 0 auto 22px;
+      font-size: 44px;
     }
-    .delivered-card h2 {
-      font-size: 28px;
-      font-weight: 900;
-      color: #1e293b;
-      margin-bottom: 10px;
-      letter-spacing: -0.5px;
-    }
-    .delivered-card p { font-size: 15px; color: #64748b; line-height: 1.65; }
+    .delivered-card h2 { font-size: 26px; font-weight: 800; color: #000; margin-bottom: 10px; letter-spacing: -0.4px; }
+    .delivered-card p  { font-size: 15px; color: #6b6b6b; line-height: 1.6; }
 
     /* ── Error ── */
     #error-screen {
       display: none;
       position: fixed;
       inset: 0;
-      background: linear-gradient(160deg, #fff7ed 0%, #ffffff 60%);
+      background: #fff;
       flex-direction: column;
       align-items: center;
       justify-content: center;
@@ -332,79 +286,76 @@
       z-index: 1000;
     }
     #error-screen.show { display: flex; }
-    #error-screen .icon { font-size: 68px; margin-bottom: 8px; }
-    #error-screen h2   { font-size: 26px; font-weight: 800; color: #1e293b; letter-spacing: -0.3px; }
-    #error-screen p    { font-size: 15px; color: #64748b; line-height: 1.7; }
+    #error-screen .icon { font-size: 64px; margin-bottom: 8px; }
+    #error-screen h2   { font-size: 24px; font-weight: 800; color: #000; letter-spacing: -0.3px; }
+    #error-screen p    { font-size: 15px; color: #6b6b6b; line-height: 1.7; }
   </style>
 </head>
 <body>
 
   <div id="loading">
-    <div class="loading-icon">🛵</div>
     <div class="spinner"></div>
-    <p class="loading-text">Tracking your order</p>
-    <p class="loading-sub">Hang tight, fetching your delivery...</p>
+    <p class="loading-text">Finding your order</p>
+    <p class="loading-sub">This will only take a second</p>
   </div>
 
   <div id="map"></div>
 
   <div id="status-card">
+    <div class="handle"></div>
 
-    <div class="card-header">
-      <div class="handle"></div>
-
+    <div class="status-section">
       <div id="live-badge" class="live-badge">
-        <span class="live-dot"></span> LIVE
+        <span class="live-dot"></span> Live tracking
       </div>
-
       <div id="status-headline">Loading...</div>
       <div id="eta-text"></div>
     </div>
 
-    <div class="card-body">
+    <div class="divider"></div>
 
-      <div class="progress-track">
-        <div class="step">
-          <div class="step-dot" id="step-0">✓</div>
-          <div class="step-label" id="step-0-lbl">Placed</div>
-        </div>
-        <div class="step-connector" id="conn-0"></div>
-        <div class="step">
-          <div class="step-dot" id="step-1">2</div>
-          <div class="step-label" id="step-1-lbl">Driver</div>
-        </div>
-        <div class="step-connector" id="conn-1"></div>
-        <div class="step">
-          <div class="step-dot" id="step-2">3</div>
-          <div class="step-label" id="step-2-lbl">Picked Up</div>
-        </div>
-        <div class="step-connector" id="conn-2"></div>
-        <div class="step">
-          <div class="step-dot" id="step-3">4</div>
-          <div class="step-label" id="step-3-lbl">Delivered</div>
+    <div class="progress-track">
+      <div class="step">
+        <div class="step-dot" id="step-0">✓</div>
+        <div class="step-label" id="step-0-lbl">Placed</div>
+      </div>
+      <div class="step-connector" id="conn-0"></div>
+      <div class="step">
+        <div class="step-dot" id="step-1">2</div>
+        <div class="step-label" id="step-1-lbl">Driver</div>
+      </div>
+      <div class="step-connector" id="conn-1"></div>
+      <div class="step">
+        <div class="step-dot" id="step-2">3</div>
+        <div class="step-label" id="step-2-lbl">Picked Up</div>
+      </div>
+      <div class="step-connector" id="conn-2"></div>
+      <div class="step">
+        <div class="step-dot" id="step-3">4</div>
+        <div class="step-label" id="step-3-lbl">Delivered</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="driver-row">
+      <div class="driver-avatar">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="28" height="28">
+          <circle cx="20" cy="14" r="8" fill="#bbb"/>
+          <path d="M4 36 Q4 26 20 26 Q36 26 36 36" fill="#bbb"/>
+        </svg>
+      </div>
+      <div class="driver-info">
+        <div id="driver-name">Waiting for driver...</div>
+        <div id="driver-phone-row">
+          <span id="driver-phone"></span>
         </div>
       </div>
-
-      <div class="driver-row">
-        <div class="driver-avatar">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="30" height="30">
-            <circle cx="20" cy="14" r="8" fill="rgba(255,255,255,0.9)"/>
-            <path d="M4 36 Q4 26 20 26 Q36 26 36 36" fill="rgba(255,255,255,0.9)"/>
-          </svg>
-        </div>
-        <div class="driver-info">
-          <div id="driver-name">Waiting for driver...</div>
-          <div id="driver-phone-row">
-            <span id="driver-phone"></span>
-            <a id="driver-phone-link" href="#" aria-label="Call driver">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.61 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.08 6.08l.97-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
-              </svg>
-            </a>
-          </div>
-        </div>
-      </div>
-
+      <a id="driver-phone-link" href="#" aria-label="Call driver">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.61 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.08 6.08l.97-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+        </svg>
+      </a>
     </div>
   </div>
 
