@@ -8,144 +8,166 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       height: 100dvh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      background: #f9fafb;
     }
 
-    #map {
-      flex: 1;
-      width: 100%;
-    }
+    /* ── Map ── */
+    #map { flex: 1; width: 100%; }
 
     /* ── Status card ── */
     #status-card {
-      background: #fff;
-      border-radius: 20px 20px 0 0;
-      padding: 20px 20px 28px;
-      box-shadow: 0 -4px 20px rgba(0,0,0,0.12);
+      background: #ffffff;
+      border-radius: 24px 24px 0 0;
+      padding: 12px 20px 36px;
+      box-shadow: 0 -8px 40px rgba(0,0,0,0.10);
       display: flex;
       flex-direction: column;
-      gap: 10px;
     }
 
-    #status-card .drag-handle {
-      width: 40px;
+    .handle {
+      width: 36px;
       height: 4px;
-      background: #d1d5db;
+      background: #e5e7eb;
       border-radius: 2px;
-      margin: 0 auto 6px;
+      margin: 0 auto 14px;
     }
 
-    #status-card .order-row {
-      display: flex;
+    /* Live badge */
+    .live-badge {
+      display: none;
       align-items: center;
-      justify-content: space-between;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #16a34a;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 4px;
+    }
+    .live-badge.show { display: flex; }
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background: #22c55e;
+      border-radius: 50%;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(1.4); }
     }
 
-    #order-number {
-      font-size: 17px;
+    /* Headline + ETA */
+    #status-headline {
+      font-size: 20px;
       font-weight: 700;
       color: #111827;
+      margin-bottom: 2px;
     }
-
-    .status-badge {
-      font-size: 12px;
-      font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 999px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .status-pending, .status-assigned   { background: #fef3c7; color: #92400e; }
-    .status-picked_up                   { background: #dbeafe; color: #1e40af; }
-    .status-out_for_delivery            { background: #ede9fe; color: #5b21b6; }
-    .status-delivered                   { background: #d1fae5; color: #065f46; }
-    .status-cancelled                   { background: #fee2e2; color: #991b1b; }
-
-    #driver-name {
+    #eta-text {
       font-size: 14px;
       color: #6b7280;
+      min-height: 18px;
+      margin-bottom: 14px;
     }
 
-    #delivery-address {
-      font-size: 13px;
+    /* ── Progress steps ── */
+    .progress-track {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      width: 62px;
+      flex-shrink: 0;
+    }
+
+    .step-dot {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2px solid #d1d5db;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
       color: #9ca3af;
+      transition: all 0.35s ease;
+    }
+    .step-dot.done   { background: #111827; border-color: #111827; color: #fff; }
+    .step-dot.active { background: #111827; border-color: #111827; color: #fff; box-shadow: 0 0 0 5px rgba(17,24,39,0.12); }
+
+    .step-label {
+      font-size: 9px;
+      color: #9ca3af;
+      font-weight: 500;
+      text-align: center;
+      line-height: 1.3;
+    }
+    .step-label.done   { color: #6b7280; }
+    .step-label.active { color: #111827; font-weight: 700; }
+
+    .step-connector {
+      flex: 1;
+      height: 2px;
+      background: #e5e7eb;
+      margin-top: 12px;
+      transition: background 0.35s ease;
+    }
+    .step-connector.done { background: #111827; }
+
+    /* ── Driver row ── */
+    .driver-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #f3f4f6;
+    }
+
+    .driver-avatar {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #f3f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
+    .driver-info { flex: 1; overflow: hidden; }
+
+    #driver-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #111827;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    #location-age {
+    #delivery-address {
       font-size: 12px;
       color: #9ca3af;
-      text-align: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
     }
-
-    /* ── Delivered banner ── */
-    #delivered-banner {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.55);
-      align-items: center;
-      justify-content: center;
-      z-index: 999;
-    }
-
-    #delivered-banner.show { display: flex; }
-
-    .delivered-card {
-      background: #fff;
-      border-radius: 20px;
-      padding: 36px 28px;
-      text-align: center;
-      max-width: 320px;
-      width: 90%;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    }
-
-    .delivered-card .check {
-      font-size: 64px;
-      line-height: 1;
-      margin-bottom: 16px;
-    }
-
-    .delivered-card h2 {
-      font-size: 22px;
-      font-weight: 700;
-      color: #111827;
-      margin-bottom: 8px;
-    }
-
-    .delivered-card p {
-      font-size: 14px;
-      color: #6b7280;
-    }
-
-    /* ── Error screen ── */
-    #error-screen {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: #f3f4f6;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      gap: 12px;
-      text-align: center;
-      padding: 24px;
-      z-index: 998;
-    }
-
-    #error-screen.show { display: flex; }
-
-    #error-screen .emoji { font-size: 48px; }
-    #error-screen h2 { font-size: 20px; font-weight: 700; color: #111827; }
-    #error-screen p  { font-size: 14px; color: #6b7280; }
 
     /* ── Loading ── */
     #loading {
@@ -153,25 +175,78 @@
       inset: 0;
       background: #fff;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      flex-direction: column;
       gap: 16px;
-      z-index: 997;
+      z-index: 1000;
     }
-
     #loading.hidden { display: none; }
 
     .spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid #e5e7eb;
-      border-top-color: #6366f1;
+      width: 42px;
+      height: 42px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #111827;
       border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+      animation: spin 0.7s linear infinite;
     }
-
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Delivered overlay ── */
+    #delivered-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      backdrop-filter: blur(3px);
+    }
+    #delivered-overlay.show { display: flex; }
+
+    .delivered-card {
+      background: #fff;
+      border-radius: 24px;
+      padding: 40px 32px;
+      text-align: center;
+      width: 88%;
+      max-width: 340px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.25);
+    }
+    .delivered-icon {
+      width: 80px;
+      height: 80px;
+      background: #dcfce7;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 38px;
+    }
+    .delivered-card h2 { font-size: 24px; font-weight: 700; color: #111827; margin-bottom: 8px; }
+    .delivered-card p  { font-size: 14px; color: #6b7280; line-height: 1.5; }
+
+    /* ── Error ── */
+    #error-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #fff;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      text-align: center;
+      padding: 32px;
+      z-index: 1000;
+    }
+    #error-screen.show { display: flex; }
+    #error-screen .icon { font-size: 56px; margin-bottom: 4px; }
+    #error-screen h2   { font-size: 22px; font-weight: 700; color: #111827; }
+    #error-screen p    { font-size: 14px; color: #6b7280; line-height: 1.6; }
   </style>
 </head>
 <body>
@@ -184,43 +259,105 @@
   <div id="map"></div>
 
   <div id="status-card">
-    <div class="drag-handle"></div>
-    <div class="order-row">
-      <span id="order-number">Order #—</span>
-      <span id="status-badge" class="status-badge">—</span>
+    <div class="handle"></div>
+
+    <div id="live-badge" class="live-badge">
+      <span class="live-dot"></span> LIVE
     </div>
-    <div id="driver-name">Waiting for driver...</div>
-    <div id="delivery-address"></div>
-    <div id="location-age"></div>
+
+    <div id="status-headline">Loading...</div>
+    <div id="eta-text"></div>
+
+    <div class="progress-track">
+      <div class="step">
+        <div class="step-dot" id="step-0">✓</div>
+        <div class="step-label" id="step-0-lbl">Placed</div>
+      </div>
+      <div class="step-connector" id="conn-0"></div>
+      <div class="step">
+        <div class="step-dot" id="step-1">2</div>
+        <div class="step-label" id="step-1-lbl">Driver</div>
+      </div>
+      <div class="step-connector" id="conn-1"></div>
+      <div class="step">
+        <div class="step-dot" id="step-2">3</div>
+        <div class="step-label" id="step-2-lbl">Picked Up</div>
+      </div>
+      <div class="step-connector" id="conn-2"></div>
+      <div class="step">
+        <div class="step-dot" id="step-3">4</div>
+        <div class="step-label" id="step-3-lbl">Delivered</div>
+      </div>
+    </div>
+
+    <div class="driver-row">
+      <div class="driver-avatar">🚗</div>
+      <div class="driver-info">
+        <div id="driver-name">Waiting for driver...</div>
+        <div id="delivery-address"></div>
+      </div>
+    </div>
   </div>
 
-  <div id="delivered-banner">
+  <div id="delivered-overlay">
     <div class="delivered-card">
-      <div class="check">✅</div>
+      <div class="delivered-icon">✅</div>
       <h2>Order Delivered!</h2>
       <p>Your order has been successfully delivered. Enjoy!</p>
     </div>
   </div>
 
   <div id="error-screen">
-    <div class="emoji">🔍</div>
+    <div class="icon">🔍</div>
     <h2>Tracking link not found</h2>
     <p>This link may be invalid or has expired.<br>Please contact the store for help.</p>
   </div>
 
+  <!-- Socket.io client — must load before the inline script -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
   <script>
     const API_BASE = window.location.origin;
-    const token = new URLSearchParams(window.location.search).get('token');
+    const token   = new URLSearchParams(window.location.search).get('token');
 
-    let map = null;           // set when Maps JS API is ready
-    let driverMarker = null;
-    let destinationMarker = null;
-    let pollInterval = null;
-    let prevDriverPos = null;
-    let animFrame = null;
-    let lastData = null;      // most recent fetch result, applied to map on Maps ready
+    // Map state
+    let map               = null;
+    let driverMarker      = null;
+    let destMarker        = null;
+    let directionsService = null;
+    let directionsRenderer= null;
+    let prevDriverPos     = null;
+    let currentBearing    = 0;
+    let animFrame         = null;
+    let lastEtaFetch      = 0;
+    let currentData       = null;
+    let pollInterval      = null;
 
-    // ── Utilities ─────────────────────────────────────────────────────────
+    // ── Socket.io ──────────────────────────────────────────────────────────
+
+    let socket = null;
+    if (token) {
+      socket = io(API_BASE, {
+        query: { token },
+        transports: ['websocket', 'polling'],
+      });
+
+      socket.on('location_update', ({ latitude, longitude, updated_at }) => {
+        if (!currentData) return;
+        currentData.driver_location = { latitude, longitude, updated_at };
+        applyMapData(currentData);
+        fetchETA();
+      });
+
+      socket.on('status_update', ({ status }) => {
+        if (!currentData) return;
+        currentData.order_status = status;
+        applyCardData(currentData);
+        if (status === 'DELIVERED') cleanup();
+      });
+    }
+
+    // ── Utilities ──────────────────────────────────────────────────────────
 
     function showError() {
       document.getElementById('loading').classList.add('hidden');
@@ -231,68 +368,165 @@
       document.getElementById('loading').classList.add('hidden');
     }
 
-    function statusLabel(s) {
-      const labels = {
-        PENDING: 'Pending',
-        ASSIGNED: 'Assigned',
-        PICKED_UP: 'Picked Up',
-        OUT_FOR_DELIVERY: 'On the Way',
-        DELIVERED: 'Delivered',
-        CANCELLED: 'Cancelled',
+    function cleanup() {
+      document.getElementById('delivered-overlay').classList.add('show');
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      if (socket) { socket.disconnect(); socket = null; }
+    }
+
+    // ── Status helpers ─────────────────────────────────────────────────────
+
+    function headlineFor(status) {
+      return {
+        PENDING:          'Looking for a driver...',
+        ASSIGNED:         'Driver is heading to pickup',
+        PICKED_UP:        'Order picked up!',
+        OUT_FOR_DELIVERY: 'Driver is on the way!',
+        DELIVERED:        'Order delivered!',
+        CANCELLED:        'Order cancelled',
+      }[status] || status;
+    }
+
+    function stepIndex(status) {
+      return { PENDING: 0, ASSIGNED: 1, PICKED_UP: 2, OUT_FOR_DELIVERY: 2, DELIVERED: 3, CANCELLED: 0 }[status] ?? 0;
+    }
+
+    function updateProgressSteps(status) {
+      const active  = stepIndex(status);
+      const allDone = status === 'DELIVERED';
+
+      for (let i = 0; i < 4; i++) {
+        const dot   = document.getElementById(`step-${i}`);
+        const label = document.getElementById(`step-${i}-lbl`);
+        const isDone   = allDone || i === 0 || i < active;
+        const isActive = !allDone && i === active && i > 0;
+
+        dot.className   = 'step-dot'   + (isDone ? ' done' : isActive ? ' active' : '');
+        label.className = 'step-label' + (isDone ? ' done' : isActive ? ' active' : '');
+        dot.textContent = isDone ? '✓' : String(i + 1);
+      }
+
+      for (let i = 0; i < 3; i++) {
+        document.getElementById(`conn-${i}`).className =
+          'step-connector' + (allDone || i < active ? ' done' : '');
+      }
+    }
+
+    // ── Car SVG marker ─────────────────────────────────────────────────────
+
+    function makeCarIcon(rotation) {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+        <g transform="rotate(${rotation} 24 24)">
+          <rect x="14" y="8" width="20" height="32" rx="7" fill="#1f2937"/>
+          <rect x="17" y="11" width="14" height="10" rx="2" fill="#bfdbfe"/>
+          <rect x="17" y="27" width="14" height="7"  rx="2" fill="#bfdbfe"/>
+          <rect x="16" y="8"  width="5"  height="4"  rx="1" fill="#fde68a"/>
+          <rect x="27" y="8"  width="5"  height="4"  rx="1" fill="#fde68a"/>
+          <rect x="17" y="36" width="5"  height="3"  rx="1" fill="#ef4444"/>
+          <rect x="26" y="36" width="5"  height="3"  rx="1" fill="#ef4444"/>
+          <rect x="9"  y="14" width="5"  height="9"  rx="2.5" fill="#374151"/>
+          <rect x="9"  y="27" width="5"  height="9"  rx="2.5" fill="#374151"/>
+          <rect x="34" y="14" width="5"  height="9"  rx="2.5" fill="#374151"/>
+          <rect x="34" y="27" width="5"  height="9"  rx="2.5" fill="#374151"/>
+        </g>
+      </svg>`;
+      return {
+        url: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
+        scaledSize: new google.maps.Size(48, 48),
+        anchor:     new google.maps.Point(24, 24),
       };
-      return labels[s] || s;
     }
 
-    function statusClass(s) {
-      return 'status-' + (s || '').toLowerCase();
-    }
+    // ── Bearing ────────────────────────────────────────────────────────────
 
-    function timeAgo(isoString) {
-      if (!isoString) return '';
-      const diff = Math.round((Date.now() - new Date(isoString)) / 1000);
-      if (diff < 10) return 'Just now';
-      if (diff < 60) return `${diff}s ago`;
-      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-      return `${Math.floor(diff / 3600)}h ago`;
+    function calcBearing(from, to) {
+      const dLng = (to.lng - from.lng) * Math.PI / 180;
+      const φ1   = from.lat * Math.PI / 180;
+      const φ2   = to.lat  * Math.PI / 180;
+      const y    = Math.sin(dLng) * Math.cos(φ2);
+      const x    = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(dLng);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
     }
 
     // ── Smooth marker animation ────────────────────────────────────────────
 
-    function animateMarker(marker, from, to, durationMs) {
+    function animateMarker(marker, from, to, duration) {
       if (animFrame) cancelAnimationFrame(animFrame);
+
+      if (prevDriverPos) {
+        currentBearing = calcBearing(prevDriverPos, to);
+        marker.setIcon(makeCarIcon(currentBearing));
+      }
+
       const start = performance.now();
       function step(now) {
-        const t = Math.min((now - start) / durationMs, 1);
-        const lat = from.lat + (to.lat - from.lat) * t;
-        const lng = from.lng + (to.lng - from.lng) * t;
-        marker.setPosition({ lat, lng });
+        const raw  = (now - start) / duration;
+        const t    = Math.min(raw, 1);
+        const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        marker.setPosition({
+          lat: from.lat + (to.lat - from.lat) * ease,
+          lng: from.lng + (to.lng - from.lng) * ease,
+        });
         if (t < 1) animFrame = requestAnimationFrame(step);
       }
       animFrame = requestAnimationFrame(step);
     }
 
-    // ── Map markers (only called when map is ready) ────────────────────────
+    // ── ETA via DirectionsService ──────────────────────────────────────────
+
+    function fetchETA() {
+      if (!directionsService || !currentData) return;
+      const loc      = currentData.driver_location;
+      const isActive = ['PICKED_UP', 'OUT_FOR_DELIVERY'].includes(currentData.order_status);
+      if (!loc || !isActive || currentData.customer_latitude == null) return;
+      if (Date.now() - lastEtaFetch < 30_000) return;
+      lastEtaFetch = Date.now();
+
+      directionsService.route({
+        origin:      { lat: Number(loc.latitude),                  lng: Number(loc.longitude) },
+        destination: { lat: Number(currentData.customer_latitude), lng: Number(currentData.customer_longitude) },
+        travelMode:  google.maps.TravelMode.DRIVING,
+      }, (result, status) => {
+        if (status !== google.maps.DirectionsStatus.OK) return;
+        directionsRenderer.setMap(map);
+        directionsRenderer.setDirections(result);
+        const duration = result.routes[0]?.legs[0]?.duration?.text;
+        document.getElementById('eta-text').textContent = duration ? `~${duration} away` : '';
+      });
+    }
+
+    // ── Apply map data ─────────────────────────────────────────────────────
 
     function applyMapData(data) {
       if (!map) return;
 
-      if (data.customer_latitude != null && data.customer_longitude != null) {
+      const isActive = ['PICKED_UP', 'OUT_FOR_DELIVERY'].includes(data.order_status);
+
+      // Destination marker (home pin)
+      if (data.customer_latitude != null && data.customer_longitude != null && !destMarker) {
         const destPos = { lat: Number(data.customer_latitude), lng: Number(data.customer_longitude) };
-        if (!destinationMarker) {
-          destinationMarker = new google.maps.Marker({
-            position: destPos,
-            map,
-            title: 'Your address',
-            icon: { url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' },
-          });
-        }
-        if (!driverMarker && !data.driver_location) {
+        destMarker = new google.maps.Marker({
+          position: destPos,
+          map,
+          title: 'Delivery address',
+          icon: {
+            path:        google.maps.SymbolPath.CIRCLE,
+            scale:       10,
+            fillColor:   '#22c55e',
+            fillOpacity: 1,
+            strokeColor: '#fff',
+            strokeWeight: 3,
+          },
+          zIndex: 5,
+        });
+        if (!data.driver_location || !isActive) {
           map.setCenter(destPos);
           map.setZoom(15);
         }
       }
 
-      if (data.driver_location) {
+      // Driver marker (car icon)
+      if (data.driver_location && isActive) {
         const newPos = {
           lat: Number(data.driver_location.latitude),
           lng: Number(data.driver_location.longitude),
@@ -302,53 +536,55 @@
           driverMarker = new google.maps.Marker({
             position: newPos,
             map,
-            title: 'Driver',
-            icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' },
+            title:  'Driver',
+            icon:   makeCarIcon(0),
             zIndex: 10,
           });
-          if (destinationMarker) {
+          prevDriverPos = newPos;
+
+          // Fit both driver and destination in view
+          if (destMarker) {
             const bounds = new google.maps.LatLngBounds();
             bounds.extend(newPos);
-            bounds.extend(destinationMarker.getPosition());
-            map.fitBounds(bounds, { top: 40, right: 40, bottom: 160, left: 40 });
+            bounds.extend(destMarker.getPosition());
+            map.fitBounds(bounds, { top: 60, right: 60, bottom: 260, left: 60 });
           } else {
             map.setCenter(newPos);
           }
-          prevDriverPos = newPos;
         } else {
-          animateMarker(driverMarker, prevDriverPos || newPos, newPos, 1000);
+          animateMarker(driverMarker, prevDriverPos || newPos, newPos, 1200);
           prevDriverPos = newPos;
         }
+      } else if (driverMarker && !isActive) {
+        driverMarker.setMap(null);
+        driverMarker = null;
+        prevDriverPos = null;
+        directionsRenderer.setMap(null);
       }
     }
 
-    // ── Update status card (no Maps dependency) ────────────────────────────
+    // ── Apply card data ────────────────────────────────────────────────────
 
     function applyCardData(data) {
-      document.getElementById('order-number').textContent =
-        'Order ' + (data.order_number || '#—');
+      const status   = data.order_status;
+      const isActive = ['PICKED_UP', 'OUT_FOR_DELIVERY'].includes(status);
 
-      const badge = document.getElementById('status-badge');
-      badge.textContent = statusLabel(data.order_status);
-      badge.className = 'status-badge ' + statusClass(data.order_status);
+      document.getElementById('status-headline').textContent = headlineFor(status);
+      document.getElementById('live-badge').className =
+        'live-badge' + (isActive && data.driver_location ? ' show' : '');
+
+      if (!isActive) document.getElementById('eta-text').textContent = '';
+
+      updateProgressSteps(status);
 
       document.getElementById('driver-name').textContent =
-        data.driver ? '🚗 ' + data.driver.name : 'Driver en route...';
+        data.driver ? data.driver.name : 'Waiting for driver...';
+      document.getElementById('delivery-address').textContent = data.delivery_address || '';
 
-      document.getElementById('delivery-address').textContent =
-        data.delivery_address || '';
-
-      document.getElementById('location-age').textContent = data.driver_location
-        ? 'Driver location: ' + timeAgo(data.driver_location.updated_at)
-        : data.driver ? 'Waiting for driver location...' : '';
-
-      if (data.order_status === 'DELIVERED') {
-        document.getElementById('delivered-banner').classList.add('show');
-        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-      }
+      if (status === 'DELIVERED') cleanup();
     }
 
-    // ── Fetch tracking data ────────────────────────────────────────────────
+    // ── Fetch tracking data (initial + fallback polling) ───────────────────
 
     async function fetchTracking() {
       try {
@@ -356,45 +592,57 @@
         if (res.status === 404) { showError(); return; }
         if (!res.ok) return;
         const data = await res.json();
-        lastData = data;
+        currentData = data;
         applyCardData(data);
-        applyMapData(data);   // no-op if map not ready yet
+        applyMapData(data);
+        if (data.driver_location && ['PICKED_UP', 'OUT_FOR_DELIVERY'].includes(data.order_status)) {
+          fetchETA();
+        }
       } catch (_) {
         // Network error — keep polling silently
       }
     }
 
-    // ── Bootstrap: script is at bottom of <body> so DOM is already ready.
-    // Using an IIFE instead of DOMContentLoaded which may have already fired.
+    // ── Bootstrap ──────────────────────────────────────────────────────────
+
     (async () => {
       if (!token) { showError(); return; }
       await fetchTracking();
       hideLoading();
-      pollInterval = setInterval(fetchTracking, 10_000);
+      // Slower poll as safety net — socket handles real-time updates
+      pollInterval = setInterval(fetchTracking, socket ? 30_000 : 10_000);
     })();
 
-    // Called by Google Maps when its script is ready.
-    // Initialises the map and applies whatever data was already fetched.
+    // ── Google Maps init callback ──────────────────────────────────────────
+
     window.initTrackingMap = function () {
       map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 14,
-        center: { lat: 33.8938, lng: 35.5018 },
+        zoom:             14,
+        center:           { lat: 33.8938, lng: 35.5018 },
         disableDefaultUI: true,
-        zoomControl: true,
-        gestureHandling: 'greedy',
+        zoomControl:      true,
+        gestureHandling:  'greedy',
         styles: [
-          { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+          { featureType: 'poi',     stylers: [{ visibility: 'off' }] },
           { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+          { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
         ],
       });
-      if (lastData) applyMapData(lastData);
+
+      directionsService  = new google.maps.DirectionsService();
+      directionsRenderer = new google.maps.DirectionsRenderer({
+        suppressMarkers: true,
+        polylineOptions: {
+          strokeColor:   '#4f46e5',
+          strokeWeight:  5,
+          strokeOpacity: 0.85,
+        },
+      });
+
+      if (currentData) applyMapData(currentData);
     };
   </script>
 
-  <!--
-    Replace YOUR_GOOGLE_MAPS_API_KEY below with your actual key.
-    Restrict it to HTTP referrers (your Railway domain) in the Google Cloud Console.
-  -->
   <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAriVJnIv8YZpcpQOIUy-4f3Tb1i0RTfAg&callback=initTrackingMap"
     async defer>

@@ -50,6 +50,7 @@ app.use(
                "'unsafe-inline'",
                "https://maps.googleapis.com",
                "https://maps.gstatic.com",
+               "https://cdn.socket.io",
             ],
             styleSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: [
@@ -67,6 +68,8 @@ app.use(
                "https://maps.googleapis.com",
                "https://*.googleapis.com",
                "https://*.gstatic.com",
+               "wss:",
+               "ws:",
             ],
             fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
          },

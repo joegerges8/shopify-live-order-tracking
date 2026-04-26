@@ -18,6 +18,7 @@ const {
   updateOrderStatus,
   createLocationUpdate,
 } = require("../services/orderService");
+const { getIO } = require("../socket");
 
 // Returns all active orders assigned to the authenticated driver.
 // "Active" means any status except DELIVERED or CANCELLED, so the driver
@@ -89,6 +90,15 @@ async function postMyOrderLocation(req, res) {
       longitude,
     });
 
+    const io = getIO();
+    if (io && order.tracking_token) {
+      io.to(`order:${order.tracking_token}`).emit("location_update", {
+        latitude,
+        longitude,
+        updated_at: created.created_at,
+      });
+    }
+
     return res.status(201).json(created);
   } catch (error) {
     console.error("Error creating location update:", error);
@@ -144,6 +154,12 @@ async function patchMyOrderStatus(req, res) {
     }
 
     const updated = await updateOrderStatus(orderId, status);
+
+    const io = getIO();
+    if (io && order.tracking_token) {
+      io.to(`order:${order.tracking_token}`).emit("status_update", { status });
+    }
+
     return res.json(updated);
   } catch (error) {
     console.error("Error updating driver order status:", error);
