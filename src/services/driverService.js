@@ -82,6 +82,14 @@ async function updateDriverPassword(driverId, newPasswordHash) {
   );
 }
 
+async function deleteDriverById(driverId) {
+  const result = await pool.query(
+    `DELETE FROM drivers WHERE id = $1 RETURNING id`,
+    [driverId]
+  );
+  return result.rows[0];
+}
+
 module.exports = {
   getAllDrivers,
   getDriverByPhone,
@@ -89,4 +97,5 @@ module.exports = {
   createDriver,
   getPublicDriverById,
   updateDriverPassword,
+  deleteDriverById,
 };

@@ -44,6 +44,7 @@ const {
 const {
   getDrivers,
   createNewDriver,
+  deleteDriver,
 } = require("../controllers/driverController");
 
 // ── Public auth routes ─────────────────────────────────────────────────────
@@ -71,5 +72,6 @@ router.patch("/me/orders/:id/status", requireDriverAuth, patchMyOrderStatus);
 // ── Dispatcher / admin routes ──────────────────────────────────────────────
 router.get("/", getDrivers);
 router.post("/", createNewDriver);
+router.delete("/:id", deleteDriver);
 
 module.exports = router;

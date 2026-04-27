@@ -3,6 +3,7 @@ const {
   getAllDrivers,
   getDriverByPhone,
   createDriver,
+  deleteDriverById,
 } = require("../services/driverService");
 
 async function getDrivers(req, res) {
@@ -49,7 +50,25 @@ async function createNewDriver(req, res) {
   }
 }
 
+async function deleteDriver(req, res) {
+  try {
+    const driverId = parseInt(req.params.id, 10);
+    if (!driverId) {
+      return res.status(400).json({ error: "Invalid driver ID" });
+    }
+    const deleted = await deleteDriverById(driverId);
+    if (!deleted) {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+    return res.json({ message: "Driver deleted", id: deleted.id });
+  } catch (error) {
+    console.error("Error deleting driver:", error);
+    return res.status(500).json({ error: "Failed to delete driver" });
+  }
+}
+
 module.exports = {
   getDrivers,
   createNewDriver,
+  deleteDriver,
 };

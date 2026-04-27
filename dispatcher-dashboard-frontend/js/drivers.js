@@ -1,4 +1,4 @@
-import { getDrivers, getOrders } from "./api.js";
+import { getDrivers, getOrders, deleteDriver } from "./api.js";
 
 const tableBody = document.querySelector("#driversTable tbody");
 
@@ -27,7 +27,7 @@ async function loadDrivers() {
     if (!drivers || drivers.length === 0) {
       tableBody.innerHTML = `
         <tr>
-          <td colspan="4">No drivers found.</td>
+          <td colspan="5">No drivers found.</td>
         </tr>
       `;
       return;
@@ -42,7 +42,21 @@ async function loadDrivers() {
         <td>${driver.full_name ?? ""}</td>
         <td>${driver.phone ?? ""}</td>
         <td>${createStatusBadge(driverStatus)}</td>
+        <td>
+          <button class="btn-delete" data-id="${driver.id}">Delete</button>
+        </td>
       `;
+
+      row.querySelector(".btn-delete").addEventListener("click", async () => {
+        if (!confirm(`Delete driver "${driver.full_name}"?`)) return;
+        try {
+          await deleteDriver(driver.id);
+          row.remove();
+        } catch (err) {
+          alert("Failed to delete driver. Please try again.");
+          console.error(err);
+        }
+      });
 
       tableBody.appendChild(row);
     });
@@ -50,7 +64,7 @@ async function loadDrivers() {
     console.error("Error loading drivers:", error);
     tableBody.innerHTML = `
       <tr>
-        <td colspan="4">Failed to load drivers.</td>
+        <td colspan="5">Failed to load drivers.</td>
       </tr>
     `;
   }

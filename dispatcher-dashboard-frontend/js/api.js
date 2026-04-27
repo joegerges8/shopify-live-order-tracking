@@ -42,6 +42,14 @@ export async function updateOrderStatus(orderId, status) {
   return response.json();
 }
 
+export async function deleteDriver(driverId) {
+  const response = await fetch(`${BASE_URL}/drivers/${driverId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error("Failed to delete driver");
+  return response.json();
+}
+
 export async function unassignDriver(orderId) {
   const response = await fetch(`${BASE_URL}/orders/${orderId}/unassign-driver`, {
     method: "PATCH",
