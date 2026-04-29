@@ -3,7 +3,7 @@
 const { Pool } = require("pg"); 
 
 //Loads the variables from your .env file into process.env.
-require("dotenv").config(); 
+require("dotenv").config({ quiet: true }); 
 
 //Creates the PostgreSQL connection using your database settings.
 //In production on Railway we prefer a single DATABASE_URL (with SSL),

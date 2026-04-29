@@ -1,21 +1,15 @@
 // driverSelfController.js
 //
-// Handles HTTP requests for the driver's own data — orders, location updates,
+// Handles HTTP requests for the driver's own data: orders, location updates,
 // and status changes. Every route in this controller is protected by the
 // requireDriverAuth middleware, which verifies the JWT token in the
 // Authorization header and attaches the driver's ID to req.driverId.
-//
-// Routes handled here:
-//   GET    /api/drivers/me/orders           — fetch active (pending) orders
-//   GET    /api/drivers/me/orders/completed — fetch completed (delivered) orders
-//   POST   /api/drivers/me/orders/:id/location — post a GPS ping
-//   PATCH  /api/drivers/me/orders/:id/status   — update delivery status
 
 const {
   getOrdersByDriverId,
   getCompletedOrdersByDriverId,
   getOrderById,
-  updateOrderStatus,
+  updateDriverOrderStatus,
   createLocationUpdate,
 } = require("../services/orderService");
 const { getIO } = require("../socket");
@@ -34,9 +28,6 @@ async function getMyOrders(req, res) {
 }
 
 // Returns all completed (DELIVERED) orders for the authenticated driver.
-// This powers the "Done" tab in the driver app and the earnings summary strip.
-// It is a separate endpoint from getMyOrders so that pending and completed
-// orders are never mixed in the same response.
 async function getMyCompletedOrders(req, res) {
   try {
     const orders = await getCompletedOrdersByDriverId(req.driverId);
@@ -48,15 +39,6 @@ async function getMyCompletedOrders(req, res) {
 }
 
 // Records a GPS coordinate from the driver's device for a specific order.
-// The driver app calls this periodically while delivering so the customer's
-// live-tracking page can show the driver's real-time location on a map.
-//
-// Validation checks:
-//   - orderId must be a finite number (rejects "abc" or NaN).
-//   - latitude and longitude must be numbers (rejects strings or missing fields).
-//   - The order must exist in the database.
-//   - The order must belong to the authenticated driver (prevents one driver
-//     from posting fake locations for another driver's order).
 async function postMyOrderLocation(req, res) {
   try {
     const orderId = Number(req.params.id);
@@ -78,7 +60,6 @@ async function postMyOrderLocation(req, res) {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    // Ownership check — a driver can only post locations for their own orders.
     if (order.assigned_driver_id !== driverId) {
       return res.status(403).json({ error: "Not allowed for this order" });
     }
@@ -106,22 +87,14 @@ async function postMyOrderLocation(req, res) {
   }
 }
 
-// Updates the delivery status of an order (e.g. from ASSIGNED to PICKED_UP,
-// or from OUT_FOR_DELIVERY to DELIVERED). When status becomes DELIVERED, the
-// database automatically stamps the delivered_at timestamp via the SQL CASE
-// expression in updateOrderStatus().
-//
-// Validation checks:
-//   - orderId must be valid.
-//   - status must be one of the predefined valid values.
-//   - The order must exist and belong to the authenticated driver.
+// Updates an order status from the driver app. The ownership check is folded
+// into the UPDATE query so the normal "Mark as Picked Up" path uses one DB call.
 async function patchMyOrderStatus(req, res) {
   try {
     const orderId = Number(req.params.id);
     const driverId = req.driverId;
     const { status } = req.body || {};
 
-    // Whitelist of allowed status transitions — rejects any arbitrary string.
     const validStatuses = [
       "PENDING",
       "ASSIGNED",
@@ -143,21 +116,19 @@ async function patchMyOrderStatus(req, res) {
       return res.status(400).json({ error: "Invalid status value" });
     }
 
-    const order = await getOrderById(orderId);
-    if (!order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
+    const updated = await updateDriverOrderStatus(orderId, driverId, status);
+    if (!updated) {
+      const order = await getOrderById(orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
 
-    // Ownership check — a driver can only update their own orders.
-    if (order.assigned_driver_id !== driverId) {
       return res.status(403).json({ error: "Not allowed for this order" });
     }
 
-    const updated = await updateOrderStatus(orderId, status);
-
     const io = getIO();
-    if (io && order.tracking_token) {
-      io.to(`order:${order.tracking_token}`).emit("status_update", { status });
+    if (io && updated.tracking_token) {
+      io.to(`order:${updated.tracking_token}`).emit("status_update", { status });
     }
 
     return res.json(updated);

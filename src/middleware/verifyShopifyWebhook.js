@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-require("dotenv").config();
+require("dotenv").config({ quiet: true });
 
 function verifyShopifyWebhook(req, res, next) {
   try {

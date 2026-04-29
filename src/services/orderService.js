@@ -98,6 +98,32 @@ async function updateOrderStatus(orderId, status) {
   return result.rows[0];
 }
 
+// Same status update as updateOrderStatus(), but scoped to the authenticated
+// driver so the common driver-app action is a single database round trip.
+async function updateDriverOrderStatus(orderId, driverId, status) {
+  const query =
+    status === "DELIVERED"
+      ? `
+        UPDATE orders
+        SET order_status = $1,
+            delivered_at = NOW(),
+            financial_status = 'paid'
+        WHERE id = $2
+          AND assigned_driver_id = $3
+        RETURNING *
+      `
+      : `
+        UPDATE orders
+        SET order_status = $1
+        WHERE id = $2
+          AND assigned_driver_id = $3
+        RETURNING *
+      `;
+
+  const result = await pool.query(query, [status, orderId, driverId]);
+  return result.rows[0];
+}
+
 // Returns all orders that are still active (not yet delivered or cancelled)
 // for a given driver. This powers the All / Pending / Active tabs in the
 // driver app. Excluding DELIVERED and CANCELLED orders keeps the list clean —
@@ -188,6 +214,7 @@ async function getOrderByTrackingToken(token) {
       SELECT latitude, longitude, created_at
       FROM location_updates
       WHERE order_id = o.id
+        AND driver_id = o.assigned_driver_id
       ORDER BY created_at DESC
       LIMIT 1
     ) lu ON TRUE
@@ -206,6 +233,7 @@ module.exports = {
   assignDriverToOrder,
   unassignDriverFromOrder,
   updateOrderStatus,
+  updateDriverOrderStatus,
   getOrdersByDriverId,
   getCompletedOrdersByDriverId,
   createLocationUpdate,
