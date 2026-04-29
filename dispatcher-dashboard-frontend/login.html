@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dispatcher Login</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+    body { background: #f3f4f6; color: #1f2937; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .login-card {
+      background: white;
+      padding: 44px 40px;
+      border-radius: 16px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+      width: 100%;
+      max-width: 420px;
+    }
+    .login-card h1 {
+      font-size: 30px;
+      color: #1e3a8a;
+      margin-bottom: 32px;
+      text-align: center;
+    }
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 16px;
+      margin-bottom: 20px;
+      background: white;
+    }
+    input:focus { outline: none; border-color: #1e3a8a; }
+    button {
+      width: 100%;
+      padding: 14px;
+      background: #1e3a8a;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #163172; }
+    #errorMsg { color: #dc2626; font-size: 14px; margin-top: 14px; text-align: center; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <h1>Dispatcher Login</h1>
+    <form id="loginForm">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" autocomplete="username" required />
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required />
+
+      <button type="submit">Log In</button>
+      <p id="errorMsg"></p>
+    </form>
+  </div>
+
+  <script>
+    // Skip login if already authenticated
+    (function () {
+      const token = localStorage.getItem("adminToken");
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          if (Date.now() / 1000 < payload.exp) {
+            window.location.replace("/dashboard/index.html");
+          }
+        } catch (_) {}
+      }
+    })();
+
+    const FALLBACK_API_ORIGIN = "https://shopify-live-order-tracking-production.up.railway.app";
+    const API_ORIGIN = window.location.protocol === "file:" ? FALLBACK_API_ORIGIN : window.location.origin;
+
+    document.getElementById("loginForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const errorMsg = document.getElementById("errorMsg");
+      errorMsg.textContent = "";
+
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+
+      try {
+        const response = await fetch(`${API_ORIGIN}/api/admin/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          errorMsg.textContent = data.error || "Login failed. Please try again.";
+          return;
+        }
+
+        localStorage.setItem("adminToken", data.token);
+        window.location.replace("/dashboard/index.html");
+      } catch (err) {
+        errorMsg.textContent = "Network error. Please try again.";
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>

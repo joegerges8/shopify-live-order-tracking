@@ -26,6 +26,7 @@ const express = require("express");
 const router = express.Router();
 
 const requireDriverAuth = require("../middleware/requireDriverAuth");
+const requireAdminAuth = require("../middleware/requireAdminAuth");
 
 const {
   signupDriver,
@@ -70,8 +71,8 @@ router.post("/me/orders/:id/location", requireDriverAuth, postMyOrderLocation);
 router.patch("/me/orders/:id/status", requireDriverAuth, patchMyOrderStatus);
 
 // ── Dispatcher / admin routes ──────────────────────────────────────────────
-router.get("/", getDrivers);
-router.post("/", createNewDriver);
-router.delete("/:id", deleteDriver);
+router.get("/", requireAdminAuth, getDrivers);
+router.post("/", requireAdminAuth, createNewDriver);
+router.delete("/:id", requireAdminAuth, deleteDriver);
 
 module.exports = router;

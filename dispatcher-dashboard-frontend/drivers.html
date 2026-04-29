@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Drivers</title>
   <link rel="stylesheet" href="css/style.css" />
+  <script src="js/auth.js"></script>
+  <script>requireAuth();</script>
 </head>
 <body>
   <div class="layout">
@@ -14,6 +16,7 @@
         <a href="index.html">Orders</a>
         <a href="drivers.html">Drivers</a>
       </nav>
+      <button class="btn-logout" onclick="logout()">Logout</button>
     </aside>
 
     <main class="main-content">

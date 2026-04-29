@@ -20,6 +20,8 @@ body {
   background: #1e3a8a;
   color: white;
   padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar h2 {
@@ -268,5 +270,21 @@ button:hover {
 }
 
 .danger-btn:hover {
+  background: #b91c1c;
+}
+
+.btn-logout {
+  margin-top: auto;
+  background: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-logout:hover {
   background: #b91c1c;
 }

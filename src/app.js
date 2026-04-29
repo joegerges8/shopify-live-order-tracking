@@ -18,6 +18,8 @@ const orderRoutes = require("./routes/orderRoutes");
 const driverRoutes = require("./routes/driverRoutes");
 const mapsRoutes = require("./routes/mapsRoutes");
 const trackingRoutes = require("./routes/trackingRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const requireAdminAuth = require("./middleware/requireAdminAuth");
 //Create the Express application instance. This is the main app object that we will configure with middleware and routes.
 const app = express();
 
@@ -90,8 +92,8 @@ app.get("/health", (req, res) => {
 app.use("/webhooks/shopify", webhookRoutes);
 
 // Normal API routes
-//This sets up the routes for handling API requests related to orders. Any request to /api/orders will be handled by the orderRoutes router, which we imported at the top of the file.
-app.use("/api/orders", orderRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/orders", requireAdminAuth, orderRoutes);
 app.use("/api/drivers", driverRoutes);
 app.use("/api/maps", mapsRoutes);
 app.use("/api/track", trackingRoutes);

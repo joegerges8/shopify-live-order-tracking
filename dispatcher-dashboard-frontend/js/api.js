@@ -4,14 +4,22 @@ const FALLBACK_API_ORIGIN = "https://shopify-live-order-tracking-production.up.r
 const API_ORIGIN = window.location.protocol === "file:" ? FALLBACK_API_ORIGIN : window.location.origin;
 const BASE_URL = `${API_ORIGIN}/api`;
 
+function authHeaders() {
+  const token = localStorage.getItem("adminToken");
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export async function getOrders() {
-  const response = await fetch(`${BASE_URL}/orders`);
+  const response = await fetch(`${BASE_URL}/orders`, { headers: authHeaders() });
   if (!response.ok) throw new Error("Failed to fetch orders");
   return response.json();
 }
 
 export async function getDrivers() {
-  const response = await fetch(`${BASE_URL}/drivers`);
+  const response = await fetch(`${BASE_URL}/drivers`, { headers: authHeaders() });
   if (!response.ok) throw new Error("Failed to fetch drivers");
   return response.json();
 }
@@ -19,12 +27,9 @@ export async function getDrivers() {
 export async function assignDriver(orderId, driverId) {
   const response = await fetch(`${BASE_URL}/orders/${orderId}/assign-driver`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: authHeaders(),
     body: JSON.stringify({ driverId }),
   });
-
   if (!response.ok) throw new Error("Failed to assign driver");
   return response.json();
 }
@@ -32,12 +37,9 @@ export async function assignDriver(orderId, driverId) {
 export async function updateOrderStatus(orderId, status) {
   const response = await fetch(`${BASE_URL}/orders/${orderId}/status`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: authHeaders(),
     body: JSON.stringify({ status }),
   });
-
   if (!response.ok) throw new Error("Failed to update status");
   return response.json();
 }
@@ -45,6 +47,7 @@ export async function updateOrderStatus(orderId, status) {
 export async function deleteDriver(driverId) {
   const response = await fetch(`${BASE_URL}/drivers/${driverId}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   if (!response.ok) throw new Error("Failed to delete driver");
   return response.json();
@@ -53,11 +56,8 @@ export async function deleteDriver(driverId) {
 export async function unassignDriver(orderId) {
   const response = await fetch(`${BASE_URL}/orders/${orderId}/unassign-driver`, {
     method: "PATCH",
+    headers: authHeaders(),
   });
-
-  if (!response.ok) {
-    throw new Error("Failed to unassign driver");
-  }
-
+  if (!response.ok) throw new Error("Failed to unassign driver");
   return response.json();
 }
