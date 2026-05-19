@@ -23,6 +23,16 @@ function extractCoords(text) {
 async function parseMapLink(url) {
   const trimmed = url.trim();
 
+  // Accept raw coordinates: "33.94861, 35.67228" or "33.94861,35.67228"
+  const rawCoords = trimmed.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+  if (rawCoords) {
+    const lat = parseFloat(rawCoords[1]);
+    const lng = parseFloat(rawCoords[2]);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+
   const direct = extractCoords(trimmed);
   if (direct) return direct;
 

@@ -260,7 +260,7 @@ function attachEventListeners() {
   locationButtons.forEach((button) => {
     button.addEventListener("click", async () => {
       const orderId = button.getAttribute("data-location-order-id");
-      const mapLink = prompt("Paste the customer's Google Maps link:");
+      const mapLink = prompt("Paste the customer's Google Maps link\nor raw coordinates (e.g. 33.94861, 35.67228):");
 
       if (!mapLink || !mapLink.trim()) return;
 
