@@ -1,9 +1,9 @@
 const PATTERNS = [
-  /@(-?\d+\.?\d*),(-?\d+\.?\d*)/,           // /@lat,lng,zoom
-  /[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/,      // ?q=lat,lng
-  /[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/,     // ?ll=lat,lng
-  /[?&]center=(-?\d+\.?\d*),(-?\d+\.?\d*)/, // ?center=lat,lng
-  /!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/,       // embedded data params
+  /@(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+  /[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+  /[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+  /[?&]center=(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+  /!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/,
 ];
 
 function extractCoords(text) {
@@ -23,32 +23,30 @@ function extractCoords(text) {
 async function parseMapLink(url) {
   const trimmed = url.trim();
 
-  // Try direct parse first (already a full URL with coords)
   const direct = extractCoords(trimmed);
   if (direct) return direct;
 
-  // Short links need to be expanded
   if (trimmed.includes('goo.gl')) {
     const response = await fetch(trimmed, {
       redirect: 'follow',
       headers: {
-        // Without a real User-Agent, Google may not issue a proper redirect
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       },
     });
 
-    // 1. Try the final redirected URL
+    console.log('[parseMapLink] status:', response.status);
+    console.log('[parseMapLink] final URL:', response.url);
+
     const fromUrl = extractCoords(response.url);
     if (fromUrl) return fromUrl;
 
-    // 2. Fall back: scan the HTML body Google returns
-    //    Mobile share links (maps.app.goo.gl) often embed coords in
-    //    the canonical <link> or og:url <meta> tag rather than the URL
     const html = await response.text();
+    console.log('[parseMapLink] HTML snippet:', html.slice(0, 800));
 
     const canonicalMatch = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)
                         || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']/i);
     if (canonicalMatch) {
+      console.log('[parseMapLink] canonical:', canonicalMatch[1]);
       const fromCanonical = extractCoords(canonicalMatch[1]);
       if (fromCanonical) return fromCanonical;
     }
@@ -56,11 +54,11 @@ async function parseMapLink(url) {
     const ogMatch = html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i)
                  || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:url["']/i);
     if (ogMatch) {
+      console.log('[parseMapLink] og:url:', ogMatch[1]);
       const fromOg = extractCoords(ogMatch[1]);
       if (fromOg) return fromOg;
     }
 
-    // 3. Last resort: scan the entire HTML (coords appear in JSON-LD or script tags)
     return extractCoords(html);
   }
 
