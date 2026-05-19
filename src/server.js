@@ -1,11 +1,3 @@
-// require("dotenv").config();
-// const app = require("./app");
-
-// const PORT = process.env.PORT || 3000;
-
-// app.listen(PORT, () => {
-//   console.log(`Server running on port ${PORT}`);
-// });
 
 require("dotenv").config({ quiet: true });
 
@@ -18,6 +10,7 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
+   //test if the database connection works by running a simple query. If it fails, we catch the error and log it.
     await pool.query("SELECT NOW()");
     console.log("Database connected successfully");
 

@@ -227,6 +227,14 @@ async function getOrderByTrackingToken(token) {
   return result.rows[0];
 }
 
+async function updateCustomerLocation(orderId, lat, lng) {
+  const result = await pool.query(
+    `UPDATE orders SET customer_latitude = $1, customer_longitude = $2 WHERE id = $3 RETURNING *`,
+    [lat, lng, orderId]
+  );
+  return result.rows[0];
+}
+
 module.exports = {
   getAllOrders,
   getOrderById,
@@ -238,4 +246,5 @@ module.exports = {
   getCompletedOrdersByDriverId,
   createLocationUpdate,
   getOrderByTrackingToken,
+  updateCustomerLocation,
 };

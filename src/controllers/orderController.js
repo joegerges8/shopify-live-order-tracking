@@ -4,7 +4,9 @@ const {
   assignDriverToOrder,
   unassignDriverFromOrder,
   updateOrderStatus,
+  updateCustomerLocation,
 } = require("../services/orderService");
+const { parseMapLink } = require("../utils/parseMapLink");
 
 const pool = require("../config/db");
 
@@ -141,9 +143,39 @@ async function changeOrderStatus(req, res) {
 }
 
 
+async function setCustomerLocation(req, res) {
+  try {
+    const orderId = req.params.id;
+    const { mapLink } = req.body;
+
+    if (!mapLink) {
+      return res.status(400).json({ error: "mapLink is required" });
+    }
+
+    const coords = await parseMapLink(mapLink);
+
+    if (!coords) {
+      return res.status(422).json({ error: "Could not extract coordinates from that link. Make sure it's a valid Google Maps link." });
+    }
+
+    const order = await getOrderById(orderId);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    await updateCustomerLocation(orderId, coords.lat, coords.lng);
+
+    return res.json({ lat: coords.lat, lng: coords.lng });
+  } catch (error) {
+    console.error("Error setting customer location:", error);
+    return res.status(500).json({ error: "Failed to set customer location" });
+  }
+}
+
 module.exports = {
   getOrders,
   assignDriver,
   unassignDriver,
   changeOrderStatus,
+  setCustomerLocation,
 };

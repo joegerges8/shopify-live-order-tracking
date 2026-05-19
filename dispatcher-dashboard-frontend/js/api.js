@@ -61,3 +61,14 @@ export async function unassignDriver(orderId) {
   if (!response.ok) throw new Error("Failed to unassign driver");
   return response.json();
 }
+
+export async function setCustomerLocation(orderId, mapLink) {
+  const response = await fetch(`${BASE_URL}/orders/${orderId}/customer-location`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ mapLink }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Failed to set customer location");
+  return data;
+}
