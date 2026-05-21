@@ -19,6 +19,7 @@ const driverRoutes = require("./routes/driverRoutes");
 const mapsRoutes = require("./routes/mapsRoutes");
 const trackingRoutes = require("./routes/trackingRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const launchRoutes = require("./routes/launchRoutes");
 const requireAdminAuth = require("./middleware/requireAdminAuth");
 //Create the Express application instance. This is the main app object that we will configure with middleware and routes.
 const app = express();
@@ -78,6 +79,9 @@ app.use(morgan("dev"));
 // Visit: https://<your-railway-domain>/dashboard/
 const dashboardDir = path.join(__dirname, "../dispatcher-dashboard-frontend");
 app.use("/dashboard", express.static(dashboardDir));
+
+// Shopify app launch URL — Shopify navigates here when merchant clicks the app
+app.use("/launch", launchRoutes);
 
 // Simple landing + health endpoints (useful for Railway/browser checks)
 app.get("/", (req, res) => {
