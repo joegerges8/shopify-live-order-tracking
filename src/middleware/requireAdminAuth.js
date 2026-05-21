@@ -7,9 +7,11 @@ function requireAdminAuth(req, res, next) {
       return res.status(401).json({ error: "Missing or invalid Authorization header" });
     }
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    if (!payload || payload.type !== "admin") {
+    if (!payload || payload.type !== "admin" || !payload.storeId) {
       return res.status(401).json({ error: "Invalid token" });
     }
+    req.storeId = payload.storeId;
+    req.shopDomain = payload.shop;
     return next();
   } catch {
     return res.status(401).json({ error: "Unauthorized" });

@@ -11,6 +11,7 @@
 
   window.logout = function () {
     localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminShop");
     location.href = LOGIN;
   };
 

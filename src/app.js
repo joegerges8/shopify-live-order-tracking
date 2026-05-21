@@ -20,6 +20,8 @@ const mapsRoutes = require("./routes/mapsRoutes");
 const trackingRoutes = require("./routes/trackingRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const launchRoutes = require("./routes/launchRoutes");
+const authRoutes = require("./routes/authRoutes");
+const { setupPassword } = require("./controllers/authController");
 const requireAdminAuth = require("./middleware/requireAdminAuth");
 //Create the Express application instance. This is the main app object that we will configure with middleware and routes.
 const app = express();
@@ -79,6 +81,12 @@ app.use(morgan("dev"));
 // Visit: https://<your-railway-domain>/dashboard/
 const dashboardDir = path.join(__dirname, "../dispatcher-dashboard-frontend");
 app.use("/dashboard", express.static(dashboardDir));
+
+// Shopify OAuth — initiates install flow for any store
+app.use("/auth", authRoutes);
+
+// Password setup after first OAuth install
+app.post("/api/admin/setup-password", express.json(), setupPassword);
 
 // Shopify app launch URL — Shopify navigates here when merchant clicks the app
 app.use("/launch", launchRoutes);

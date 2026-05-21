@@ -1,5 +1,3 @@
-//Save Shopify orders in DB
-
 const pool = require("../config/db");
 const { randomUUID } = require("crypto");
 
@@ -21,9 +19,19 @@ function parseNullableNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+async function getStoreId(shopDomain) {
+  if (!shopDomain) return null;
+  const result = await pool.query(
+    `SELECT id FROM stores WHERE shop_domain = $1 AND active = TRUE LIMIT 1`,
+    [shopDomain]
+  );
+  return result.rows[0]?.id ?? null;
+}
+
 async function handleOrderCreated(req, res) {
   try {
     const order = parseWebhookOrder(req);
+    const storeId = await getStoreId(req.shopDomain);
 
     const shopifyOrderId = order.id;
     const orderNumber = order.name || String(order.order_number || "");
@@ -41,10 +49,7 @@ async function handleOrderCreated(req, res) {
     const customerEmail = order.email || order.customer?.email || null;
 
     const shippingAddress = order.shipping_address
-      ? [
-          order.shipping_address.address1,
-          order.shipping_address.address2,
-        ]
+      ? [order.shipping_address.address1, order.shipping_address.address2]
           .filter(Boolean)
           .join(", ")
       : null;
@@ -65,49 +70,22 @@ async function handleOrderCreated(req, res) {
     const trackingToken = randomUUID();
 
     await pool.query(
-      `
-      INSERT INTO orders (
-        shopify_order_id,
-        order_number,
-        customer_first_name,
-        customer_last_name,
-        customer_phone,
-        customer_email,
-        shipping_address,
-        city,
-        country,
-        total_price,
-        financial_status,
-        fulfillment_status,
-        customer_latitude,
-        customer_longitude,
-        customer_altitude,
-        google_maps_link,
-        tracking_token
-      )
-      VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
-      )
-      ON CONFLICT (shopify_order_id) DO NOTHING
-      `,
+      `INSERT INTO orders (
+        shopify_order_id, order_number,
+        customer_first_name, customer_last_name, customer_phone, customer_email,
+        shipping_address, city, country,
+        total_price, financial_status, fulfillment_status,
+        customer_latitude, customer_longitude, customer_altitude,
+        google_maps_link, tracking_token, store_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+      ON CONFLICT (shopify_order_id) DO NOTHING`,
       [
-        shopifyOrderId,
-        orderNumber,
-        customerFirstName,
-        customerLastName,
-        customerPhone,
-        customerEmail,
-        shippingAddress,
-        city,
-        country,
-        totalPrice,
-        financialStatus,
-        fulfillmentStatus,
-        customerLatitude,
-        customerLongitude,
-        customerAltitude,
-        googleMapsLink,
-        trackingToken,
+        shopifyOrderId, orderNumber,
+        customerFirstName, customerLastName, customerPhone, customerEmail,
+        shippingAddress, city, country,
+        totalPrice, financialStatus, fulfillmentStatus,
+        customerLatitude, customerLongitude, customerAltitude,
+        googleMapsLink, trackingToken, storeId,
       ]
     );
 
@@ -124,24 +102,16 @@ async function handleOrderCancelled(req, res) {
     const shopifyOrderId = order.id;
 
     if (!shopifyOrderId) {
-      // Return 200 to prevent Shopify retries for invalid payloads.
       return res.status(200).send("Missing order id");
     }
 
     await pool.query(
-      `
-      UPDATE orders
-      SET
-        order_status = 'canceled',
-        financial_status = COALESCE($2, financial_status),
-        fulfillment_status = COALESCE($3, fulfillment_status)
-      WHERE shopify_order_id = $1
-      `,
-      [
-        shopifyOrderId,
-        order.financial_status || null,
-        order.fulfillment_status || null,
-      ]
+      `UPDATE orders
+       SET order_status = 'canceled',
+           financial_status = COALESCE($2, financial_status),
+           fulfillment_status = COALESCE($3, fulfillment_status)
+       WHERE shopify_order_id = $1`,
+      [shopifyOrderId, order.financial_status || null, order.fulfillment_status || null]
     );
 
     return res.status(200).send("Webhook received");
@@ -157,17 +127,10 @@ async function handleOrderDeleted(req, res) {
     const shopifyOrderId = order.id;
 
     if (!shopifyOrderId) {
-      // Return 200 to prevent Shopify retries for invalid payloads.
       return res.status(200).send("Missing order id");
     }
 
-    await pool.query(
-      `
-      DELETE FROM orders
-      WHERE shopify_order_id = $1
-      `,
-      [shopifyOrderId]
-    );
+    await pool.query(`DELETE FROM orders WHERE shopify_order_id = $1`, [shopifyOrderId]);
 
     return res.status(200).send("Webhook received");
   } catch (error) {
@@ -176,8 +139,4 @@ async function handleOrderDeleted(req, res) {
   }
 }
 
-module.exports = {
-  handleOrderCreated,
-  handleOrderCancelled,
-  handleOrderDeleted,
-};
+module.exports = { handleOrderCreated, handleOrderCancelled, handleOrderDeleted };

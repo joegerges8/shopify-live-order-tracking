@@ -1,33 +1,34 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const pool = require("../config/db");
 
 async function loginAdmin(req, res) {
   try {
-    const { username, password } = req.body || {};
+    const { shop, password } = req.body || {};
 
-    if (!username || !password) {
-      return res.status(400).json({ error: "username and password are required" });
+    if (!shop || !password) {
+      return res.status(400).json({ error: "shop and password are required" });
     }
 
-    const expectedUsername = (process.env.ADMIN_USERNAME || "").trim();
-    const expectedPasswordHash = (process.env.ADMIN_PASSWORD || "").trim();
+    const shopDomain = shop.trim().toLowerCase();
 
-    if (!expectedUsername || !expectedPasswordHash) {
-      console.error("[AdminAuth] ADMIN_USERNAME or ADMIN_PASSWORD env var is missing");
-      return res.status(500).json({ error: "Server misconfigured" });
-    }
+    const result = await pool.query(
+      `SELECT id, admin_password_hash FROM stores WHERE shop_domain = $1 AND active = TRUE LIMIT 1`,
+      [shopDomain]
+    );
+    const store = result.rows[0];
 
-    if (username !== expectedUsername) {
+    if (!store || !store.admin_password_hash) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const ok = await bcrypt.compare(password, expectedPasswordHash);
+    const ok = await bcrypt.compare(password, store.admin_password_hash);
     if (!ok) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     const token = jwt.sign(
-      { sub: "admin", type: "admin" },
+      { sub: "admin", type: "admin", storeId: store.id, shop: shopDomain },
       process.env.JWT_SECRET,
       { expiresIn: "8h" }
     );

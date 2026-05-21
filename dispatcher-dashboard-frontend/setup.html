@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Set Up Your Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+    body { background: #f3f4f6; color: #1f2937; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card {
+      background: white;
+      padding: 44px 40px;
+      border-radius: 16px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+      width: 100%;
+      max-width: 440px;
+    }
+    .card h1 { font-size: 26px; color: #1e3a8a; margin-bottom: 8px; text-align: center; }
+    .card p { font-size: 14px; color: #6b7280; text-align: center; margin-bottom: 28px; }
+    .shop-badge {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px;
+      color: #1e3a8a;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 16px;
+      margin-bottom: 20px;
+      background: white;
+    }
+    input:focus { outline: none; border-color: #1e3a8a; }
+    button {
+      width: 100%;
+      padding: 14px;
+      background: #1e3a8a;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #163172; }
+    button:disabled { background: #93c5fd; cursor: not-allowed; }
+    #errorMsg { color: #dc2626; font-size: 14px; margin-top: 14px; text-align: center; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Welcome!</h1>
+    <p>Your store has been connected. Set a password to access your dispatcher dashboard.</p>
+    <div class="shop-badge" id="shopBadge"></div>
+    <form id="setupForm">
+      <label for="password">Dashboard Password</label>
+      <input type="password" id="password" placeholder="At least 8 characters" required />
+
+      <label for="confirm">Confirm Password</label>
+      <input type="password" id="confirm" placeholder="Repeat password" required />
+
+      <button type="submit" id="submitBtn">Set Password & Continue</button>
+      <p id="errorMsg"></p>
+    </form>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const shop = params.get("shop") || "";
+    const token = params.get("token") || "";
+
+    if (!shop || !token) {
+      document.body.innerHTML = "<p style='padding:40px;text-align:center;color:#dc2626'>Invalid setup link. Please reinstall the app from Shopify.</p>";
+    }
+
+    document.getElementById("shopBadge").textContent = shop;
+
+    const FALLBACK_API_ORIGIN = "https://shopify-live-order-tracking-production.up.railway.app";
+    const API_ORIGIN = window.location.protocol === "file:" ? FALLBACK_API_ORIGIN : window.location.origin;
+
+    document.getElementById("setupForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const errorMsg = document.getElementById("errorMsg");
+      const btn = document.getElementById("submitBtn");
+      errorMsg.textContent = "";
+
+      const password = document.getElementById("password").value;
+      const confirm = document.getElementById("confirm").value;
+
+      if (password.length < 8) {
+        errorMsg.textContent = "Password must be at least 8 characters.";
+        return;
+      }
+      if (password !== confirm) {
+        errorMsg.textContent = "Passwords do not match.";
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+
+      try {
+        const res = await fetch(`${API_ORIGIN}/api/admin/setup-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shop, setup_token: token, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          errorMsg.textContent = data.error || "Setup failed. Please try again.";
+          btn.disabled = false;
+          btn.textContent = "Set Password & Continue";
+          return;
+        }
+        window.location.replace(`/dashboard/login.html?shop=${encodeURIComponent(shop)}`);
+      } catch {
+        errorMsg.textContent = "Network error. Please try again.";
+        btn.disabled = false;
+        btn.textContent = "Set Password & Continue";
+      }
+    });
+  </script>
+</body>
+</html>

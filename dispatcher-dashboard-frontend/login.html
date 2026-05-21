@@ -15,19 +15,8 @@
       width: 100%;
       max-width: 420px;
     }
-    .login-card h1 {
-      font-size: 30px;
-      color: #1e3a8a;
-      margin-bottom: 32px;
-      text-align: center;
-    }
-    label {
-      display: block;
-      font-size: 14px;
-      font-weight: 600;
-      color: #374151;
-      margin-bottom: 6px;
-    }
+    .login-card h1 { font-size: 30px; color: #1e3a8a; margin-bottom: 32px; text-align: center; }
+    label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 6px; }
     input {
       width: 100%;
       padding: 12px 14px;
@@ -51,14 +40,16 @@
     }
     button:hover { background: #163172; }
     #errorMsg { color: #dc2626; font-size: 14px; margin-top: 14px; text-align: center; min-height: 20px; }
+    .hint { font-size: 12px; color: #9ca3af; margin-top: -14px; margin-bottom: 20px; }
   </style>
 </head>
 <body>
   <div class="login-card">
     <h1>Dispatcher Login</h1>
     <form id="loginForm">
-      <label for="username">Username</label>
-      <input type="text" id="username" name="username" autocomplete="username" required />
+      <label for="shop">Shop Domain</label>
+      <input type="text" id="shop" name="shop" placeholder="yourstore.myshopify.com" autocomplete="off" required />
+      <p class="hint">e.g. eq7yaq-sw.myshopify.com</p>
 
       <label for="password">Password</label>
       <input type="password" id="password" name="password" autocomplete="current-password" required />
@@ -69,8 +60,13 @@
   </div>
 
   <script>
-    // Skip login if already authenticated
+    // Pre-fill shop from URL param (set after OAuth redirect)
     (function () {
+      const params = new URLSearchParams(window.location.search);
+      const shop = params.get("shop");
+      if (shop) document.getElementById("shop").value = shop;
+
+      // Skip login if already authenticated and token is valid
       const token = localStorage.getItem("adminToken");
       if (token) {
         try {
@@ -90,14 +86,14 @@
       const errorMsg = document.getElementById("errorMsg");
       errorMsg.textContent = "";
 
-      const username = document.getElementById("username").value.trim();
+      const shop = document.getElementById("shop").value.trim().toLowerCase();
       const password = document.getElementById("password").value;
 
       try {
         const response = await fetch(`${API_ORIGIN}/api/admin/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ shop, password }),
         });
 
         const data = await response.json();
@@ -108,6 +104,7 @@
         }
 
         localStorage.setItem("adminToken", data.token);
+        localStorage.setItem("adminShop", shop);
         window.location.replace("/dashboard/index.html");
       } catch (err) {
         errorMsg.textContent = "Network error. Please try again.";

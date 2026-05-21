@@ -35,6 +35,9 @@ function verifyShopifyWebhook(req, res, next) {
       return res.status(401).send("Invalid webhook signature");
     }
 
+    // Make shop domain available to webhook controllers for store lookup
+    req.shopDomain = (req.get("X-Shopify-Shop-Domain") || "").trim().toLowerCase();
+
     next();
   } catch (error) {
     console.error("Webhook verification error:", error);
