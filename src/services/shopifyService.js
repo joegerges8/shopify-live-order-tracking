@@ -71,9 +71,11 @@ async function syncOrderTagToShopify(storeId, shopifyOrderId, status) {
   console.log(`[Shopify sync] Order ${shopifyOrderId} tagged "${deliveryTag}"`);
 }
 
-// Creates a Shopify fulfillment for the order, marking it as fulfilled.
-// Called only when status transitions to DELIVERED.
-async function fulfillShopifyOrder(storeId, shopifyOrderId) {
+// Marks a Shopify order as "Delivered" — the same as clicking Mark as → Delivered
+// in the Shopify admin. Steps:
+//   1. Find or create a fulfillment on the order
+//   2. Post a fulfillment event with status "delivered"
+async function markDeliveredInShopify(storeId, shopifyOrderId) {
   if (!shopifyOrderId) return;
 
   const store = await getStoreCredentials(storeId);
@@ -90,43 +92,65 @@ async function fulfillShopifyOrder(storeId, shopifyOrderId) {
   };
   const base = `https://${shop_domain}/admin/api/${SHOPIFY_API_VERSION}`;
 
-  // Get open fulfillment orders
-  const foRes = await fetch(
-    `${base}/orders/${shopifyOrderId}/fulfillment_orders.json`,
-    { headers }
-  );
-  if (!foRes.ok) {
-    console.error(`[Shopify sync] GET fulfillment_orders failed: ${foRes.status}`);
-    return;
-  }
-  const { fulfillment_orders } = await foRes.json();
-  const open = (fulfillment_orders || []).filter(fo =>
-    fo.status === "open" || fo.status === "in_progress"
-  );
-
-  if (open.length === 0) {
-    console.log(`[Shopify sync] Order ${shopifyOrderId} already fulfilled or has no open fulfillment orders`);
-    return;
+  // Step 1: Check for an existing fulfillment
+  let fulfillmentId = null;
+  const existingRes = await fetch(`${base}/orders/${shopifyOrderId}/fulfillments.json`, { headers });
+  if (existingRes.ok) {
+    const { fulfillments } = await existingRes.json();
+    if (fulfillments && fulfillments.length > 0) {
+      fulfillmentId = fulfillments[0].id;
+    }
   }
 
-  const fulfillRes = await fetch(`${base}/fulfillments.json`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      fulfillment: {
-        line_items_by_fulfillment_order: open.map(fo => ({
-          fulfillment_order_id: fo.id,
-        })),
-        notify_customer: false,
-      },
-    }),
-  });
-  if (!fulfillRes.ok) {
-    const body = await fulfillRes.text();
-    console.error(`[Shopify sync] Create fulfillment failed: ${fulfillRes.status} ${body}`);
+  // Step 2: No fulfillment yet — create one via the fulfillment orders API
+  if (!fulfillmentId) {
+    const foRes = await fetch(`${base}/orders/${shopifyOrderId}/fulfillment_orders.json`, { headers });
+    if (!foRes.ok) {
+      console.error(`[Shopify sync] GET fulfillment_orders failed: ${foRes.status}`);
+      return;
+    }
+    const { fulfillment_orders } = await foRes.json();
+    const open = (fulfillment_orders || []).filter(fo =>
+      fo.status === "open" || fo.status === "in_progress"
+    );
+    if (open.length === 0) {
+      console.log(`[Shopify sync] Order ${shopifyOrderId} has no open fulfillment orders`);
+      return;
+    }
+    const createRes = await fetch(`${base}/fulfillments.json`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        fulfillment: {
+          line_items_by_fulfillment_order: open.map(fo => ({ fulfillment_order_id: fo.id })),
+          notify_customer: false,
+        },
+      }),
+    });
+    if (!createRes.ok) {
+      const body = await createRes.text();
+      console.error(`[Shopify sync] Create fulfillment failed: ${createRes.status} ${body}`);
+      return;
+    }
+    const { fulfillment } = await createRes.json();
+    fulfillmentId = fulfillment.id;
+  }
+
+  // Step 3: Add a "delivered" shipment event — this is what flips Shopify to "Delivered"
+  const eventRes = await fetch(
+    `${base}/orders/${shopifyOrderId}/fulfillments/${fulfillmentId}/events.json`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ event: { status: "delivered" } }),
+    }
+  );
+  if (!eventRes.ok) {
+    const body = await eventRes.text();
+    console.error(`[Shopify sync] Fulfillment event failed: ${eventRes.status} ${body}`);
     return;
   }
-  console.log(`[Shopify sync] Order ${shopifyOrderId} marked fulfilled in Shopify`);
+  console.log(`[Shopify sync] Order ${shopifyOrderId} marked as Delivered in Shopify`);
 }
 
-module.exports = { syncOrderTagToShopify, fulfillShopifyOrder };
+module.exports = { syncOrderTagToShopify, markDeliveredInShopify };
