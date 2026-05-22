@@ -1,4 +1,5 @@
 const pool = require("../config/db");
+const { syncOrderTagToShopify, fulfillShopifyOrder } = require("./shopifyService");
 
 // Returns every order for a specific store, newest first.
 async function getAllOrders(storeId) {
@@ -26,7 +27,13 @@ async function assignDriverToOrder(orderId, driverId, storeId) {
      RETURNING *`,
     [driverId, orderId, storeId]
   );
-  return result.rows[0];
+  const row = result.rows[0];
+  if (row) {
+    syncOrderTagToShopify(storeId, row.shopify_order_id, "ASSIGNED").catch(err =>
+      console.error("[Shopify sync] assign tag failed:", err.message)
+    );
+  }
+  return row;
 }
 
 async function unassignDriverFromOrder(orderId, storeId) {
@@ -37,7 +44,13 @@ async function unassignDriverFromOrder(orderId, storeId) {
      RETURNING *`,
     [orderId, storeId]
   );
-  return result.rows[0];
+  const row = result.rows[0];
+  if (row) {
+    syncOrderTagToShopify(storeId, row.shopify_order_id, "PENDING").catch(err =>
+      console.error("[Shopify sync] unassign tag failed:", err.message)
+    );
+  }
+  return row;
 }
 
 async function updateOrderStatus(orderId, status, storeId) {
@@ -49,7 +62,18 @@ async function updateOrderStatus(orderId, status, storeId) {
          WHERE id = $2 AND store_id = $3 RETURNING *`;
 
   const result = await pool.query(query, [status, orderId, storeId]);
-  return result.rows[0];
+  const row = result.rows[0];
+  if (row) {
+    syncOrderTagToShopify(storeId, row.shopify_order_id, status).catch(err =>
+      console.error("[Shopify sync] status tag failed:", err.message)
+    );
+    if (status === "DELIVERED") {
+      fulfillShopifyOrder(storeId, row.shopify_order_id).catch(err =>
+        console.error("[Shopify sync] fulfillment failed:", err.message)
+      );
+    }
+  }
+  return row;
 }
 
 // Driver-scoped updates — drivers are global, no store filter needed here.

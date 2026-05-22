@@ -5,7 +5,7 @@ const pool = require("../config/db");
 const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const APP_URL = (process.env.APP_URL || "https://shopify-live-order-tracking-production.up.railway.app").replace(/\/$/, "");
-const SCOPES = "read_orders,read_all_orders";
+const SCOPES = "read_orders,read_all_orders,write_orders,write_fulfillments";
 const REDIRECT_URI = `${APP_URL}/auth/callback`;
 
 function validateShopDomain(shop) {
