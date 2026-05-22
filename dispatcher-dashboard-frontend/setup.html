@@ -75,13 +75,14 @@
   <script>
     const params = new URLSearchParams(window.location.search);
     const shop = params.get("shop") || "";
+    const storeName = params.get("name") || shop;
     const token = params.get("token") || "";
 
     if (!shop || !token) {
       document.body.innerHTML = "<p style='padding:40px;text-align:center;color:#dc2626'>Invalid setup link. Please reinstall the app from Shopify.</p>";
     }
 
-    document.getElementById("shopBadge").textContent = shop;
+    document.getElementById("shopBadge").textContent = storeName;
 
     const FALLBACK_API_ORIGIN = "https://shopify-live-order-tracking-production.up.railway.app";
     const API_ORIGIN = window.location.protocol === "file:" ? FALLBACK_API_ORIGIN : window.location.origin;
@@ -120,7 +121,7 @@
           btn.textContent = "Set Password & Continue";
           return;
         }
-        window.location.replace(`/dashboard/login.html?shop=${encodeURIComponent(shop)}`);
+        window.location.replace(`/dashboard/login.html?name=${encodeURIComponent(storeName)}&shop=${encodeURIComponent(shop)}`);
       } catch {
         errorMsg.textContent = "Network error. Please try again.";
         btn.disabled = false;

@@ -68,17 +68,30 @@ async function oauthCallback(req, res) {
   // Generate one-time setup token
   const setupToken = crypto.randomBytes(32).toString("hex");
 
+  // Fetch store name from Shopify
+  let storeName = shop.replace(".myshopify.com", "");
+  try {
+    const shopInfoRes = await fetch(`https://${shop}/admin/api/2024-01/shop.json`, {
+      headers: { "X-Shopify-Access-Token": access_token },
+    });
+    if (shopInfoRes.ok) {
+      const shopData = await shopInfoRes.json();
+      storeName = shopData.shop?.name || storeName;
+    }
+  } catch (_) {}
+
   // Upsert store record
   const result = await pool.query(
-    `INSERT INTO stores (shop_domain, access_token, scope, setup_token)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO stores (shop_domain, access_token, scope, setup_token, store_name)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (shop_domain) DO UPDATE
        SET access_token = EXCLUDED.access_token,
            scope        = EXCLUDED.scope,
            setup_token  = EXCLUDED.setup_token,
+           store_name   = EXCLUDED.store_name,
            active       = TRUE
      RETURNING id, admin_password_hash`,
-    [shop, access_token, scope, setupToken]
+    [shop, access_token, scope, setupToken, storeName]
   );
   const store = result.rows[0];
 
@@ -89,10 +102,10 @@ async function oauthCallback(req, res) {
 
   if (store.admin_password_hash) {
     // Returning install — skip setup, go straight to login
-    return res.redirect(`/dashboard/login.html?shop=${encodeURIComponent(shop)}`);
+    return res.redirect(`/dashboard/login.html?name=${encodeURIComponent(storeName)}&shop=${encodeURIComponent(shop)}`);
   }
   // First install — send to password setup page
-  res.redirect(`/dashboard/setup.html?shop=${encodeURIComponent(shop)}&token=${setupToken}`);
+  res.redirect(`/dashboard/setup.html?name=${encodeURIComponent(storeName)}&shop=${encodeURIComponent(shop)}&token=${setupToken}`);
 }
 
 async function registerWebhooks(shop, accessToken) {

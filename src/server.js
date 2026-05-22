@@ -29,6 +29,7 @@ async function startServer() {
         active          BOOLEAN DEFAULT TRUE
       );
     `);
+    await pool.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS store_name VARCHAR(255);`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS store_id INT REFERENCES stores(id);`);
 
     // Seed the original single store from env so existing orders remain visible

@@ -47,9 +47,9 @@
   <div class="login-card">
     <h1>Dispatcher Login</h1>
     <form id="loginForm">
-      <label for="shop">Shop Domain</label>
-      <input type="text" id="shop" name="shop" placeholder="yourstore.myshopify.com" autocomplete="off" required />
-      <p class="hint">e.g. eq7yaq-sw.myshopify.com</p>
+      <label for="shop">Store Name</label>
+      <input type="text" id="shop" name="shop" placeholder="sonicbeatlb" autocomplete="off" required />
+      <p class="hint">Enter your store name (e.g. sonicbeatlb) or full .myshopify.com domain</p>
 
       <label for="password">Password</label>
       <input type="password" id="password" name="password" autocomplete="current-password" required />
@@ -60,11 +60,11 @@
   </div>
 
   <script>
-    // Pre-fill shop from URL param (set after OAuth redirect)
+    // Pre-fill store name from URL param (set after OAuth redirect)
     (function () {
       const params = new URLSearchParams(window.location.search);
-      const shop = params.get("shop");
-      if (shop) document.getElementById("shop").value = shop;
+      const name = params.get("name") || params.get("shop");
+      if (name) document.getElementById("shop").value = name;
 
       // Skip login if already authenticated and token is valid
       const token = localStorage.getItem("adminToken");
@@ -104,7 +104,7 @@
         }
 
         localStorage.setItem("adminToken", data.token);
-        localStorage.setItem("adminShop", shop);
+        localStorage.setItem("adminShop", data.storeName || shop);
         window.location.replace("/dashboard/index.html");
       } catch (err) {
         errorMsg.textContent = "Network error. Please try again.";
