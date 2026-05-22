@@ -9,14 +9,23 @@
     }
   }
 
-  window.logout = function () {
+  function doLogout() {
     localStorage.removeItem("adminToken");
     localStorage.removeItem("adminShop");
-    location.href = LOGIN;
-  };
+    window.location.replace(LOGIN);
+  }
+
+  window.logout = doLogout;
 
   window.requireAuth = function () {
     const t = localStorage.getItem("adminToken");
-    if (!t || isExpired(t)) location.replace(LOGIN);
+    if (!t || isExpired(t)) window.location.replace(LOGIN);
   };
+
+  // Bind logout button via addEventListener as soon as the DOM is ready,
+  // so it works regardless of inline onclick availability.
+  document.addEventListener("DOMContentLoaded", function () {
+    var btn = document.querySelector(".btn-logout");
+    if (btn) btn.addEventListener("click", doLogout);
+  });
 })();

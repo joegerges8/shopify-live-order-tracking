@@ -12,16 +12,25 @@ function authHeaders() {
   };
 }
 
+function handleResponse(response) {
+  if (response.status === 401) {
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminShop");
+    window.location.replace("/dashboard/login.html");
+    throw new Error("Session expired");
+  }
+  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+  return response.json();
+}
+
 export async function getOrders() {
   const response = await fetch(`${BASE_URL}/orders`, { headers: authHeaders() });
-  if (!response.ok) throw new Error("Failed to fetch orders");
-  return response.json();
+  return handleResponse(response);
 }
 
 export async function getDrivers() {
   const response = await fetch(`${BASE_URL}/drivers`, { headers: authHeaders() });
-  if (!response.ok) throw new Error("Failed to fetch drivers");
-  return response.json();
+  return handleResponse(response);
 }
 
 export async function assignDriver(orderId, driverId) {
@@ -30,8 +39,7 @@ export async function assignDriver(orderId, driverId) {
     headers: authHeaders(),
     body: JSON.stringify({ driverId }),
   });
-  if (!response.ok) throw new Error("Failed to assign driver");
-  return response.json();
+  return handleResponse(response);
 }
 
 export async function updateOrderStatus(orderId, status) {
@@ -40,8 +48,7 @@ export async function updateOrderStatus(orderId, status) {
     headers: authHeaders(),
     body: JSON.stringify({ status }),
   });
-  if (!response.ok) throw new Error("Failed to update status");
-  return response.json();
+  return handleResponse(response);
 }
 
 export async function deleteDriver(driverId) {
@@ -49,8 +56,7 @@ export async function deleteDriver(driverId) {
     method: "DELETE",
     headers: authHeaders(),
   });
-  if (!response.ok) throw new Error("Failed to delete driver");
-  return response.json();
+  return handleResponse(response);
 }
 
 export async function unassignDriver(orderId) {
@@ -58,8 +64,7 @@ export async function unassignDriver(orderId) {
     method: "PATCH",
     headers: authHeaders(),
   });
-  if (!response.ok) throw new Error("Failed to unassign driver");
-  return response.json();
+  return handleResponse(response);
 }
 
 export async function setCustomerLocation(orderId, mapLink) {
@@ -68,6 +73,12 @@ export async function setCustomerLocation(orderId, mapLink) {
     headers: authHeaders(),
     body: JSON.stringify({ mapLink }),
   });
+  if (response.status === 401) {
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminShop");
+    window.location.replace("/dashboard/login.html");
+    throw new Error("Session expired");
+  }
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Failed to set customer location");
   return data;
