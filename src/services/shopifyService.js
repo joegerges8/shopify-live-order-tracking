@@ -3,12 +3,10 @@ const pool = require("../config/db");
 const SHOPIFY_API_VERSION = "2024-01";
 
 const STATUS_TAG_MAP = {
-  PENDING:          "delivery-pending",
-  ASSIGNED:         "delivery-assigned",
-  PICKED_UP:        "delivery-picked-up",
-  OUT_FOR_DELIVERY: "delivery-out-for-delivery",
-  DELIVERED:        "delivery-delivered",
-  CANCELLED:        "delivery-cancelled",
+  PENDING:   "delivery-pending",
+  ASSIGNED:  "delivery-assigned",
+  PICKED_UP: "delivery-picked-up",
+  CANCELLED: "delivery-cancelled",
 };
 
 async function getStoreCredentials(storeId) {
@@ -19,53 +17,40 @@ async function getStoreCredentials(storeId) {
   return result.rows[0] || null;
 }
 
-// Updates the delivery-* tag on a Shopify order to reflect the current status.
 async function syncOrderTagToShopify(storeId, shopifyOrderId, status) {
-  if (!shopifyOrderId) return;
+  if (!shopifyOrderId || !STATUS_TAG_MAP[status]) return;
 
   const store = await getStoreCredentials(storeId);
-  if (!store) {
-    console.warn(`[Shopify sync] Store ${storeId} not found`);
-    return;
-  }
+  if (!store) return;
   if (!store.scope || !store.scope.includes("write_orders")) {
     console.warn(`[Shopify sync] Store ${storeId} lacks write_orders scope — re-install needed`);
     return;
   }
 
   const { shop_domain, access_token } = store;
-  const headers = {
-    "Content-Type": "application/json",
-    "X-Shopify-Access-Token": access_token,
-  };
+  const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": access_token };
   const base = `https://${shop_domain}/admin/api/${SHOPIFY_API_VERSION}`;
 
-  // Fetch current tags
-  const getRes = await fetch(
-    `${base}/orders/${shopifyOrderId}.json?fields=id,tags`,
-    { headers }
-  );
+  const getRes = await fetch(`${base}/orders/${shopifyOrderId}.json?fields=id,tags`, { headers });
   if (!getRes.ok) {
     console.error(`[Shopify sync] GET order ${shopifyOrderId} failed: ${getRes.status}`);
     return;
   }
   const { order } = await getRes.json();
 
-  // Replace any existing delivery-* tag with the new one
   const deliveryTag = STATUS_TAG_MAP[status];
   const existingTags = order.tags
-    ? order.tags.split(",").map(t => t.trim()).filter(t => !t.startsWith("delivery-"))
+    ? order.tags.split(",").map(t => t.trim()).filter(t => t && !t.startsWith("delivery-"))
     : [];
-  if (deliveryTag) existingTags.push(deliveryTag);
-  const newTags = existingTags.join(", ");
+  existingTags.push(deliveryTag);
 
   const putRes = await fetch(`${base}/orders/${shopifyOrderId}.json`, {
     method: "PUT",
     headers,
-    body: JSON.stringify({ order: { id: shopifyOrderId, tags: newTags } }),
+    body: JSON.stringify({ order: { id: shopifyOrderId, tags: existingTags.join(", ") } }),
   });
   if (!putRes.ok) {
-    console.error(`[Shopify sync] PUT order ${shopifyOrderId} tags failed: ${putRes.status}`);
+    console.error(`[Shopify sync] PUT tags failed: ${putRes.status}`);
     return;
   }
   console.log(`[Shopify sync] Order ${shopifyOrderId} tagged "${deliveryTag}"`);
