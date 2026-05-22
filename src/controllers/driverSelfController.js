@@ -12,7 +12,7 @@ const {
   updateDriverOrderStatus,
   createLocationUpdate,
 } = require("../services/orderService");
-const { syncOrderTagToShopify, fulfillShopifyOrder } = require("../services/shopifyService");
+const { syncOrderTagToShopify } = require("../services/shopifyService");
 const { getIO } = require("../socket");
 
 // Returns all active orders assigned to the authenticated driver.
@@ -97,7 +97,6 @@ async function patchMyOrderStatus(req, res) {
     const { status } = req.body || {};
 
     const validStatuses = [
-      "PENDING",
       "ASSIGNED",
       "PICKED_UP",
       "OUT_FOR_DELIVERY",
@@ -135,11 +134,6 @@ async function patchMyOrderStatus(req, res) {
     syncOrderTagToShopify(updated.store_id, updated.shopify_order_id, status).catch(err =>
       console.error("[Shopify sync] driver status tag failed:", err.message)
     );
-    if (status === "DELIVERED") {
-      fulfillShopifyOrder(updated.store_id, updated.shopify_order_id).catch(err =>
-        console.error("[Shopify sync] driver fulfillment failed:", err.message)
-      );
-    }
 
     return res.json(updated);
   } catch (error) {

@@ -139,4 +139,34 @@ async function handleOrderDeleted(req, res) {
   }
 }
 
-module.exports = { handleOrderCreated, handleOrderCancelled, handleOrderDeleted };
+// Fired by Shopify when all items in an order are fulfilled from the Shopify admin.
+// Marks the dispatcher order as DELIVERED so both dashboards stay in sync.
+async function handleOrderFulfilled(req, res) {
+  try {
+    const order = parseWebhookOrder(req);
+    const shopifyOrderId = order.id;
+
+    if (!shopifyOrderId) {
+      return res.status(200).send("Missing order id");
+    }
+
+    await pool.query(
+      `UPDATE orders
+       SET order_status = 'FULFILLED',
+           delivered_at = NOW(),
+           financial_status = COALESCE($2, financial_status),
+           fulfillment_status = COALESCE($3, fulfillment_status)
+       WHERE shopify_order_id = $1
+         AND order_status NOT IN ('FULFILLED', 'CANCELLED')`,
+      [shopifyOrderId, order.financial_status || null, order.fulfillment_status || null]
+    );
+
+    console.log(`[Webhook] Order ${shopifyOrderId} fulfilled in Shopify → marked DELIVERED`);
+    return res.status(200).send("Webhook received");
+  } catch (error) {
+    console.error("Webhook fulfilled error:", error);
+    return res.status(500).send("Server error");
+  }
+}
+
+module.exports = { handleOrderCreated, handleOrderCancelled, handleOrderDeleted, handleOrderFulfilled };

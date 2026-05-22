@@ -1,5 +1,5 @@
 const pool = require("../config/db");
-const { syncOrderTagToShopify, fulfillShopifyOrder } = require("./shopifyService");
+const { syncOrderTagToShopify } = require("./shopifyService");
 
 // Returns every order for a specific store, newest first.
 async function getAllOrders(storeId) {
@@ -67,11 +67,6 @@ async function updateOrderStatus(orderId, status, storeId) {
     syncOrderTagToShopify(storeId, row.shopify_order_id, status).catch(err =>
       console.error("[Shopify sync] status tag failed:", err.message)
     );
-    if (status === "DELIVERED") {
-      fulfillShopifyOrder(storeId, row.shopify_order_id).catch(err =>
-        console.error("[Shopify sync] fulfillment failed:", err.message)
-      );
-    }
   }
   return row;
 }

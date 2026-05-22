@@ -62,9 +62,18 @@ function createDriverOptions(drivers, orders, selectedDriverId = null) {
    STATUS + UI
 =========================== */
 
+const STATUS_DISPLAY = {
+  PENDING:          "UNFULFILLED",
+  ASSIGNED:         "ASSIGNED",
+  PICKED_UP:        "PICKED_UP",
+  OUT_FOR_DELIVERY: "OUT FOR DELIVERY",
+  DELIVERED:        "DELIVERED",
+  FULFILLED:        "FULFILLED",
+  CANCELLED:        "CANCELLED",
+};
+
 function createStatusOptions(currentStatus) {
   const statuses = [
-    "PENDING",
     "ASSIGNED",
     "PICKED_UP",
     "OUT_FOR_DELIVERY",
@@ -76,7 +85,7 @@ function createStatusOptions(currentStatus) {
 
   statuses.forEach((status) => {
     const selected = status === currentStatus ? "selected" : "";
-    options += `<option value="${status}" ${selected}>${status}</option>`;
+    options += `<option value="${status}" ${selected}>${STATUS_DISPLAY[status] || status}</option>`;
   });
 
   return options;
@@ -85,7 +94,8 @@ function createStatusOptions(currentStatus) {
 function createStatusBadge(status) {
   if (!status) return "";
   const normalized = status.toLowerCase();
-  return `<span class="status-badge status-${normalized}">${status}</span>`;
+  const display = STATUS_DISPLAY[status] || status;
+  return `<span class="status-badge status-${normalized}">${display}</span>`;
 }
 
 /* ===========================
@@ -94,7 +104,9 @@ function createStatusBadge(status) {
 
 function updateStats(orders, drivers) {
   const totalOrders = orders.length;
-  const pendingOrders = orders.filter((order) => order.order_status === "PENDING").length;
+  const pendingOrders = orders.filter((order) =>
+    !["DELIVERED", "FULFILLED", "CANCELLED"].includes(order.order_status)
+  ).length;
   const deliveredOrders = orders.filter((order) => order.order_status === "DELIVERED").length;
   const availableDrivers = drivers.filter((driver) => !isDriverBusy(driver.id, orders)).length;
 

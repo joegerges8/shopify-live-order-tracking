@@ -113,6 +113,7 @@ async function registerWebhooks(shop, accessToken) {
     "orders/create",
     "orders/cancelled",
     "orders/deleted",
+    "orders/fulfilled",
   ];
   for (const topic of topics) {
     const slug = topic.replace("/", "/orders/").split("/").pop();

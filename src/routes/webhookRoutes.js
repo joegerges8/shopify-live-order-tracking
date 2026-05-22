@@ -6,6 +6,7 @@ const {
   handleOrderCreated,
   handleOrderCancelled,
   handleOrderDeleted,
+  handleOrderFulfilled,
 } = require("../controllers/webhookController");
 
 // Each route matches a Shopify webhook topic under /webhooks/shopify.
@@ -44,6 +45,13 @@ router.post(
   express.raw({ type: "*/*" }),
   verifyShopifyWebhook,
   handleOrderDeleted
+);
+
+router.post(
+  "/orders/fulfilled",
+  express.raw({ type: "*/*" }),
+  verifyShopifyWebhook,
+  handleOrderFulfilled
 );
 
 module.exports = router;

@@ -206,6 +206,12 @@ button:hover {
   color: #166534;
 }
 
+.status-fulfilled {
+  background: #bbf7d0;
+  color: #14532d;
+  font-weight: 700;
+}
+
 .status-cancelled {
   background: #fee2e2;
   color: #991b1b;
