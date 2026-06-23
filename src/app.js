@@ -100,6 +100,54 @@ app.get("/health", (req, res) => {
    res.status(200).json({ status: "ok" });
 });
 
+
+app.get("/privacy", (req, res) => {
+   res.status(200).type("html").send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+         <meta charset="UTF-8" />
+         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+         <title>LiveDispatch Privacy Policy</title>
+         <style>
+            body {
+               font-family: Arial, sans-serif;
+               max-width: 850px;
+               margin: 40px auto;
+               padding: 0 20px;
+               line-height: 1.6;
+               color: #222;
+            }
+            h1, h2 { color: #111; }
+         </style>
+      </head>
+      <body>
+         <h1>LiveDispatch Privacy Policy</h1>
+         <p>Last updated: June 23, 2026</p>
+
+         <h2>Information We Collect</h2>
+         <p>LiveDispatch collects store and order information needed to provide delivery dispatching, driver assignment, and customer order tracking services. This may include order details, customer name, delivery address, phone number, email address, order status, tracking links, and driver assignment information.</p>
+
+         <h2>How We Use Information</h2>
+         <p>We use this information to import orders, assign drivers, update delivery statuses, display dispatcher dashboards, and provide customers with real-time delivery tracking pages.</p>
+
+         <h2>Data Sharing</h2>
+         <p>We do not sell merchant or customer data. Data is only used to provide the LiveDispatch service and may be processed by hosting, database, and infrastructure providers required to operate the app.</p>
+
+         <h2>Data Storage and Security</h2>
+         <p>LiveDispatch stores app data securely and uses reasonable technical measures to protect merchant and customer information.</p>
+
+         <h2>Data Retention and Deletion</h2>
+         <p>Merchants may request deletion of their store data by contacting support. When a store uninstalls the app, LiveDispatch may delete or anonymize related data according to applicable requirements.</p>
+
+         <h2>Contact</h2>
+         <p>For privacy questions or data deletion requests, contact us at: gergesjoe.2004@gmail.com</p>
+      </body>
+      </html>
+   `);
+});
+
+
 // Shopify webhook route needs raw body for HMAC verification
 app.use("/webhooks/shopify", webhookRoutes);
 
