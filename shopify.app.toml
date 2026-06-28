@@ -1,0 +1,41 @@
+name = "Live Dispatch"
+client_id = "6cc55b2c16983f7b719f69b9c3cad0b7"
+application_url = "https://dispatcher-dashboard.up.railway.app/auth/"
+embedded = false
+
+[access_scopes]
+scopes = "write_fulfillments,read_orders,write_orders"
+
+[auth]
+redirect_urls = ["https://dispatcher-dashboard.up.railway.app/auth/callback"]
+
+[webhooks]
+api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/create"]
+  uri = "/webhooks/shopify/orders/create"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/cancelled"]
+  uri = "/webhooks/shopify/orders/cancelled"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/delete"]
+  uri = "/webhooks/shopify/orders/delete"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/fulfilled"]
+  uri = "/webhooks/shopify/orders/fulfilled"
+
+  [[webhooks.subscriptions]]
+  topics = ["customers/data_request"]
+  uri = "/webhooks/shopify/customers/data_request"
+
+  [[webhooks.subscriptions]]
+  topics = ["customers/redact"]
+  uri = "/webhooks/shopify/customers/redact"
+
+  [[webhooks.subscriptions]]
+  topics = ["shop/redact"]
+  uri = "/webhooks/shopify/shop/redact"
