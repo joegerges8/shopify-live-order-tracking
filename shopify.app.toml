@@ -28,14 +28,3 @@ api_version = "2026-04"
   topics = ["orders/fulfilled"]
   uri = "/webhooks/shopify/orders/fulfilled"
 
-  [[webhooks.subscriptions]]
-  topics = ["customers/data_request"]
-  uri = "/webhooks/shopify/customers/data_request"
-
-  [[webhooks.subscriptions]]
-  topics = ["customers/redact"]
-  uri = "/webhooks/shopify/customers/redact"
-
-  [[webhooks.subscriptions]]
-  topics = ["shop/redact"]
-  uri = "/webhooks/shopify/shop/redact"
