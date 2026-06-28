@@ -14,17 +14,17 @@ api_version = "2026-04"
 
   [[webhooks.subscriptions]]
   topics = ["orders/create"]
-  uri = "/webhooks/shopify/orders/create"
+  uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/orders/create"
 
   [[webhooks.subscriptions]]
   topics = ["orders/cancelled"]
-  uri = "/webhooks/shopify/orders/cancelled"
+  uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/orders/cancelled"
 
   [[webhooks.subscriptions]]
   topics = ["orders/delete"]
-  uri = "/webhooks/shopify/orders/delete"
+  uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/orders/delete"
 
   [[webhooks.subscriptions]]
   topics = ["orders/fulfilled"]
-  uri = "/webhooks/shopify/orders/fulfilled"
+  uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/orders/fulfilled"
 
