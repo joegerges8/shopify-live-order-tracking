@@ -7,6 +7,9 @@ const {
   handleOrderCancelled,
   handleOrderDeleted,
   handleOrderFulfilled,
+  handleCustomerDataRequest,
+  handleCustomerRedact,
+  handleShopRedact,
 } = require("../controllers/webhookController");
 
 // Each route matches a Shopify webhook topic under /webhooks/shopify.
@@ -52,6 +55,27 @@ router.post(
   express.raw({ type: "*/*" }),
   verifyShopifyWebhook,
   handleOrderFulfilled
+);
+
+router.post(
+  "/customers/data_request",
+  express.raw({ type: "*/*" }),
+  verifyShopifyWebhook,
+  handleCustomerDataRequest
+);
+
+router.post(
+  "/customers/redact",
+  express.raw({ type: "*/*" }),
+  verifyShopifyWebhook,
+  handleCustomerRedact
+);
+
+router.post(
+  "/shop/redact",
+  express.raw({ type: "*/*" }),
+  verifyShopifyWebhook,
+  handleShopRedact
 );
 
 module.exports = router;

@@ -8,7 +8,7 @@
 const {
   getOrdersByDriverId,
   getCompletedOrdersByDriverId,
-  getOrderById,
+  getOrderByIdForDriver,
   updateDriverOrderStatus,
   createLocationUpdate,
 } = require("../services/orderService");
@@ -56,13 +56,9 @@ async function postMyOrderLocation(req, res) {
         .json({ error: "latitude and longitude must be numbers" });
     }
 
-    const order = await getOrderById(orderId);
+    const order = await getOrderByIdForDriver(orderId, driverId);
     if (!order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    if (order.assigned_driver_id !== driverId) {
-      return res.status(403).json({ error: "Not allowed for this order" });
+      return res.status(404).json({ error: "Order not found for this driver" });
     }
 
     const created = await createLocationUpdate({
@@ -118,7 +114,7 @@ async function patchMyOrderStatus(req, res) {
 
     const updated = await updateDriverOrderStatus(orderId, driverId, status);
     if (!updated) {
-      const order = await getOrderById(orderId);
+      const order = await getOrderByIdForDriver(orderId, driverId);
       if (!order) {
         return res.status(404).json({ error: "Order not found" });
       }

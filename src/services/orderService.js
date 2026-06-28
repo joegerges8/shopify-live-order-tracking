@@ -19,6 +19,14 @@ async function getOrderById(orderId, storeId) {
   return result.rows[0];
 }
 
+async function getOrderByIdForDriver(orderId, driverId) {
+  const result = await pool.query(
+    `SELECT * FROM orders WHERE id = $1 AND assigned_driver_id = $2 LIMIT 1`,
+    [orderId, driverId]
+  );
+  return result.rows[0];
+}
+
 async function assignDriverToOrder(orderId, driverId, storeId) {
   const result = await pool.query(
     `UPDATE orders
@@ -168,6 +176,7 @@ async function updateCustomerLocation(orderId, lat, lng, storeId) {
 module.exports = {
   getAllOrders,
   getOrderById,
+  getOrderByIdForDriver,
   assignDriverToOrder,
   unassignDriverFromOrder,
   updateOrderStatus,

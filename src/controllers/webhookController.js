@@ -33,6 +33,11 @@ async function handleOrderCreated(req, res) {
     const order = parseWebhookOrder(req);
     const storeId = await getStoreId(req.shopDomain);
 
+    if (!storeId) {
+      console.warn(`[Webhook] Ignoring order create for unknown shop: ${req.shopDomain || "missing shop"}`);
+      return res.status(200).send("Store not found");
+    }
+
     const shopifyOrderId = order.id;
     const orderNumber = order.name || String(order.order_number || "");
     const customerFirstName = order.customer?.first_name || null;
@@ -99,19 +104,23 @@ async function handleOrderCreated(req, res) {
 async function handleOrderCancelled(req, res) {
   try {
     const order = parseWebhookOrder(req);
+    const storeId = await getStoreId(req.shopDomain);
     const shopifyOrderId = order.id;
 
     if (!shopifyOrderId) {
       return res.status(200).send("Missing order id");
     }
+    if (!storeId) {
+      return res.status(200).send("Store not found");
+    }
 
     await pool.query(
       `UPDATE orders
-       SET order_status = 'canceled',
+       SET order_status = 'CANCELLED',
            financial_status = COALESCE($2, financial_status),
            fulfillment_status = COALESCE($3, fulfillment_status)
-       WHERE shopify_order_id = $1`,
-      [shopifyOrderId, order.financial_status || null, order.fulfillment_status || null]
+       WHERE shopify_order_id = $1 AND store_id = $4`,
+      [shopifyOrderId, order.financial_status || null, order.fulfillment_status || null, storeId]
     );
 
     return res.status(200).send("Webhook received");
@@ -124,13 +133,20 @@ async function handleOrderCancelled(req, res) {
 async function handleOrderDeleted(req, res) {
   try {
     const order = parseWebhookOrder(req);
+    const storeId = await getStoreId(req.shopDomain);
     const shopifyOrderId = order.id;
 
     if (!shopifyOrderId) {
       return res.status(200).send("Missing order id");
     }
+    if (!storeId) {
+      return res.status(200).send("Store not found");
+    }
 
-    await pool.query(`DELETE FROM orders WHERE shopify_order_id = $1`, [shopifyOrderId]);
+    await pool.query(
+      `DELETE FROM orders WHERE shopify_order_id = $1 AND store_id = $2`,
+      [shopifyOrderId, storeId]
+    );
 
     return res.status(200).send("Webhook received");
   } catch (error) {
@@ -144,10 +160,14 @@ async function handleOrderDeleted(req, res) {
 async function handleOrderFulfilled(req, res) {
   try {
     const order = parseWebhookOrder(req);
+    const storeId = await getStoreId(req.shopDomain);
     const shopifyOrderId = order.id;
 
     if (!shopifyOrderId) {
       return res.status(200).send("Missing order id");
+    }
+    if (!storeId) {
+      return res.status(200).send("Store not found");
     }
 
     await pool.query(
@@ -157,8 +177,9 @@ async function handleOrderFulfilled(req, res) {
            financial_status = COALESCE($2, financial_status),
            fulfillment_status = COALESCE($3, fulfillment_status)
        WHERE shopify_order_id = $1
+         AND store_id = $4
          AND order_status NOT IN ('FULFILLED', 'CANCELLED')`,
-      [shopifyOrderId, order.financial_status || null, order.fulfillment_status || null]
+      [shopifyOrderId, order.financial_status || null, order.fulfillment_status || null, storeId]
     );
 
     console.log(`[Webhook] Order ${shopifyOrderId} fulfilled in Shopify → marked DELIVERED`);
@@ -169,4 +190,84 @@ async function handleOrderFulfilled(req, res) {
   }
 }
 
-module.exports = { handleOrderCreated, handleOrderCancelled, handleOrderDeleted, handleOrderFulfilled };
+async function handleCustomerDataRequest(req, res) {
+  try {
+    const payload = parseWebhookOrder(req);
+    console.log("[Privacy] Customer data request received", {
+      shop: req.shopDomain,
+      customerId: payload.customer?.id,
+      email: payload.customer?.email,
+    });
+
+    return res.status(200).send("Webhook received");
+  } catch (error) {
+    console.error("Customer data request webhook error:", error);
+    return res.status(500).send("Server error");
+  }
+}
+
+async function handleCustomerRedact(req, res) {
+  try {
+    const payload = parseWebhookOrder(req);
+    const storeId = await getStoreId(req.shopDomain);
+
+    if (!storeId) {
+      return res.status(200).send("Store not found");
+    }
+
+    const email = payload.customer?.email || null;
+    const phone = payload.customer?.phone || null;
+    const orderIds = Array.isArray(payload.orders_to_redact)
+      ? payload.orders_to_redact.filter(Boolean)
+      : [];
+
+    await pool.query(
+      `UPDATE orders
+       SET customer_first_name = NULL,
+           customer_last_name = NULL,
+           customer_phone = NULL,
+           customer_email = NULL,
+           shipping_address = NULL,
+           customer_latitude = NULL,
+           customer_longitude = NULL,
+           customer_altitude = NULL,
+           google_maps_link = NULL
+       WHERE store_id = $1
+         AND (
+           ($2::TEXT IS NOT NULL AND customer_email = $2)
+           OR ($3::TEXT IS NOT NULL AND customer_phone = $3)
+           OR (array_length($4::BIGINT[], 1) IS NOT NULL AND shopify_order_id = ANY($4::BIGINT[]))
+         )`,
+      [storeId, email, phone, orderIds]
+    );
+
+    return res.status(200).send("Webhook received");
+  } catch (error) {
+    console.error("Customer redact webhook error:", error);
+    return res.status(500).send("Server error");
+  }
+}
+
+async function handleShopRedact(req, res) {
+  try {
+    if (!req.shopDomain) {
+      return res.status(200).send("Missing shop domain");
+    }
+
+    await pool.query(`DELETE FROM stores WHERE shop_domain = $1`, [req.shopDomain]);
+    return res.status(200).send("Webhook received");
+  } catch (error) {
+    console.error("Shop redact webhook error:", error);
+    return res.status(500).send("Server error");
+  }
+}
+
+module.exports = {
+  handleOrderCreated,
+  handleOrderCancelled,
+  handleOrderDeleted,
+  handleOrderFulfilled,
+  handleCustomerDataRequest,
+  handleCustomerRedact,
+  handleShopRedact,
+};

@@ -34,16 +34,14 @@ app.use("/api", express.json());
 
 //
 //Enable CORS, set security headers with Helmet, and log requests with Morgan.
-//For Shopify embedded apps, we need to allow the app to be rendered
-//inside an iframe on admin.shopify.com / *.myshopify.com, so we disable
-//Helmet's default frameguard header (X-Frame-Options: SAMEORIGIN).
 app.use(cors());
 app.use(
    helmet({
-      frameguard: false,
+      frameguard: { action: "deny" },
       contentSecurityPolicy: {
          directives: {
             defaultSrc: ["'self'"],
+            frameAncestors: ["'none'"],
             scriptSrc: [
                "'self'",
                "'unsafe-inline'",

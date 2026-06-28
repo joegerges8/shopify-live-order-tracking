@@ -5,7 +5,8 @@ const pool = require("../config/db");
 const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const APP_URL = (process.env.APP_URL || "https://shopify-live-order-tracking-production.up.railway.app").replace(/\/$/, "");
-const SCOPES = "read_orders,read_all_orders,write_orders,write_fulfillments";
+const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-04";
+const SCOPES = process.env.SHOPIFY_SCOPES || "read_orders,write_orders,write_fulfillments";
 const REDIRECT_URI = `${APP_URL}/auth/callback`;
 
 function validateShopDomain(shop) {
@@ -71,7 +72,7 @@ async function oauthCallback(req, res) {
   // Fetch store name from Shopify
   let storeName = shop.replace(".myshopify.com", "");
   try {
-    const shopInfoRes = await fetch(`https://${shop}/admin/api/2024-01/shop.json`, {
+    const shopInfoRes = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/shop.json`, {
       headers: { "X-Shopify-Access-Token": access_token },
     });
     if (shopInfoRes.ok) {
@@ -112,14 +113,16 @@ async function registerWebhooks(shop, accessToken) {
   const topics = [
     "orders/create",
     "orders/cancelled",
-    "orders/deleted",
+    "orders/delete",
     "orders/fulfilled",
+    "customers/data_request",
+    "customers/redact",
+    "shop/redact",
   ];
   for (const topic of topics) {
-    const slug = topic.replace("/", "/orders/").split("/").pop();
-    const address = `${APP_URL}/webhooks/shopify/orders/${slug}`;
+    const address = `${APP_URL}/webhooks/shopify/${topic}`;
     try {
-      const r = await fetch(`https://${shop}/admin/api/2024-01/webhooks.json`, {
+      const r = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

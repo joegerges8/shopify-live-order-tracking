@@ -1,7 +1,24 @@
+-- stores table
+-- One row per Shopify store that installs Live Dispatch.
+-- Drivers are intentionally NOT scoped to a store; they are shared globally.
+CREATE TABLE stores (
+    id SERIAL PRIMARY KEY,
+    shop_domain VARCHAR(255) UNIQUE NOT NULL,
+    access_token TEXT NOT NULL DEFAULT '',
+    scope TEXT,
+    setup_token TEXT,
+    store_name VARCHAR(255),
+    admin_password_hash TEXT,
+    active BOOLEAN DEFAULT TRUE,
+    installed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- drivers table
 -- Stores one row per delivery driver. password_hash holds the bcrypt hash
 -- of the driver's password — the plain text is never stored.
 -- status indicates whether the driver is currently available for assignments.
+-- Drivers are shared across all stores.
 CREATE TABLE drivers (
     id SERIAL PRIMARY KEY,
     full_name VARCHAR(150) NOT NULL,
@@ -24,6 +41,7 @@ CREATE TABLE drivers (
 -- This column was added after the initial schema via the migration below.
 CREATE TABLE orders (
     id SERIAL PRIMARY KEY,
+    store_id INT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
     shopify_order_id BIGINT UNIQUE NOT NULL,  -- links back to the Shopify order
     order_number VARCHAR(50),
     customer_first_name VARCHAR(100),
@@ -47,6 +65,8 @@ CREATE TABLE orders (
     delivered_at TIMESTAMP                    -- set automatically when status = 'DELIVERED'
 );
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN delivered_at TIMESTAMP;
+-- Migration for existing databases: ALTER TABLE orders ADD COLUMN store_id INT REFERENCES stores(id) ON DELETE CASCADE;
+-- After backfilling existing rows, run: ALTER TABLE orders ALTER COLUMN store_id SET NOT NULL;
 
 -- location_updates table
 -- Each row is one GPS ping from the driver's device during an active delivery.
