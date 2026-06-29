@@ -1,4 +1,4 @@
-name = "Live Dispatch"
+name = "DispatchHQ"
 client_id = "6cc55b2c16983f7b719f69b9c3cad0b7"
 application_url = "https://dispatcher-dashboard.up.railway.app/auth/"
 embedded = false
@@ -27,4 +27,16 @@ api_version = "2026-04"
   [[webhooks.subscriptions]]
   topics = ["orders/fulfilled"]
   uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/orders/fulfilled"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request"]
+  uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/customers/data_request"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/redact"]
+  uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/customers/redact"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["shop/redact"]
+  uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/shop/redact"
 
