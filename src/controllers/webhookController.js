@@ -40,6 +40,9 @@ async function handleOrderCreated(req, res) {
 
     const shopifyOrderId = order.id;
     const orderNumber = order.name || String(order.order_number || "");
+    console.log("[Webhook Debug] customer:", JSON.stringify(order.customer));
+    console.log("[Webhook Debug] shipping_address:", JSON.stringify(order.shipping_address));
+    console.log("[Webhook Debug] billing_address:", JSON.stringify(order.billing_address));
     const customerFirstName = order.customer?.first_name || order.shipping_address?.first_name || order.billing_address?.first_name || null;
     const customerLastName = order.customer?.last_name || order.shipping_address?.last_name || order.billing_address?.last_name || null;
 
