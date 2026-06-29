@@ -40,8 +40,8 @@ async function handleOrderCreated(req, res) {
 
     const shopifyOrderId = order.id;
     const orderNumber = order.name || String(order.order_number || "");
-    const customerFirstName = order.customer?.first_name || null;
-    const customerLastName = order.customer?.last_name || null;
+    const customerFirstName = order.customer?.first_name || order.shipping_address?.first_name || order.billing_address?.first_name || null;
+    const customerLastName = order.customer?.last_name || order.shipping_address?.last_name || order.billing_address?.last_name || null;
 
     const customerPhone =
       order.phone ||
@@ -59,8 +59,8 @@ async function handleOrderCreated(req, res) {
           .join(", ")
       : null;
 
-    const city = order.shipping_address?.city || null;
-    const country = order.shipping_address?.country || null;
+    const city = order.shipping_address?.city || order.billing_address?.city || null;
+    const country = order.shipping_address?.country || order.billing_address?.country || null;
     const totalPrice = order.total_price || 0;
     const financialStatus = order.financial_status || null;
     const fulfillmentStatus = order.fulfillment_status || null;
