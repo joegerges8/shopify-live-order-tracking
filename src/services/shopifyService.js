@@ -17,6 +17,13 @@ async function getStoreCredentials(storeId) {
   return result.rows[0] || null;
 }
 
+function hasScope(scope, requiredScope) {
+  return String(scope || "")
+    .split(",")
+    .map((item) => item.trim())
+    .includes(requiredScope);
+}
+
 function firstNonBlank(...values) {
   for (const value of values) {
     if (value === null || value === undefined) continue;
@@ -116,9 +123,8 @@ async function fetchOrderCustomerFieldsFromShopify(storeId, shopifyOrderId) {
 
   const store = await getStoreCredentials(storeId);
   if (!store || !store.access_token) return null;
-  if (!store.scope || !store.scope.includes("read_orders")) {
-    console.warn(`[Shopify backfill] Store ${storeId} lacks read_orders scope`);
-    return null;
+  if (!hasScope(store.scope, "read_orders") && !hasScope(store.scope, "write_orders")) {
+    console.warn(`[Shopify backfill] Store ${storeId} saved scope is missing order access; trying Shopify anyway`);
   }
 
   const fields = [
@@ -154,7 +160,7 @@ async function syncOrderTagToShopify(storeId, shopifyOrderId, status) {
 
   const store = await getStoreCredentials(storeId);
   if (!store) return;
-  if (!store.scope || !store.scope.includes("write_orders")) {
+  if (!hasScope(store.scope, "write_orders")) {
     console.warn(`[Shopify sync] Store ${storeId} lacks write_orders scope — re-install needed`);
     return;
   }
@@ -197,7 +203,7 @@ async function markDeliveredInShopify(storeId, shopifyOrderId) {
 
   const store = await getStoreCredentials(storeId);
   if (!store) return;
-  if (!store.scope || !store.scope.includes("write_fulfillments")) {
+  if (!hasScope(store.scope, "write_fulfillments")) {
     console.warn(`[Shopify sync] Store ${storeId} lacks write_fulfillments scope — re-install needed`);
     return;
   }
