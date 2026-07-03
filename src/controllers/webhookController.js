@@ -19,6 +19,62 @@ function parseNullableNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function firstNonBlank(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const trimmed = String(value).trim();
+    if (trimmed.length) return trimmed;
+  }
+  return null;
+}
+
+function splitName(name) {
+  const normalized = firstNonBlank(name);
+  if (!normalized) return { firstName: null, lastName: null };
+
+  const parts = normalized.split(/\s+/);
+  return {
+    firstName: parts[0] || null,
+    lastName: parts.length > 1 ? parts.slice(1).join(" ") : null,
+  };
+}
+
+function getAddressCandidates(order) {
+  return [
+    order.shipping_address,
+    order.billing_address,
+    order.customer?.default_address,
+    ...(Array.isArray(order.customer?.addresses) ? order.customer.addresses : []),
+  ].filter(Boolean);
+}
+
+function getCustomerName(order) {
+  const addresses = getAddressCandidates(order);
+  const addressName = splitName(firstNonBlank(...addresses.map((address) => address.name)));
+
+  return {
+    firstName: firstNonBlank(
+      order.customer?.first_name,
+      ...addresses.map((address) => address.first_name),
+      addressName.firstName
+    ),
+    lastName: firstNonBlank(
+      order.customer?.last_name,
+      ...addresses.map((address) => address.last_name),
+      addressName.lastName
+    ),
+  };
+}
+
+function getShippingAddress(order) {
+  const address = getAddressCandidates(order)[0];
+  if (!address) return null;
+
+  return [address.address1, address.address2]
+    .filter(Boolean)
+    .join(", ") || null;
+}
+
 async function getStoreId(shopDomain) {
   if (!shopDomain) return null;
   const result = await pool.query(
@@ -40,27 +96,23 @@ async function handleOrderCreated(req, res) {
 
     const shopifyOrderId = order.id;
     const orderNumber = order.name || String(order.order_number || "");
-    const customerFirstName = order.customer?.first_name || order.shipping_address?.first_name || order.billing_address?.first_name || null;
-    const customerLastName = order.customer?.last_name || order.shipping_address?.last_name || order.billing_address?.last_name || null;
+    const customerName = getCustomerName(order);
+    const customerFirstName = customerName.firstName;
+    const customerLastName = customerName.lastName;
+    const addresses = getAddressCandidates(order);
 
     const customerPhone =
-      order.phone ||
-      order.customer?.phone ||
-      order.shipping_address?.phone ||
-      order.billing_address?.phone ||
-      order.customer?.default_address?.phone ||
-      null;
+      firstNonBlank(
+        order.phone,
+        order.customer?.phone,
+        ...addresses.map((address) => address.phone)
+      );
 
-    const customerEmail = order.email || order.customer?.email || null;
+    const customerEmail = firstNonBlank(order.email, order.customer?.email);
 
-    const shippingAddress = order.shipping_address
-      ? [order.shipping_address.address1, order.shipping_address.address2]
-          .filter(Boolean)
-          .join(", ")
-      : null;
-
-    const city = order.shipping_address?.city || order.billing_address?.city || null;
-    const country = order.shipping_address?.country || order.billing_address?.country || null;
+    const shippingAddress = getShippingAddress(order);
+    const city = firstNonBlank(...addresses.map((address) => address.city));
+    const country = firstNonBlank(...addresses.map((address) => address.country));
     const totalPrice = order.total_price || 0;
     const financialStatus = order.financial_status || null;
     const fulfillmentStatus = order.fulfillment_status || null;
@@ -83,7 +135,24 @@ async function handleOrderCreated(req, res) {
         customer_latitude, customer_longitude, customer_altitude,
         google_maps_link, tracking_token, store_id
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-      ON CONFLICT (shopify_order_id) DO NOTHING`,
+      ON CONFLICT (shopify_order_id) DO UPDATE SET
+        order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
+        customer_first_name = COALESCE(EXCLUDED.customer_first_name, orders.customer_first_name),
+        customer_last_name = COALESCE(EXCLUDED.customer_last_name, orders.customer_last_name),
+        customer_phone = COALESCE(EXCLUDED.customer_phone, orders.customer_phone),
+        customer_email = COALESCE(EXCLUDED.customer_email, orders.customer_email),
+        shipping_address = COALESCE(EXCLUDED.shipping_address, orders.shipping_address),
+        city = COALESCE(EXCLUDED.city, orders.city),
+        country = COALESCE(EXCLUDED.country, orders.country),
+        total_price = COALESCE(EXCLUDED.total_price, orders.total_price),
+        financial_status = COALESCE(EXCLUDED.financial_status, orders.financial_status),
+        fulfillment_status = COALESCE(EXCLUDED.fulfillment_status, orders.fulfillment_status),
+        customer_latitude = COALESCE(EXCLUDED.customer_latitude, orders.customer_latitude),
+        customer_longitude = COALESCE(EXCLUDED.customer_longitude, orders.customer_longitude),
+        customer_altitude = COALESCE(EXCLUDED.customer_altitude, orders.customer_altitude),
+        google_maps_link = COALESCE(EXCLUDED.google_maps_link, orders.google_maps_link),
+        tracking_token = COALESCE(orders.tracking_token, EXCLUDED.tracking_token),
+        store_id = COALESCE(orders.store_id, EXCLUDED.store_id)`,
       [
         shopifyOrderId, orderNumber,
         customerFirstName, customerLastName, customerPhone, customerEmail,

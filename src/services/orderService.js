@@ -1,5 +1,55 @@
 const pool = require("../config/db");
-const { syncOrderTagToShopify, markDeliveredInShopify } = require("./shopifyService");
+const {
+  syncOrderTagToShopify,
+  markDeliveredInShopify,
+  fetchOrderCustomerFieldsFromShopify,
+} = require("./shopifyService");
+
+function isMissingCustomerOrCity(order) {
+  const hasCustomerName = Boolean(
+    `${order.customer_first_name || ""} ${order.customer_last_name || ""}`.trim()
+  );
+  return !hasCustomerName || !order.city;
+}
+
+async function backfillMissingCustomerFields(order, storeId) {
+  if (!isMissingCustomerOrCity(order)) return order;
+
+  const fields = await fetchOrderCustomerFieldsFromShopify(storeId, order.shopify_order_id);
+  if (!fields) return order;
+
+  const result = await pool.query(
+    `UPDATE orders
+     SET customer_first_name = COALESCE($1, customer_first_name),
+         customer_last_name = COALESCE($2, customer_last_name),
+         customer_phone = COALESCE($3, customer_phone),
+         customer_email = COALESCE($4, customer_email),
+         shipping_address = COALESCE($5, shipping_address),
+         city = COALESCE($6, city),
+         country = COALESCE($7, country),
+         total_price = COALESCE($8, total_price),
+         financial_status = COALESCE($9, financial_status),
+         fulfillment_status = COALESCE($10, fulfillment_status)
+     WHERE id = $11 AND store_id = $12
+     RETURNING *`,
+    [
+      fields.customer_first_name,
+      fields.customer_last_name,
+      fields.customer_phone,
+      fields.customer_email,
+      fields.shipping_address,
+      fields.city,
+      fields.country,
+      fields.total_price,
+      fields.financial_status,
+      fields.fulfillment_status,
+      order.id,
+      storeId,
+    ]
+  );
+
+  return result.rows[0] || order;
+}
 
 // Returns every order for a specific store, newest first.
 async function getAllOrders(storeId) {
@@ -7,7 +57,22 @@ async function getAllOrders(storeId) {
     `SELECT * FROM orders WHERE store_id = $1 ORDER BY created_at DESC`,
     [storeId]
   );
-  return result.rows;
+  const rows = result.rows;
+  let repairBudget = 25;
+  const repairedRows = await Promise.all(
+    rows.map((order) => {
+      if (!isMissingCustomerOrCity(order) || repairBudget <= 0) {
+        return order;
+      }
+
+      repairBudget -= 1;
+      return backfillMissingCustomerFields(order, storeId).catch((error) => {
+        console.error(`[Shopify backfill] Order ${order.shopify_order_id} failed:`, error.message);
+        return order;
+      });
+    })
+  );
+  return repairedRows;
 }
 
 // Returns a single order by primary key, scoped to the store.

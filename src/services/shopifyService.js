@@ -17,6 +17,108 @@ async function getStoreCredentials(storeId) {
   return result.rows[0] || null;
 }
 
+function firstNonBlank(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const trimmed = String(value).trim();
+    if (trimmed.length) return trimmed;
+  }
+  return null;
+}
+
+function splitName(name) {
+  const normalized = firstNonBlank(name);
+  if (!normalized) return { firstName: null, lastName: null };
+
+  const parts = normalized.split(/\s+/);
+  return {
+    firstName: parts[0] || null,
+    lastName: parts.length > 1 ? parts.slice(1).join(" ") : null,
+  };
+}
+
+function getAddressCandidates(order) {
+  return [
+    order.shipping_address,
+    order.billing_address,
+    order.customer?.default_address,
+    ...(Array.isArray(order.customer?.addresses) ? order.customer.addresses : []),
+  ].filter(Boolean);
+}
+
+function extractOrderCustomerFields(order) {
+  const addresses = getAddressCandidates(order);
+  const addressName = splitName(firstNonBlank(...addresses.map((address) => address.name)));
+  const firstName = firstNonBlank(
+    order.customer?.first_name,
+    ...addresses.map((address) => address.first_name),
+    addressName.firstName
+  );
+  const lastName = firstNonBlank(
+    order.customer?.last_name,
+    ...addresses.map((address) => address.last_name),
+    addressName.lastName
+  );
+  const address = addresses[0];
+  const shippingAddress = address
+    ? [address.address1, address.address2].filter(Boolean).join(", ") || null
+    : null;
+
+  return {
+    customer_first_name: firstName,
+    customer_last_name: lastName,
+    customer_phone: firstNonBlank(
+      order.phone,
+      order.customer?.phone,
+      ...addresses.map((item) => item.phone)
+    ),
+    customer_email: firstNonBlank(order.email, order.customer?.email),
+    shipping_address: shippingAddress,
+    city: firstNonBlank(...addresses.map((item) => item.city)),
+    country: firstNonBlank(...addresses.map((item) => item.country)),
+    total_price: order.total_price ?? null,
+    financial_status: order.financial_status ?? null,
+    fulfillment_status: order.fulfillment_status ?? null,
+  };
+}
+
+async function fetchOrderCustomerFieldsFromShopify(storeId, shopifyOrderId) {
+  if (!shopifyOrderId) return null;
+
+  const store = await getStoreCredentials(storeId);
+  if (!store || !store.access_token) return null;
+  if (!store.scope || !store.scope.includes("read_orders")) {
+    console.warn(`[Shopify backfill] Store ${storeId} lacks read_orders scope`);
+    return null;
+  }
+
+  const fields = [
+    "id",
+    "name",
+    "order_number",
+    "email",
+    "phone",
+    "customer",
+    "shipping_address",
+    "billing_address",
+    "total_price",
+    "financial_status",
+    "fulfillment_status",
+  ].join(",");
+  const url = `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders/${shopifyOrderId}.json?fields=${fields}`;
+  const response = await fetch(url, {
+    headers: { "X-Shopify-Access-Token": store.access_token },
+  });
+
+  if (!response.ok) {
+    console.error(`[Shopify backfill] GET order ${shopifyOrderId} failed: ${response.status}`);
+    return null;
+  }
+
+  const { order } = await response.json();
+  return order ? extractOrderCustomerFields(order) : null;
+}
+
 async function syncOrderTagToShopify(storeId, shopifyOrderId, status) {
   if (!shopifyOrderId || !STATUS_TAG_MAP[status]) return;
 
@@ -138,4 +240,4 @@ async function markDeliveredInShopify(storeId, shopifyOrderId) {
   console.log(`[Shopify sync] Order ${shopifyOrderId} marked as Delivered in Shopify`);
 }
 
-module.exports = { syncOrderTagToShopify, markDeliveredInShopify };
+module.exports = { syncOrderTagToShopify, markDeliveredInShopify, fetchOrderCustomerFieldsFromShopify };
