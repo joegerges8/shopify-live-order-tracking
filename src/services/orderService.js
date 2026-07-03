@@ -12,11 +12,23 @@ function isMissingCustomerOrCity(order) {
   return !hasCustomerName || !order.city;
 }
 
+function normalizeOrderForDashboard(order) {
+  return {
+    ...order,
+    customer_name: `${order.customer_first_name || ""} ${order.customer_last_name || ""}`.trim(),
+    display_city: order.city || "",
+  };
+}
+
 async function backfillMissingCustomerFields(order, storeId) {
   if (!isMissingCustomerOrCity(order)) return order;
 
   const fields = await fetchOrderCustomerFieldsFromShopify(storeId, order.shopify_order_id);
   if (!fields) return order;
+  if (!fields.customer_first_name && !fields.customer_last_name && !fields.city) {
+    console.warn(`[Shopify backfill] Order ${order.shopify_order_id} returned no customer name or city`);
+    return order;
+  }
 
   const result = await pool.query(
     `UPDATE orders
@@ -48,7 +60,9 @@ async function backfillMissingCustomerFields(order, storeId) {
     ]
   );
 
-  return result.rows[0] || order;
+  const updatedOrder = result.rows[0] || order;
+  console.info(`[Shopify backfill] Updated order ${order.shopify_order_id} customer/city`);
+  return updatedOrder;
 }
 
 // Returns every order for a specific store, newest first.
@@ -72,7 +86,7 @@ async function getAllOrders(storeId) {
       });
     })
   );
-  return repairedRows;
+  return repairedRows.map(normalizeOrderForDashboard);
 }
 
 // Returns a single order by primary key, scoped to the store.

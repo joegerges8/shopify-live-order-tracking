@@ -7,8 +7,17 @@ function parseWebhookOrder(req) {
 
 function getNoteAttribute(order, key) {
   const noteAttributes = order.note_attributes || [];
-  const match = noteAttributes.find((item) => item.name === key);
+  const normalizedKey = String(key).trim().toLowerCase();
+  const match = noteAttributes.find((item) => String(item.name || "").trim().toLowerCase() === normalizedKey);
   return match ? match.value : null;
+}
+
+function getAnyNoteAttribute(order, keys) {
+  for (const key of keys) {
+    const value = firstNonBlank(getNoteAttribute(order, key));
+    if (value) return value;
+  }
+  return null;
 }
 
 function parseNullableNumber(value) {
@@ -51,17 +60,28 @@ function getAddressCandidates(order) {
 function getCustomerName(order) {
   const addresses = getAddressCandidates(order);
   const addressName = splitName(firstNonBlank(...addresses.map((address) => address.name)));
+  const noteName = splitName(getAnyNoteAttribute(order, [
+    "customer_name",
+    "customer name",
+    "full_name",
+    "full name",
+    "name",
+  ]));
 
   return {
     firstName: firstNonBlank(
       order.customer?.first_name,
       ...addresses.map((address) => address.first_name),
-      addressName.firstName
+      addressName.firstName,
+      getAnyNoteAttribute(order, ["first_name", "first name"]),
+      noteName.firstName
     ),
     lastName: firstNonBlank(
       order.customer?.last_name,
       ...addresses.map((address) => address.last_name),
-      addressName.lastName
+      addressName.lastName,
+      getAnyNoteAttribute(order, ["last_name", "last name"]),
+      noteName.lastName
     ),
   };
 }
@@ -111,7 +131,10 @@ async function handleOrderCreated(req, res) {
     const customerEmail = firstNonBlank(order.email, order.customer?.email);
 
     const shippingAddress = getShippingAddress(order);
-    const city = firstNonBlank(...addresses.map((address) => address.city));
+    const city = firstNonBlank(
+      ...addresses.map((address) => address.city),
+      getAnyNoteAttribute(order, ["city", "delivery_city", "delivery city", "shipping_city", "shipping city"])
+    );
     const country = firstNonBlank(...addresses.map((address) => address.country));
     const totalPrice = order.total_price || 0;
     const financialStatus = order.financial_status || null;

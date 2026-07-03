@@ -14,6 +14,17 @@ const cityFilterEl = document.getElementById("cityFilter");
 let allOrders = [];
 let allDrivers = [];
 
+function getCustomerName(order) {
+  return (
+    order.customer_name ||
+    `${order.customer_first_name ?? ""} ${order.customer_last_name ?? ""}`.trim()
+  );
+}
+
+function getOrderCity(order) {
+  return order.display_city || order.city || "";
+}
+
 /* ===========================
    DRIVER LOGIC
 =========================== */
@@ -121,7 +132,7 @@ function updateStats(orders, drivers) {
 =========================== */
 
 function populateCityFilter(orders) {
-  const uniqueCities = [...new Set(orders.map((order) => order.city).filter(Boolean))];
+  const uniqueCities = [...new Set(orders.map(getOrderCity).filter(Boolean))];
 
   cityFilterEl.innerHTML = `<option value="">All cities</option>`;
 
@@ -141,7 +152,7 @@ function applyFilters() {
   const filteredOrders = allOrders.filter((order) => {
     const orderNumber = String(order.order_number ?? "").toLowerCase();
     const orderStatus = order.order_status ?? "";
-    const city = order.city ?? "";
+    const city = getOrderCity(order);
 
     const matchesSearch = !searchValue || orderNumber.includes(searchValue);
     const matchesStatus = !selectedStatus || orderStatus === selectedStatus;
@@ -172,6 +183,8 @@ function renderOrders(orders, drivers) {
   orders.forEach((order) => {
     const row = document.createElement("tr");
     const assignedDriverName = getDriverNameById(order.assigned_driver_id, drivers);
+    const customerName = getCustomerName(order);
+    const city = getOrderCity(order);
 
     const trackingBtn = order.tracking_token && order.order_status !== "PENDING"
       ? `<button class="small-btn track-btn" data-tracking-token="${order.tracking_token}" title="Copy tracking link">🔗 Track</button>`
@@ -182,8 +195,8 @@ function renderOrders(orders, drivers) {
 
     row.innerHTML = `
       <td>${order.order_number ?? ""}</td>
-      <td>${order.customer_first_name ?? ""} ${order.customer_last_name ?? ""}</td>
-      <td>${order.city ?? ""}</td>
+      <td>${customerName}</td>
+      <td>${city}</td>
       <td>${order.total_price ?? ""}</td>
       <td>${order.financial_status ?? ""}</td>
       <td>${createStatusBadge(order.order_status)}</td>

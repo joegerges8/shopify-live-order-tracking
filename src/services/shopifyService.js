@@ -26,6 +26,21 @@ function firstNonBlank(...values) {
   return null;
 }
 
+function getNoteAttribute(order, key) {
+  const normalizedKey = String(key).trim().toLowerCase();
+  const noteAttributes = Array.isArray(order.note_attributes) ? order.note_attributes : [];
+  const match = noteAttributes.find((item) => String(item.name || "").trim().toLowerCase() === normalizedKey);
+  return match ? match.value : null;
+}
+
+function getAnyNoteAttribute(order, keys) {
+  for (const key of keys) {
+    const value = firstNonBlank(getNoteAttribute(order, key));
+    if (value) return value;
+  }
+  return null;
+}
+
 function splitName(name) {
   const normalized = firstNonBlank(name);
   if (!normalized) return { firstName: null, lastName: null };
@@ -49,15 +64,26 @@ function getAddressCandidates(order) {
 function extractOrderCustomerFields(order) {
   const addresses = getAddressCandidates(order);
   const addressName = splitName(firstNonBlank(...addresses.map((address) => address.name)));
+  const noteName = splitName(getAnyNoteAttribute(order, [
+    "customer_name",
+    "customer name",
+    "full_name",
+    "full name",
+    "name",
+  ]));
   const firstName = firstNonBlank(
     order.customer?.first_name,
     ...addresses.map((address) => address.first_name),
-    addressName.firstName
+    addressName.firstName,
+    getAnyNoteAttribute(order, ["first_name", "first name"]),
+    noteName.firstName
   );
   const lastName = firstNonBlank(
     order.customer?.last_name,
     ...addresses.map((address) => address.last_name),
-    addressName.lastName
+    addressName.lastName,
+    getAnyNoteAttribute(order, ["last_name", "last name"]),
+    noteName.lastName
   );
   const address = addresses[0];
   const shippingAddress = address
@@ -74,7 +100,10 @@ function extractOrderCustomerFields(order) {
     ),
     customer_email: firstNonBlank(order.email, order.customer?.email),
     shipping_address: shippingAddress,
-    city: firstNonBlank(...addresses.map((item) => item.city)),
+    city: firstNonBlank(
+      ...addresses.map((item) => item.city),
+      getAnyNoteAttribute(order, ["city", "delivery_city", "delivery city", "shipping_city", "shipping city"])
+    ),
     country: firstNonBlank(...addresses.map((item) => item.country)),
     total_price: order.total_price ?? null,
     financial_status: order.financial_status ?? null,
@@ -101,6 +130,7 @@ async function fetchOrderCustomerFieldsFromShopify(storeId, shopifyOrderId) {
     "customer",
     "shipping_address",
     "billing_address",
+    "note_attributes",
     "total_price",
     "financial_status",
     "fulfillment_status",
