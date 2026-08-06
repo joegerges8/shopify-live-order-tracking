@@ -2,6 +2,8 @@ const pool = require("../config/db");
 const {
   syncOrderTagToShopify,
   markDeliveredInShopify,
+  markFulfilledInShopify,
+  markUnfulfilledInShopify,
   fetchOrderCustomerFieldsFromShopify,
 } = require("./shopifyService");
 
@@ -157,6 +159,16 @@ async function updateOrderStatus(orderId, status, storeId) {
     if (status === "DELIVERED") {
       markDeliveredInShopify(storeId, row.shopify_order_id).catch(err =>
         console.error("[Shopify sync] mark delivered failed:", err.message)
+      );
+    }
+    if (status === "FULFILLED") {
+      markFulfilledInShopify(storeId, row.shopify_order_id).catch(err =>
+        console.error("[Shopify sync] mark fulfilled failed:", err.message)
+      );
+    }
+    if (status === "PENDING") {
+      markUnfulfilledInShopify(storeId, row.shopify_order_id).catch(err =>
+        console.error("[Shopify sync] mark unfulfilled failed:", err.message)
       );
     }
   }
