@@ -85,9 +85,11 @@ const STATUS_DISPLAY = {
 
 function createStatusOptions(currentStatus) {
   const statuses = [
+    "PENDING",
     "ASSIGNED",
     "PICKED_UP",
     "DELIVERED",
+    "FULFILLED",
     "CANCELLED",
   ];
 

@@ -72,7 +72,7 @@ async function changeOrderStatus(req, res) {
     const { status } = req.body;
 
     const validStatuses = [
-      "ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED",
+      "PENDING", "ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED", "FULFILLED", "CANCELLED",
     ];
 
     if (!status) {
