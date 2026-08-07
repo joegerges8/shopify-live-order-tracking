@@ -11,6 +11,7 @@ const {
   getOrderByIdForDriver,
   updateDriverOrderStatus,
   createLocationUpdate,
+  markOrderPaid,
 } = require("../services/orderService");
 const { syncOrderTagToShopify, markDeliveredInShopify } = require("../services/shopifyService");
 const { getIO } = require("../socket");
@@ -134,6 +135,16 @@ async function patchMyOrderStatus(req, res) {
       markDeliveredInShopify(updated.store_id, updated.shopify_order_id).catch(err =>
         console.error("[Shopify sync] driver mark delivered failed:", err.message)
       );
+      // The driver marking a delivery done is when cash on delivery is
+      // collected, so record the payment in Shopify. A failure is logged
+      // rather than shown to the driver — the dispatcher sees the order still
+      // reading as unpaid on the dashboard and can mark it there.
+      try {
+        const paidRow = await markOrderPaid(updated.id, updated.store_id);
+        if (paidRow) Object.assign(updated, paidRow);
+      } catch (error) {
+        console.error("[Shopify sync] driver mark paid failed:", error.message);
+      }
     }
 
     return res.json(updated);
