@@ -7,8 +7,10 @@ const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const APP_URL = (process.env.APP_URL || "https://shopify-live-order-tracking-production.up.railway.app").replace(/\/$/, "");
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-04";
+// Keep in step with [access_scopes] in shopify.app.toml and the Dev Dashboard.
 const SCOPES = process.env.SHOPIFY_SCOPES ||
-  "read_orders,write_orders,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders";
+  "read_all_orders,read_orders,write_orders,write_fulfillments," +
+  "read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders";
 const REDIRECT_URI = `${APP_URL}/auth/callback`;
 
 function validateShopDomain(shop) {
