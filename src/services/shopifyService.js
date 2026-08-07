@@ -350,6 +350,47 @@ async function cancelOrderInShopify(storeId, shopifyOrderId) {
   console.log(`[Shopify sync] Order ${shopifyOrderId} cancelled in Shopify`);
 }
 
+// Permanently deletes the order from Shopify. This is irreversible, and
+// Shopify only permits it for certain orders — anything that went through an
+// online payment gateway can be cancelled but never deleted.
+//
+// An order that is already gone from Shopify (404) counts as success, so a
+// half-finished delete can be retried without getting stuck.
+async function deleteOrderInShopify(storeId, shopifyOrderId) {
+  if (!shopifyOrderId) return;
+
+  const store = await getStoreCredentials(storeId);
+  if (!store || !store.access_token) {
+    throw new Error(`Store ${storeId} has no Shopify access token — re-install the app.`);
+  }
+
+  const base = `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}`;
+  const response = await fetch(`${base}/orders/${shopifyOrderId}.json`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": store.access_token,
+    },
+  });
+
+  if (response.status === 404) {
+    console.log(`[Shopify sync] Order ${shopifyOrderId} already absent from Shopify`);
+    return;
+  }
+  if (!response.ok) {
+    const body = (await response.text()).slice(0, 300);
+    if (response.status === 403 || response.status === 422 || response.status === 406) {
+      throw new Error(
+        `Shopify will not delete this order. Orders paid through an online payment ` +
+        `gateway can only be cancelled, never deleted. Details: ${body}`
+      );
+    }
+    throw new Error(`Shopify delete returned ${response.status}: ${body}`);
+  }
+
+  console.log(`[Shopify sync] Order ${shopifyOrderId} deleted from Shopify`);
+}
+
 // Reverts a Shopify order back to "Unfulfilled" by cancelling any open
 // fulfillments on it.
 async function markUnfulfilledInShopify(storeId, shopifyOrderId) {
@@ -528,6 +569,7 @@ module.exports = {
   markFulfilledInShopify,
   markUnfulfilledInShopify,
   cancelOrderInShopify,
+  deleteOrderInShopify,
   fetchOrderCustomerFieldsFromShopify,
   importOrdersFromShopify,
 };

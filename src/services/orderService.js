@@ -5,6 +5,7 @@ const {
   markFulfilledInShopify,
   markUnfulfilledInShopify,
   cancelOrderInShopify,
+  deleteOrderInShopify,
   fetchOrderCustomerFieldsFromShopify,
   importOrdersFromShopify,
 } = require("./shopifyService");
@@ -272,6 +273,34 @@ async function updateOrderStatus(orderId, status, storeId) {
   return row;
 }
 
+// Removes the order from Shopify and then from the dashboard. Shopify refuses
+// to delete an order that is still open, so it is cancelled first — that call
+// is best effort, because an order already cancelled reports an error the
+// delete itself doesn't care about.
+//
+// The local row is only removed once Shopify has confirmed, so a rejected
+// delete leaves the two sides in step instead of silently diverging.
+async function deleteOrderEverywhere(orderId, storeId) {
+  const order = await getOrderById(orderId, storeId);
+  if (!order) return null;
+
+  if (order.order_status !== "CANCELLED") {
+    try {
+      await cancelOrderInShopify(storeId, order.shopify_order_id);
+    } catch (error) {
+      console.warn(
+        `[Shopify sync] Cancel before delete for order ${order.shopify_order_id} did not apply: ${error.message}`
+      );
+    }
+  }
+
+  await deleteOrderInShopify(storeId, order.shopify_order_id);
+
+  await pool.query(`DELETE FROM orders WHERE id = $1 AND store_id = $2`, [orderId, storeId]);
+  console.log(`[Orders] Order ${order.order_number || orderId} deleted from Shopify and the dashboard`);
+  return order;
+}
+
 // Driver-scoped updates — drivers are global, no store filter needed here.
 async function updateDriverOrderStatus(orderId, driverId, status) {
   const query =
@@ -368,6 +397,7 @@ module.exports = {
   assignDriverToOrder,
   unassignDriverFromOrder,
   updateOrderStatus,
+  deleteOrderEverywhere,
   updateDriverOrderStatus,
   getOrdersByDriverId,
   getCompletedOrdersByDriverId,
