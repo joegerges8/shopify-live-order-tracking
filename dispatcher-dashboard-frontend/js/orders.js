@@ -200,6 +200,16 @@ function renderOrders(orders, drivers) {
     const locationLabel = order.customer_latitude ? "📍 Update Location" : "📍 Set Location";
     const locationBtn = `<button class="small-btn" data-location-order-id="${order.id}">${locationLabel}</button>`;
 
+    // An assigned order offers only Unassign. The driver picker and Assign
+    // button come back once the order is free again, so assigning is a
+    // one-step action rather than something that can be silently redone.
+    const assignControls = order.assigned_driver_id
+      ? `<button class="small-btn danger-btn" data-unassign-order-id="${order.id}">Unassign</button>`
+      : `<select id="driver-${order.id}">
+           ${createDriverOptions(drivers, allOrders, order.assigned_driver_id)}
+         </select>
+         <button class="small-btn" data-assign-order-id="${order.id}">Assign</button>`;
+
     row.innerHTML = `
       <td>${order.order_number ?? ""}</td>
       <td>${customerName}</td>
@@ -210,15 +220,7 @@ function renderOrders(orders, drivers) {
       <td>${assignedDriverName}</td>
       <td>
         <div class="action-group">
-          <select id="driver-${order.id}">
-            ${createDriverOptions(drivers, allOrders, order.assigned_driver_id)}
-          </select>
-          <button class="small-btn" data-assign-order-id="${order.id}">Assign</button>
-          ${
-            order.assigned_driver_id
-              ? `<button class="small-btn danger-btn" data-unassign-order-id="${order.id}">Unassign</button>`
-              : ""
-          }
+          ${assignControls}
           ${trackingBtn}
           ${locationBtn}
         </div>
@@ -316,6 +318,9 @@ function attachEventListeners() {
     button.addEventListener("click", async () => {
       const orderId = button.getAttribute("data-assign-order-id");
       const driverSelect = document.getElementById(`driver-${orderId}`);
+      // The picker is only rendered for unassigned orders; if a refresh removed
+      // it mid-click there is nothing to assign.
+      if (!driverSelect) return;
       const driverId = driverSelect.value;
 
       if (!driverId) {
