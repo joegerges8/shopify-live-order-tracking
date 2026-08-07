@@ -77,6 +77,11 @@ async function startServer() {
     `);
     await pool.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS store_name VARCHAR(255);`);
     await pool.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();`);
+    // Expiring offline tokens: Shopify's access tokens now last 60 minutes and
+    // are renewed with a refresh token that itself lasts 90 days.
+    await pool.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS refresh_token TEXT;`);
+    await pool.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMPTZ;`);
+    await pool.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS refresh_token_expires_at TIMESTAMPTZ;`);
     await pool.query(`ALTER TABLE drivers ADD COLUMN IF NOT EXISTS email VARCHAR(150) UNIQUE;`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS store_id INT REFERENCES stores(id);`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;`);

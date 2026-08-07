@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 const { randomUUID } = require("crypto");
+const { getStoreAccess } = require("./shopifyTokens");
 
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-04";
 
@@ -10,12 +11,10 @@ const STATUS_TAG_MAP = {
   CANCELLED: "delivery-cancelled",
 };
 
+// Every Shopify call in this file goes through here, so token migration and
+// refresh happen automatically wherever the app talks to the Admin API.
 async function getStoreCredentials(storeId) {
-  const result = await pool.query(
-    `SELECT shop_domain, access_token, scope FROM stores WHERE id = $1 LIMIT 1`,
-    [storeId]
-  );
-  return result.rows[0] || null;
+  return getStoreAccess(storeId);
 }
 
 function hasScope(scope, requiredScope) {
