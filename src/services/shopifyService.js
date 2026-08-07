@@ -402,7 +402,10 @@ async function upsertImportedOrder(storeId, order) {
 async function importOrdersFromShopify(storeId, { maxPages = 8 } = {}) {
   const store = await getStoreCredentials(storeId);
   if (!store) {
-    throw new Error(`No store record found for store id ${storeId}`);
+    throw new Error(
+      `Store id ${storeId} no longer exists — this dashboard session belongs to an older ` +
+      `install. Log out and log in again to reconnect to the current store.`
+    );
   }
   if (!store.access_token) {
     throw new Error(

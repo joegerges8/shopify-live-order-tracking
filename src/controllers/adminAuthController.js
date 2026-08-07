@@ -27,8 +27,15 @@ async function loginAdmin(req, res) {
     }
     const store = result.rows[0];
 
-    if (!store || !store.admin_password_hash) {
+    if (!store) {
       return res.status(401).json({ error: "Invalid credentials" });
+    }
+    // A store re-installed after being removed comes back without a password,
+    // so point the merchant at setup instead of a dead-end "invalid credentials".
+    if (!store.admin_password_hash) {
+      return res.status(409).json({
+        error: "This store has no dashboard password yet. Open the app from your Shopify admin to finish setup.",
+      });
     }
 
     const ok = await bcrypt.compare(password, store.admin_password_hash);
