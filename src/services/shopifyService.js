@@ -159,10 +159,9 @@ async function syncOrderTagToShopify(storeId, shopifyOrderId, status) {
   if (!shopifyOrderId || !STATUS_TAG_MAP[status]) return;
 
   const store = await getStoreCredentials(storeId);
-  if (!store) return;
+  if (!store || !store.access_token) return;
   if (!hasScope(store.scope, "write_orders")) {
-    console.warn(`[Shopify sync] Store ${storeId} lacks write_orders scope — re-install needed`);
-    return;
+    console.warn(`[Shopify sync] Store ${storeId} saved scope is missing write_orders — trying anyway; re-install if calls fail`);
   }
 
   const { shop_domain, access_token } = store;
@@ -201,14 +200,21 @@ async function ensureFulfillment(base, headers, shopifyOrderId) {
   const existingRes = await fetch(`${base}/orders/${shopifyOrderId}/fulfillments.json`, { headers });
   if (existingRes.ok) {
     const { fulfillments } = await existingRes.json();
-    if (fulfillments && fulfillments.length > 0) {
-      return fulfillments[0].id;
+    const active = (fulfillments || []).filter(f =>
+      f.status !== "cancelled" && f.status !== "error" && f.status !== "failure"
+    );
+    if (active.length > 0) {
+      return active[0].id;
     }
   }
 
   const foRes = await fetch(`${base}/orders/${shopifyOrderId}/fulfillment_orders.json`, { headers });
   if (!foRes.ok) {
-    console.error(`[Shopify sync] GET fulfillment_orders failed: ${foRes.status}`);
+    const body = await foRes.text();
+    console.error(
+      `[Shopify sync] GET fulfillment_orders failed: ${foRes.status} ${body} — ` +
+      `a 403 here means the app token is missing the read/write_merchant_managed_fulfillment_orders scopes (re-install the app)`
+    );
     return null;
   }
   const { fulfillment_orders } = await foRes.json();
@@ -240,10 +246,14 @@ async function ensureFulfillment(base, headers, shopifyOrderId) {
 
 async function getShopifyWriteContext(storeId) {
   const store = await getStoreCredentials(storeId);
-  if (!store) return null;
+  if (!store || !store.access_token) return null;
+  // Warn (but still try) if the saved scope looks incomplete — the DB copy can
+  // be stale, so let Shopify's response be the real authority.
   if (!hasScope(store.scope, "write_fulfillments")) {
-    console.warn(`[Shopify sync] Store ${storeId} lacks write_fulfillments scope — re-install needed`);
-    return null;
+    console.warn(`[Shopify sync] Store ${storeId} saved scope is missing write_fulfillments — trying anyway; re-install if calls fail`);
+  }
+  if (!hasScope(store.scope, "write_merchant_managed_fulfillment_orders")) {
+    console.warn(`[Shopify sync] Store ${storeId} saved scope is missing write_merchant_managed_fulfillment_orders — trying anyway; re-install if calls fail`);
   }
   const { shop_domain, access_token } = store;
   return {

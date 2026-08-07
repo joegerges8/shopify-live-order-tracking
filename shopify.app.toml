@@ -4,7 +4,7 @@ application_url = "https://dispatcher-dashboard.up.railway.app/auth/"
 embedded = false
 
 [access_scopes]
-scopes = "write_fulfillments,read_orders,write_orders"
+scopes = "write_fulfillments,read_orders,write_orders,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
 
 [auth]
 redirect_urls = ["https://dispatcher-dashboard.up.railway.app/auth/callback"]
