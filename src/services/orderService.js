@@ -13,6 +13,48 @@ const {
 const lastAutoImportAt = new Map();
 const AUTO_IMPORT_COOLDOWN_MS = 5 * 60 * 1000;
 
+// Completed orders drop off the dashboard once they're this old. They stay in
+// the database and in Shopify — this only controls what the dispatcher sees,
+// so the list stays short and quick to load.
+const DEFAULT_RETENTION_DAYS = 7;
+
+function getRetentionDays() {
+  const configured = Number(process.env.DASHBOARD_ORDER_RETENTION_DAYS);
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_RETENTION_DAYS;
+}
+
+// Repairing a row costs one Shopify API call, and the dashboard reloads every
+// 30 seconds, so repairs are capped per request and each order is only retried
+// once an hour instead of on every poll.
+const BACKFILL_PER_REQUEST = 5;
+const BACKFILL_RETRY_MS = 60 * 60 * 1000;
+const backfillAttempts = new Map();
+
+function shouldAttemptBackfill(order) {
+  const lastAttempt = backfillAttempts.get(order.shopify_order_id);
+  return !lastAttempt || Date.now() - lastAttempt > BACKFILL_RETRY_MS;
+}
+
+function recordBackfillAttempt(order) {
+  if (backfillAttempts.size > 5000) backfillAttempts.clear();
+  backfillAttempts.set(order.shopify_order_id, Date.now());
+}
+
+// Orders the dispatcher still needs to see: everything in flight, plus
+// completed orders finished within the retention window.
+function queryVisibleOrders(storeId, retentionDays) {
+  return pool.query(
+    `SELECT * FROM orders
+     WHERE store_id = $1
+       AND (
+         order_status NOT IN ('FULFILLED', 'DELIVERED')
+         OR COALESCE(fulfilled_at, delivered_at, created_at) >= NOW() - make_interval(days => $2::int)
+       )
+     ORDER BY created_at DESC`,
+    [storeId, retentionDays]
+  );
+}
+
 function isMissingCustomerOrCity(order) {
   const hasCustomerName = Boolean(
     `${order.customer_first_name || ""} ${order.customer_last_name || ""}`.trim()
@@ -78,22 +120,24 @@ async function backfillMissingCustomerFields(order, storeId) {
 // orders placed from that point on — the Shopify history is pulled in first so
 // the dashboard repopulates itself without any manual step.
 async function getAllOrders(storeId) {
-  let result = await pool.query(
-    `SELECT * FROM orders WHERE store_id = $1 ORDER BY created_at DESC`,
-    [storeId]
-  );
+  const retentionDays = getRetentionDays();
+  let result = await queryVisibleOrders(storeId, retentionDays);
 
   if (result.rows.length === 0) {
+    // Distinguish "nothing imported yet" from "everything is older than the
+    // retention window" — only the first case warrants a Shopify import.
+    const existing = await pool.query(
+      `SELECT 1 FROM orders WHERE store_id = $1 LIMIT 1`,
+      [storeId]
+    );
     const lastAttempt = lastAutoImportAt.get(storeId) || 0;
-    if (Date.now() - lastAttempt > AUTO_IMPORT_COOLDOWN_MS) {
+
+    if (existing.rows.length === 0 && Date.now() - lastAttempt > AUTO_IMPORT_COOLDOWN_MS) {
       lastAutoImportAt.set(storeId, Date.now());
       try {
         console.log(`[Shopify import] Store ${storeId} has no orders — auto-importing from Shopify`);
         await importOrdersFromShopify(storeId);
-        result = await pool.query(
-          `SELECT * FROM orders WHERE store_id = $1 ORDER BY created_at DESC`,
-          [storeId]
-        );
+        result = await queryVisibleOrders(storeId, retentionDays);
       } catch (error) {
         console.error(`[Shopify import] Auto-import for store ${storeId} failed:`, error.message);
       }
@@ -101,14 +145,15 @@ async function getAllOrders(storeId) {
   }
 
   const rows = result.rows;
-  let repairBudget = 25;
+  let repairBudget = BACKFILL_PER_REQUEST;
   const repairedRows = await Promise.all(
     rows.map((order) => {
-      if (!isMissingCustomerOrCity(order) || repairBudget <= 0) {
+      if (!isMissingCustomerOrCity(order) || repairBudget <= 0 || !shouldAttemptBackfill(order)) {
         return order;
       }
 
       repairBudget -= 1;
+      recordBackfillAttempt(order);
       return backfillMissingCustomerFields(order, storeId).catch((error) => {
         console.error(`[Shopify backfill] Order ${order.shopify_order_id} failed:`, error.message);
         return order;
@@ -169,15 +214,23 @@ async function unassignDriverFromOrder(orderId, storeId) {
   return row;
 }
 
-async function updateOrderStatus(orderId, status, storeId) {
-  const query =
-    status === "DELIVERED"
-      ? `UPDATE orders SET order_status = $1, delivered_at = NOW(), financial_status = 'paid'
-         WHERE id = $2 AND store_id = $3 RETURNING *`
-      : `UPDATE orders SET order_status = $1
-         WHERE id = $2 AND store_id = $3 RETURNING *`;
+// The completion timestamps double as the clock for the dashboard's retention
+// window, so a status change into a finished state has to stamp one.
+function statusUpdateQuery(status) {
+  if (status === "DELIVERED") {
+    return `UPDATE orders SET order_status = $1, delivered_at = NOW(), financial_status = 'paid'
+            WHERE id = $2 AND store_id = $3 RETURNING *`;
+  }
+  if (status === "FULFILLED") {
+    return `UPDATE orders SET order_status = $1, fulfilled_at = NOW()
+            WHERE id = $2 AND store_id = $3 RETURNING *`;
+  }
+  return `UPDATE orders SET order_status = $1
+          WHERE id = $2 AND store_id = $3 RETURNING *`;
+}
 
-  const result = await pool.query(query, [status, orderId, storeId]);
+async function updateOrderStatus(orderId, status, storeId) {
+  const result = await pool.query(statusUpdateQuery(status), [status, orderId, storeId]);
   const row = result.rows[0];
   if (row) {
     syncOrderTagToShopify(storeId, row.shopify_order_id, status).catch(err =>

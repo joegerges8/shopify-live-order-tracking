@@ -349,6 +349,16 @@ function mapImportedOrderStatus(order) {
   return "PENDING";
 }
 
+// When Shopify already fulfilled an order, keep the date it happened so the
+// dashboard's retention window measures from the real event rather than from
+// the moment the order was imported.
+function getFulfilledAt(order) {
+  const fulfillments = Array.isArray(order.fulfillments) ? order.fulfillments : [];
+  const successful = fulfillments.find((f) => f.status !== "cancelled" && f.status !== "error");
+  if (successful?.created_at) return successful.created_at;
+  return order.fulfillment_status === "fulfilled" ? order.updated_at || order.created_at : null;
+}
+
 async function upsertImportedOrder(storeId, order) {
   const fields = extractOrderCustomerFields(order);
   await pool.query(
@@ -357,8 +367,8 @@ async function upsertImportedOrder(storeId, order) {
       customer_first_name, customer_last_name, customer_phone, customer_email,
       shipping_address, city, country,
       total_price, financial_status, fulfillment_status,
-      order_status, tracking_token, store_id, created_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,COALESCE($16::TIMESTAMPTZ, NOW()))
+      order_status, tracking_token, store_id, created_at, fulfilled_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,COALESCE($16::TIMESTAMPTZ, NOW()),$17::TIMESTAMPTZ)
     ON CONFLICT (shopify_order_id) DO UPDATE SET
       order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
       customer_first_name = COALESCE(EXCLUDED.customer_first_name, orders.customer_first_name),
@@ -372,6 +382,7 @@ async function upsertImportedOrder(storeId, order) {
       financial_status = COALESCE(EXCLUDED.financial_status, orders.financial_status),
       fulfillment_status = COALESCE(EXCLUDED.fulfillment_status, orders.fulfillment_status),
       tracking_token = COALESCE(orders.tracking_token, EXCLUDED.tracking_token),
+      fulfilled_at = COALESCE(orders.fulfilled_at, EXCLUDED.fulfilled_at),
       store_id = EXCLUDED.store_id`,
     [
       order.id,
@@ -390,6 +401,7 @@ async function upsertImportedOrder(storeId, order) {
       randomUUID(),
       storeId,
       order.created_at || null,
+      getFulfilledAt(order),
     ]
   );
 }
