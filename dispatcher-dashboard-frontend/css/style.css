@@ -323,3 +323,18 @@ button:hover {
 .sync-error {
   color: #b91c1c;
 }
+
+/* WHATSAPP PHONE BUTTON */
+
+.phone-btn {
+  display: inline-block;
+  background: #25d366;
+  color: #0b3d1f;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.phone-btn:hover {
+  background: #1da851;
+  color: #ffffff;
+}
