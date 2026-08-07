@@ -85,6 +85,8 @@ async function startServer() {
     await pool.query(`ALTER TABLE drivers ADD COLUMN IF NOT EXISTS email VARCHAR(150) UNIQUE;`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS store_id INT REFERENCES stores(id);`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;`);
+    // Drives the dashboard's retention window for completed orders.
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMP;`);
 
     // Seed the original single store from env so existing orders remain visible
     const seedShop = (process.env.SHOPIFY_STORE || "").trim();
@@ -127,6 +129,9 @@ async function startServer() {
 
       CREATE INDEX IF NOT EXISTS idx_orders_tracking_token
         ON orders (tracking_token);
+
+      CREATE INDEX IF NOT EXISTS idx_orders_store_created
+        ON orders (store_id, created_at DESC);
     `);
     console.log("Schema migrations applied");
 

@@ -266,6 +266,7 @@ async function handleOrderFulfilled(req, res) {
       `UPDATE orders
        SET order_status = 'FULFILLED',
            delivered_at = NOW(),
+           fulfilled_at = NOW(),
            financial_status = COALESCE($2, financial_status),
            fulfillment_status = COALESCE($3, fulfillment_status)
        WHERE shopify_order_id = $1

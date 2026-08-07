@@ -68,8 +68,12 @@ CREATE TABLE orders (
     customer_altitude NUMERIC(10,2),
     google_maps_link TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    delivered_at TIMESTAMP                    -- set automatically when status = 'DELIVERED'
+    delivered_at TIMESTAMP,                   -- set automatically when status = 'DELIVERED'
+    fulfilled_at TIMESTAMP                    -- set when status = 'FULFILLED'; completed orders
+                                              -- drop off the dashboard once this is older than
+                                              -- DASHBOARD_ORDER_RETENTION_DAYS (default 7)
 );
+-- Migration for existing databases: ALTER TABLE orders ADD COLUMN fulfilled_at TIMESTAMP;
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN delivered_at TIMESTAMP;
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN store_id INT REFERENCES stores(id) ON DELETE CASCADE;
 -- After backfilling existing rows, run: ALTER TABLE orders ALTER COLUMN store_id SET NOT NULL;
