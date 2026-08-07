@@ -220,8 +220,10 @@ async function unassignDriverFromOrder(orderId, storeId) {
 // The completion timestamps double as the clock for the dashboard's retention
 // window, so a status change into a finished state has to stamp one.
 function statusUpdateQuery(status) {
+  // financial_status is not set here: delivering records the payment in
+  // Shopify first, and the local column only follows once that succeeds.
   if (status === "DELIVERED") {
-    return `UPDATE orders SET order_status = $1, delivered_at = NOW(), financial_status = 'paid'
+    return `UPDATE orders SET order_status = $1, delivered_at = NOW()
             WHERE id = $2 AND store_id = $3 RETURNING *`;
   }
   if (status === "FULFILLED") {
@@ -239,7 +241,7 @@ function statusUpdateQuery(status) {
 
 async function updateOrderStatus(orderId, status, storeId) {
   const result = await pool.query(statusUpdateQuery(status), [status, orderId, storeId]);
-  const row = result.rows[0];
+  let row = result.rows[0];
   if (row) {
     syncOrderTagToShopify(storeId, row.shopify_order_id, status).catch(err =>
       console.error("[Shopify sync] status tag failed:", err.message)
@@ -248,6 +250,17 @@ async function updateOrderStatus(orderId, status, storeId) {
       markDeliveredInShopify(storeId, row.shopify_order_id).catch(err =>
         console.error("[Shopify sync] mark delivered failed:", err.message)
       );
+      // Delivering a cash-on-delivery order is the moment the money changes
+      // hands, so record the payment in Shopify. Awaited, so the dispatcher
+      // hears about it straight away if Shopify won't take it.
+      try {
+        const paidRow = await markOrderPaid(orderId, storeId);
+        if (paidRow) row = paidRow;
+      } catch (error) {
+        console.error("[Shopify sync] mark paid on delivery failed:", error.message);
+        row.shopify_warning =
+          `Marked delivered, but Shopify was not updated to paid: ${error.message}`;
+      }
     }
     if (status === "FULFILLED") {
       markFulfilledInShopify(storeId, row.shopify_order_id).catch(err =>
@@ -328,7 +341,7 @@ async function updateDriverOrderStatus(orderId, driverId, status) {
   const query =
     status === "DELIVERED"
       ? `UPDATE orders
-         SET order_status = $1, delivered_at = NOW(), financial_status = 'paid'
+         SET order_status = $1, delivered_at = NOW()
          WHERE id = $2 AND assigned_driver_id = $3
          RETURNING *`
       : `UPDATE orders
