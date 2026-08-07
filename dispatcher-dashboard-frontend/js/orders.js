@@ -415,7 +415,10 @@ function attachEventListeners() {
         if (updated && updated.shopify_warning) {
           alert(`Status updated to ${status}, but Shopify was not updated:\n\n${updated.shopify_warning}`);
         } else if (status === "CANCELLED") {
-          alert("Order cancelled in Shopify and the driver was unassigned.");
+          alert(
+            "Order cancelled in Shopify and the driver was unassigned.\n\n" +
+            "It has been removed from this dashboard. The order is still in Shopify."
+          );
         } else {
           alert("Status updated successfully.");
         }

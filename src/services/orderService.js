@@ -45,11 +45,14 @@ function recordBackfillAttempt(order) {
 }
 
 // Orders the dispatcher still needs to see: everything in flight, plus
-// completed orders finished within the retention window.
+// completed orders finished within the retention window. Cancelled orders are
+// dropped outright — there is no delivery left to run — while the rows stay in
+// the database and the orders stay in Shopify.
 function queryVisibleOrders(storeId, retentionDays) {
   return pool.query(
     `SELECT * FROM orders
      WHERE store_id = $1
+       AND order_status <> 'CANCELLED'
        AND (
          order_status NOT IN ('FULFILLED', 'DELIVERED')
          OR COALESCE(fulfilled_at, delivered_at, created_at) >= NOW() - make_interval(days => $2::int)
