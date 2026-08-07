@@ -1,4 +1,5 @@
 const pool = require("../config/db");
+const { randomUUID } = require("crypto");
 const {
   syncOrderTagToShopify,
   markDeliveredInShopify,
@@ -239,15 +240,32 @@ function statusUpdateQuery(status) {
           WHERE id = $2 AND store_id = $3 RETURNING *`;
 }
 
+// The tracking token is what the customer's live tracking link is built from.
+// Orders created before tokens were issued would otherwise reach Shopify with
+// no link at all, so one is minted on demand.
+async function ensureTrackingToken(row) {
+  if (!row || row.tracking_token) return row;
+
+  const result = await pool.query(
+    `UPDATE orders SET tracking_token = $1 WHERE id = $2 AND tracking_token IS NULL
+     RETURNING *`,
+    [randomUUID(), row.id]
+  );
+  return result.rows[0] || row;
+}
+
 async function updateOrderStatus(orderId, status, storeId) {
   const result = await pool.query(statusUpdateQuery(status), [status, orderId, storeId]);
   let row = result.rows[0];
+  if (row && (status === "FULFILLED" || status === "DELIVERED")) {
+    row = await ensureTrackingToken(row);
+  }
   if (row) {
     syncOrderTagToShopify(storeId, row.shopify_order_id, status).catch(err =>
       console.error("[Shopify sync] status tag failed:", err.message)
     );
     if (status === "DELIVERED") {
-      markDeliveredInShopify(storeId, row.shopify_order_id).catch(err =>
+      markDeliveredInShopify(storeId, row.shopify_order_id, row).catch(err =>
         console.error("[Shopify sync] mark delivered failed:", err.message)
       );
       // Delivering a cash-on-delivery order is the moment the money changes
@@ -263,7 +281,7 @@ async function updateOrderStatus(orderId, status, storeId) {
       }
     }
     if (status === "FULFILLED") {
-      markFulfilledInShopify(storeId, row.shopify_order_id).catch(err =>
+      markFulfilledInShopify(storeId, row.shopify_order_id, row).catch(err =>
         console.error("[Shopify sync] mark fulfilled failed:", err.message)
       );
     }
@@ -350,7 +368,8 @@ async function updateDriverOrderStatus(orderId, driverId, status) {
          RETURNING *`;
 
   const result = await pool.query(query, [status, orderId, driverId]);
-  return result.rows[0];
+  const row = result.rows[0];
+  return status === "DELIVERED" ? ensureTrackingToken(row) : row;
 }
 
 async function getOrdersByDriverId(driverId) {

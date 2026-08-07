@@ -4,6 +4,19 @@ const { getStoreAccess } = require("./shopifyTokens");
 
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-04";
 
+// Where the customer-facing live tracking page is served from. Same origin as
+// the rest of the app, so the OAuth APP_URL is reused.
+const APP_URL = (process.env.APP_URL || "https://shopify-live-order-tracking-production.up.railway.app")
+  .replace(/\/$/, "");
+
+// Shown in Shopify as "<company> tracking: <number>", the same slot Wakilni
+// and other carriers occupy on the order page.
+const TRACKING_COMPANY = process.env.TRACKING_COMPANY_NAME || "DispatchHQ";
+
+// Attaching tracking makes Shopify send its shipping confirmation email with
+// the link in it. Set SHOPIFY_NOTIFY_CUSTOMER=false to stay silent.
+const NOTIFY_CUSTOMER = process.env.SHOPIFY_NOTIFY_CUSTOMER !== "false";
+
 const STATUS_TAG_MAP = {
   PENDING:   "delivery-pending",
   ASSIGNED:  "delivery-assigned",
@@ -193,10 +206,49 @@ async function syncOrderTagToShopify(storeId, shopifyOrderId, status) {
   console.log(`[Shopify sync] Order ${shopifyOrderId} tagged "${deliveryTag}"`);
 }
 
+// Builds the live tracking link Shopify will show on the order and put in the
+// shipping confirmation email. Apps like Interakt read this field, which is how
+// the link reaches the customer on WhatsApp.
+function buildTrackingInfo(order) {
+  const token = order?.tracking_token;
+  if (!token) return null;
+
+  return {
+    company: TRACKING_COMPANY,
+    number: String(order.order_number || token).replace(/^#/, ""),
+    url: `${APP_URL}/track/track.html?token=${encodeURIComponent(token)}`,
+  };
+}
+
+// Adds the tracking link to a fulfillment that has none. A fulfillment that
+// already carries tracking belongs to another carrier — Wakilni, say — so it
+// is left alone rather than having its details overwritten.
+async function addTrackingToFulfillment(base, headers, fulfillment, trackingInfo) {
+  if (!trackingInfo) return;
+  if (fulfillment.tracking_number || fulfillment.tracking_url) return;
+
+  const response = await fetch(`${base}/fulfillments/${fulfillment.id}/update_tracking.json`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      fulfillment: { notify_customer: NOTIFY_CUSTOMER, tracking_info: trackingInfo },
+    }),
+  });
+
+  if (!response.ok) {
+    const body = (await response.text()).slice(0, 300);
+    console.error(`[Shopify sync] Update tracking failed: ${response.status} ${body}`);
+    return;
+  }
+  console.log(`[Shopify sync] Tracking link added to fulfillment ${fulfillment.id}`);
+}
+
 // Finds an existing fulfillment on the order, or creates one covering all
 // open fulfillment orders. Creating a fulfillment is what flips Shopify's
 // Fulfillment status from "Unfulfilled" to "Fulfilled".
-async function ensureFulfillment(base, headers, shopifyOrderId) {
+async function ensureFulfillment(base, headers, shopifyOrderId, order) {
+  const trackingInfo = buildTrackingInfo(order);
+
   const existingRes = await fetch(`${base}/orders/${shopifyOrderId}/fulfillments.json`, { headers });
   if (existingRes.ok) {
     const { fulfillments } = await existingRes.json();
@@ -204,6 +256,8 @@ async function ensureFulfillment(base, headers, shopifyOrderId) {
       f.status !== "cancelled" && f.status !== "error" && f.status !== "failure"
     );
     if (active.length > 0) {
+      // Backfills orders fulfilled before tracking links existed.
+      await addTrackingToFulfillment(base, headers, active[0], trackingInfo);
       return active[0].id;
     }
   }
@@ -231,7 +285,10 @@ async function ensureFulfillment(base, headers, shopifyOrderId) {
     body: JSON.stringify({
       fulfillment: {
         line_items_by_fulfillment_order: open.map(fo => ({ fulfillment_order_id: fo.id })),
-        notify_customer: false,
+        // Sending the notification is what puts the tracking link in the
+        // customer's shipping confirmation email.
+        notify_customer: NOTIFY_CUSTOMER,
+        ...(trackingInfo ? { tracking_info: trackingInfo } : {}),
       },
     }),
   });
@@ -265,14 +322,14 @@ async function getShopifyWriteContext(storeId) {
 // Marks a Shopify order as "Delivered" — the same as clicking Mark as → Delivered
 // in the Shopify admin. Ensures a fulfillment exists, then posts a "delivered"
 // shipment event on it.
-async function markDeliveredInShopify(storeId, shopifyOrderId) {
+async function markDeliveredInShopify(storeId, shopifyOrderId, order) {
   if (!shopifyOrderId) return;
 
   const ctx = await getShopifyWriteContext(storeId);
   if (!ctx) return;
   const { base, headers } = ctx;
 
-  const fulfillmentId = await ensureFulfillment(base, headers, shopifyOrderId);
+  const fulfillmentId = await ensureFulfillment(base, headers, shopifyOrderId, order);
   if (!fulfillmentId) return;
 
   const eventRes = await fetch(
@@ -293,14 +350,14 @@ async function markDeliveredInShopify(storeId, shopifyOrderId) {
 
 // Marks a Shopify order as "Fulfilled" — creates a fulfillment covering all
 // open fulfillment orders, same as clicking Mark as → Fulfilled in the admin.
-async function markFulfilledInShopify(storeId, shopifyOrderId) {
+async function markFulfilledInShopify(storeId, shopifyOrderId, order) {
   if (!shopifyOrderId) return;
 
   const ctx = await getShopifyWriteContext(storeId);
   if (!ctx) return;
   const { base, headers } = ctx;
 
-  const fulfillmentId = await ensureFulfillment(base, headers, shopifyOrderId);
+  const fulfillmentId = await ensureFulfillment(base, headers, shopifyOrderId, order);
   if (!fulfillmentId) return;
   console.log(`[Shopify sync] Order ${shopifyOrderId} marked as Fulfilled in Shopify`);
 }
