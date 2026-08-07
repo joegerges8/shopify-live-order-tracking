@@ -1,4 +1,4 @@
-import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, setCustomerLocation } from "./api.js";
+import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, setCustomerLocation, importOrders } from "./api.js";
 
 const tableBody = document.querySelector("#ordersTable tbody");
 
@@ -373,6 +373,31 @@ function attachEventListeners() {
 searchOrderEl.addEventListener("input", applyFilters);
 statusFilterEl.addEventListener("change", applyFilters);
 cityFilterEl.addEventListener("change", applyFilters);
+
+const syncOrdersBtn = document.getElementById("syncOrdersBtn");
+const syncStatusEl = document.getElementById("syncStatus");
+
+if (syncOrdersBtn) {
+  syncOrdersBtn.addEventListener("click", async () => {
+    syncOrdersBtn.disabled = true;
+    syncStatusEl.className = "sync-status";
+    syncStatusEl.textContent = "Syncing orders from Shopify…";
+
+    try {
+      const result = await importOrders();
+      await loadOrders();
+      syncStatusEl.className = "sync-status sync-ok";
+      syncStatusEl.textContent =
+        `Synced ${result.imported} of ${result.fetched} orders from Shopify.` +
+        (result.failed ? ` ${result.failed} could not be saved.` : "");
+    } catch (error) {
+      syncStatusEl.className = "sync-status sync-error";
+      syncStatusEl.textContent = `Sync failed: ${error.message}`;
+    } finally {
+      syncOrdersBtn.disabled = false;
+    }
+  });
+}
 
 loadOrders();
 

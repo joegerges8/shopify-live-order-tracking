@@ -401,27 +401,46 @@ async function upsertImportedOrder(storeId, order) {
 // by the current store and keep their dispatcher status and tracking token.
 async function importOrdersFromShopify(storeId, { maxPages = 8 } = {}) {
   const store = await getStoreCredentials(storeId);
-  if (!store || !store.access_token) return { imported: 0 };
+  if (!store) {
+    throw new Error(`No store record found for store id ${storeId}`);
+  }
+  if (!store.access_token) {
+    throw new Error(
+      `Store ${store.shop_domain} has no Shopify access token saved — re-install the app from ` +
+      `/auth?shop=${store.shop_domain} to reconnect it.`
+    );
+  }
 
   const headers = { "X-Shopify-Access-Token": store.access_token };
   let url = `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?status=any&limit=250`;
   let imported = 0;
+  let seen = 0;
+  const failures = [];
 
   for (let page = 0; page < maxPages && url; page++) {
     const response = await fetch(url, { headers });
     if (!response.ok) {
-      const body = await response.text();
-      console.error(`[Shopify import] GET orders failed: ${response.status} ${body}`);
+      const body = (await response.text()).slice(0, 400);
+      const message =
+        `Shopify GET /orders.json returned ${response.status} for ${store.shop_domain} ` +
+        `(saved scope: ${store.scope || "none"}). Response: ${body}`;
+      console.error(`[Shopify import] ${message}`);
+      // A failure on the very first page means nothing could be imported at
+      // all — surface it instead of silently reporting zero.
+      if (page === 0) throw new Error(message);
       break;
     }
+
     const { orders } = await response.json();
     if (!orders || orders.length === 0) break;
+    seen += orders.length;
 
     for (const order of orders) {
       try {
         await upsertImportedOrder(storeId, order);
         imported++;
       } catch (err) {
+        failures.push(`${order.name || order.id}: ${err.message}`);
         console.error(`[Shopify import] Order ${order.id} failed:`, err.message);
       }
     }
@@ -431,8 +450,17 @@ async function importOrdersFromShopify(storeId, { maxPages = 8 } = {}) {
     url = nextMatch ? nextMatch[1] : null;
   }
 
-  console.log(`[Shopify import] Store ${storeId}: imported/updated ${imported} orders`);
-  return { imported };
+  if (imported === 0 && failures.length > 0) {
+    throw new Error(
+      `All ${failures.length} orders failed to save. First error — ${failures[0]}`
+    );
+  }
+
+  console.log(
+    `[Shopify import] Store ${storeId} (${store.shop_domain}): ` +
+    `fetched ${seen}, saved ${imported}, failed ${failures.length}`
+  );
+  return { imported, fetched: seen, failed: failures.length, failures: failures.slice(0, 5) };
 }
 
 module.exports = {

@@ -134,13 +134,16 @@ async function setCustomerLocation(req, res) {
   }
 }
 
+// Pulls the store's Shopify order history into the dashboard on demand. The
+// real failure reason is returned to the caller so the dispatcher can see why
+// a sync came back empty instead of having to read server logs.
 async function importOrders(req, res) {
   try {
     const result = await importOrdersFromShopify(req.storeId);
     return res.json(result);
   } catch (error) {
     console.error("Error importing orders from Shopify:", error);
-    return res.status(500).json({ error: "Failed to import orders from Shopify" });
+    return res.status(502).json({ error: error.message || "Failed to import orders from Shopify" });
   }
 }
 

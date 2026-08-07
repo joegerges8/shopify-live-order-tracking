@@ -5,7 +5,13 @@ const {
   markFulfilledInShopify,
   markUnfulfilledInShopify,
   fetchOrderCustomerFieldsFromShopify,
+  importOrdersFromShopify,
 } = require("./shopifyService");
+
+// Guards the empty-dashboard auto-import so a store whose import keeps failing
+// doesn't hit Shopify on every page load.
+const lastAutoImportAt = new Map();
+const AUTO_IMPORT_COOLDOWN_MS = 5 * 60 * 1000;
 
 function isMissingCustomerOrCity(order) {
   const hasCustomerName = Boolean(
@@ -67,12 +73,33 @@ async function backfillMissingCustomerFields(order, storeId) {
   return updatedOrder;
 }
 
-// Returns every order for a specific store, newest first.
+// Returns every order for a specific store, newest first. If the store has no
+// orders at all — which happens after a re-install, since webhooks only cover
+// orders placed from that point on — the Shopify history is pulled in first so
+// the dashboard repopulates itself without any manual step.
 async function getAllOrders(storeId) {
-  const result = await pool.query(
+  let result = await pool.query(
     `SELECT * FROM orders WHERE store_id = $1 ORDER BY created_at DESC`,
     [storeId]
   );
+
+  if (result.rows.length === 0) {
+    const lastAttempt = lastAutoImportAt.get(storeId) || 0;
+    if (Date.now() - lastAttempt > AUTO_IMPORT_COOLDOWN_MS) {
+      lastAutoImportAt.set(storeId, Date.now());
+      try {
+        console.log(`[Shopify import] Store ${storeId} has no orders — auto-importing from Shopify`);
+        await importOrdersFromShopify(storeId);
+        result = await pool.query(
+          `SELECT * FROM orders WHERE store_id = $1 ORDER BY created_at DESC`,
+          [storeId]
+        );
+      } catch (error) {
+        console.error(`[Shopify import] Auto-import for store ${storeId} failed:`, error.message);
+      }
+    }
+  }
+
   const rows = result.rows;
   let repairBudget = 25;
   const repairedRows = await Promise.all(
