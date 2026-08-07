@@ -132,7 +132,7 @@ async function patchMyOrderStatus(req, res) {
       console.error("[Shopify sync] driver status tag failed:", err.message)
     );
     if (status === "DELIVERED") {
-      markDeliveredInShopify(updated.store_id, updated.shopify_order_id).catch(err =>
+      markDeliveredInShopify(updated.store_id, updated.shopify_order_id, updated).catch(err =>
         console.error("[Shopify sync] driver mark delivered failed:", err.message)
       );
       // The driver marking a delivery done is when cash on delivery is
