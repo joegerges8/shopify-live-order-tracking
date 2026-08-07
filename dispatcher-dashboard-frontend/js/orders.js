@@ -26,6 +26,51 @@ function getOrderCity(order) {
 }
 
 /* ===========================
+   CUSTOMER PHONE / WHATSAPP
+=========================== */
+
+// Country code assumed for numbers stored in local form (03 719 871).
+const DEFAULT_COUNTRY_CODE = "961"; // Lebanon
+
+// wa.me wants digits only, including the country code and without a leading +.
+function toWhatsAppNumber(rawPhone) {
+  if (!rawPhone) return null;
+
+  const trimmed = String(rawPhone).trim();
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return null;
+
+  // Already international: +961…
+  if (trimmed.startsWith("+")) return digits;
+  // Dialling prefix instead of a plus: 00961…
+  if (digits.startsWith("00")) return digits.slice(2);
+  // Local form, the leading 0 is dropped when the country code goes on.
+  if (digits.startsWith("0")) return DEFAULT_COUNTRY_CODE + digits.slice(1);
+  // Bare number that already carries the country code.
+  if (digits.startsWith(DEFAULT_COUNTRY_CODE)) return digits;
+
+  return DEFAULT_COUNTRY_CODE + digits;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function createPhoneCell(order) {
+  const phone = order.customer_phone;
+  const waNumber = toWhatsAppNumber(phone);
+  if (!waNumber) return "—";
+
+  return `<a class="small-btn phone-btn" href="https://wa.me/${waNumber}"
+             target="_blank" rel="noopener noreferrer"
+             title="Message ${escapeHtml(phone)} on WhatsApp">💬 ${escapeHtml(phone)}</a>`;
+}
+
+/* ===========================
    DRIVER LOGIC
 =========================== */
 
@@ -181,7 +226,7 @@ function renderOrders(orders, drivers) {
   if (!orders || orders.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="9">No orders found.</td>
+        <td colspan="10">No orders found.</td>
       </tr>
     `;
     return;
@@ -213,6 +258,7 @@ function renderOrders(orders, drivers) {
     row.innerHTML = `
       <td>${order.order_number ?? ""}</td>
       <td>${customerName}</td>
+      <td>${createPhoneCell(order)}</td>
       <td>${city}</td>
       <td>${order.total_price ?? ""}</td>
       <td>${order.financial_status ?? ""}</td>
@@ -259,7 +305,7 @@ async function loadOrders() {
     console.error("Error loading orders:", error);
     tableBody.innerHTML = `
       <tr>
-        <td colspan="9">Failed to load orders.</td>
+        <td colspan="10">Failed to load orders.</td>
       </tr>
     `;
   }
