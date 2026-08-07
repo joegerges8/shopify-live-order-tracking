@@ -7,6 +7,7 @@ const {
   updateCustomerLocation,
 } = require("../services/orderService");
 const { parseMapLink } = require("../utils/parseMapLink");
+const { importOrdersFromShopify } = require("../services/shopifyService");
 const pool = require("../config/db");
 
 async function getOrders(req, res) {
@@ -133,4 +134,14 @@ async function setCustomerLocation(req, res) {
   }
 }
 
-module.exports = { getOrders, assignDriver, unassignDriver, changeOrderStatus, setCustomerLocation };
+async function importOrders(req, res) {
+  try {
+    const result = await importOrdersFromShopify(req.storeId);
+    return res.json(result);
+  } catch (error) {
+    console.error("Error importing orders from Shopify:", error);
+    return res.status(500).json({ error: "Failed to import orders from Shopify" });
+  }
+}
+
+module.exports = { getOrders, assignDriver, unassignDriver, changeOrderStatus, setCustomerLocation, importOrders };

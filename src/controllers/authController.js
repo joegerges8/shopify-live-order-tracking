@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const pool = require("../config/db");
+const { importOrdersFromShopify } = require("../services/shopifyService");
 
 const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
@@ -100,6 +101,12 @@ async function oauthCallback(req, res) {
   // Register webhooks asynchronously (don't block the redirect)
   registerWebhooks(shop, access_token).catch(err =>
     console.error("[OAuth] Webhook registration error:", err.message)
+  );
+
+  // Pull existing Shopify orders into the dashboard so it isn't empty after
+  // a (re)install — webhooks only cover orders created from now on.
+  importOrdersFromShopify(store.id).catch(err =>
+    console.error("[OAuth] Order import error:", err.message)
   );
 
   if (store.admin_password_hash) {
