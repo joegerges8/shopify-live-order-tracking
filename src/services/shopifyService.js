@@ -305,6 +305,51 @@ async function markFulfilledInShopify(storeId, shopifyOrderId) {
   console.log(`[Shopify sync] Order ${shopifyOrderId} marked as Fulfilled in Shopify`);
 }
 
+// Cancels the order in Shopify — the same as clicking Cancel order in the
+// admin. No refund is issued: cancelling stops the order, and refunding money
+// is a separate decision the merchant makes in Shopify.
+//
+// Shopify refuses to cancel an order that is both paid and fulfilled, so the
+// caller gets a descriptive error rather than a silent no-op.
+async function cancelOrderInShopify(storeId, shopifyOrderId) {
+  if (!shopifyOrderId) return;
+
+  const store = await getStoreCredentials(storeId);
+  if (!store || !store.access_token) {
+    throw new Error(`Store ${storeId} has no Shopify access token — re-install the app.`);
+  }
+  if (!hasScope(store.scope, "write_orders")) {
+    console.warn(`[Shopify sync] Store ${storeId} saved scope is missing write_orders — trying anyway`);
+  }
+
+  const base = `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}`;
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Shopify-Access-Token": store.access_token,
+  };
+
+  const response = await fetch(`${base}/orders/${shopifyOrderId}/cancel.json`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ reason: "other", email: false }),
+  });
+
+  if (!response.ok) {
+    const body = (await response.text()).slice(0, 300);
+    // 422 is Shopify's "this order can't be cancelled" — paid and fulfilled
+    // orders have to be refunded or restocked by hand in the admin.
+    if (response.status === 422) {
+      throw new Error(
+        `Shopify would not cancel this order (it may already be paid and fulfilled, ` +
+        `or already cancelled). Cancel it from the Shopify admin instead. Details: ${body}`
+      );
+    }
+    throw new Error(`Shopify cancel returned ${response.status}: ${body}`);
+  }
+
+  console.log(`[Shopify sync] Order ${shopifyOrderId} cancelled in Shopify`);
+}
+
 // Reverts a Shopify order back to "Unfulfilled" by cancelling any open
 // fulfillments on it.
 async function markUnfulfilledInShopify(storeId, shopifyOrderId) {
@@ -482,6 +527,7 @@ module.exports = {
   markDeliveredInShopify,
   markFulfilledInShopify,
   markUnfulfilledInShopify,
+  cancelOrderInShopify,
   fetchOrderCustomerFieldsFromShopify,
   importOrdersFromShopify,
 };

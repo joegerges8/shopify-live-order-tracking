@@ -4,6 +4,7 @@ const {
   markDeliveredInShopify,
   markFulfilledInShopify,
   markUnfulfilledInShopify,
+  cancelOrderInShopify,
   fetchOrderCustomerFieldsFromShopify,
   importOrdersFromShopify,
 } = require("./shopifyService");
@@ -225,6 +226,11 @@ function statusUpdateQuery(status) {
     return `UPDATE orders SET order_status = $1, fulfilled_at = NOW()
             WHERE id = $2 AND store_id = $3 RETURNING *`;
   }
+  // Cancelling releases the driver — there is nothing left for them to deliver.
+  if (status === "CANCELLED") {
+    return `UPDATE orders SET order_status = $1, assigned_driver_id = NULL
+            WHERE id = $2 AND store_id = $3 RETURNING *`;
+  }
   return `UPDATE orders SET order_status = $1
           WHERE id = $2 AND store_id = $3 RETURNING *`;
 }
@@ -250,6 +256,17 @@ async function updateOrderStatus(orderId, status, storeId) {
       markUnfulfilledInShopify(storeId, row.shopify_order_id).catch(err =>
         console.error("[Shopify sync] mark unfulfilled failed:", err.message)
       );
+    }
+    if (status === "CANCELLED") {
+      // Awaited, unlike the other syncs: Shopify refuses to cancel some orders
+      // and the dispatcher needs to know straight away that the store still
+      // shows it as live.
+      try {
+        await cancelOrderInShopify(storeId, row.shopify_order_id);
+      } catch (error) {
+        console.error("[Shopify sync] cancel order failed:", error.message);
+        row.shopify_warning = error.message;
+      }
     }
   }
   return row;

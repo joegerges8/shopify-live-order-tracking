@@ -355,12 +355,18 @@ function attachEventListeners() {
       }
 
       try {
-        await updateOrderStatus(orderId, status);
-        alert("Status updated successfully.");
+        const updated = await updateOrderStatus(orderId, status);
+        if (updated && updated.shopify_warning) {
+          alert(`Status updated to ${status}, but Shopify was not updated:\n\n${updated.shopify_warning}`);
+        } else if (status === "CANCELLED") {
+          alert("Order cancelled in Shopify and the driver was unassigned.");
+        } else {
+          alert("Status updated successfully.");
+        }
         await loadOrders();
       } catch (error) {
         console.error("Error updating status:", error);
-        alert("Failed to update status.");
+        alert(`Failed to update status: ${error.message}`);
       }
     });
   });
