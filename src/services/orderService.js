@@ -6,6 +6,7 @@ const {
   markUnfulfilledInShopify,
   cancelOrderInShopify,
   deleteOrderInShopify,
+  markOrderPaidInShopify,
   fetchOrderCustomerFieldsFromShopify,
   importOrdersFromShopify,
 } = require("./shopifyService");
@@ -273,6 +274,27 @@ async function updateOrderStatus(orderId, status, storeId) {
   return row;
 }
 
+// Records the payment in Shopify, then mirrors it locally. Payment is a
+// separate axis from the delivery lifecycle, so order_status is deliberately
+// untouched — an order out with a driver stays that way once it is paid.
+//
+// Shopify is written first: if it refuses, the dashboard keeps showing the
+// order as unpaid rather than claiming money was recorded when it wasn't.
+async function markOrderPaid(orderId, storeId) {
+  const order = await getOrderById(orderId, storeId);
+  if (!order) return null;
+
+  await markOrderPaidInShopify(storeId, order.shopify_order_id);
+
+  const result = await pool.query(
+    `UPDATE orders SET financial_status = 'paid'
+     WHERE id = $1 AND store_id = $2
+     RETURNING *`,
+    [orderId, storeId]
+  );
+  return result.rows[0];
+}
+
 // Removes the order from Shopify and then from the dashboard. Shopify refuses
 // to delete an order that is still open, so it is cancelled first — that call
 // is best effort, because an order already cancelled reports an error the
@@ -397,6 +419,7 @@ module.exports = {
   assignDriverToOrder,
   unassignDriverFromOrder,
   updateOrderStatus,
+  markOrderPaid,
   deleteOrderEverywhere,
   updateDriverOrderStatus,
   getOrdersByDriverId,

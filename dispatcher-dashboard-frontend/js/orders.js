@@ -1,4 +1,4 @@
-import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, setCustomerLocation, importOrders, deleteOrder } from "./api.js";
+import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, setCustomerLocation, importOrders, deleteOrder, markOrderPaid } from "./api.js";
 
 const tableBody = document.querySelector("#ordersTable tbody");
 
@@ -81,6 +81,7 @@ const STATUS_DISPLAY = {
   DELIVERED:        "DELIVERED",
   FULFILLED:        "FULFILLED",
   CANCELLED:        "CANCELLED",
+  PAID:             "MARK AS PAID",
   DELETED:          "DELETE ORDER",
 };
 
@@ -92,7 +93,9 @@ function createStatusOptions(currentStatus) {
     "DELIVERED",
     "FULFILLED",
     "CANCELLED",
-    // Not a status an order can hold — picking it removes the order outright.
+    // Neither of these is a delivery status. PAID records payment and leaves
+    // the delivery status alone; DELETED removes the order outright.
+    "PAID",
     "DELETED",
   ];
 
@@ -354,6 +357,29 @@ function attachEventListeners() {
 
       if (!status) {
         alert("Please select a status.");
+        return;
+      }
+
+      if (status === "PAID") {
+        const orderLabel = button.getAttribute("data-order-number") || `#${orderId}`;
+        const confirmed = confirm(
+          `Mark order ${orderLabel} as paid?\n\n` +
+          `This records a payment in Shopify. Undoing it means issuing a refund. ` +
+          `The delivery status stays as it is.`
+        );
+        if (!confirmed) return;
+
+        button.disabled = true;
+        try {
+          await markOrderPaid(orderId);
+          alert(`Order ${orderLabel} is now marked as paid in Shopify and the dashboard.`);
+          await loadOrders();
+        } catch (error) {
+          console.error("Error marking order as paid:", error);
+          alert(`Could not mark the order as paid:\n\n${error.message}`);
+        } finally {
+          button.disabled = false;
+        }
         return;
       }
 

@@ -350,6 +350,77 @@ async function cancelOrderInShopify(storeId, shopifyOrderId) {
   console.log(`[Shopify sync] Order ${shopifyOrderId} cancelled in Shopify`);
 }
 
+const MARK_AS_PAID_MUTATION = `
+  mutation orderMarkAsPaid($input: OrderMarkAsPaidInput!) {
+    orderMarkAsPaid(input: $input) {
+      order { id name displayFinancialStatus }
+      userErrors { field message }
+    }
+  }`;
+
+// Records payment against the order, the same as Mark as paid in the Shopify
+// admin. This is the flow for money collected outside checkout — cash on
+// delivery — where Shopify holds the order as Payment pending until told.
+//
+// Only the payment side is touched: fulfillment and the delivery status are
+// left exactly as they are.
+async function markOrderPaidInShopify(storeId, shopifyOrderId) {
+  if (!shopifyOrderId) return null;
+
+  const store = await getStoreCredentials(storeId);
+  if (!store || !store.access_token) {
+    throw new Error(`Store ${storeId} has no Shopify access token — re-install the app.`);
+  }
+  if (!hasScope(store.scope, "write_orders")) {
+    console.warn(`[Shopify sync] Store ${storeId} saved scope is missing write_orders — trying anyway`);
+  }
+
+  const response = await fetch(
+    `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": store.access_token,
+      },
+      body: JSON.stringify({
+        query: MARK_AS_PAID_MUTATION,
+        variables: { input: { id: `gid://shopify/Order/${shopifyOrderId}` } },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const body = (await response.text()).slice(0, 300);
+    throw new Error(`Shopify mark-as-paid returned ${response.status}: ${body}`);
+  }
+
+  const payload = await response.json();
+  if (payload.errors?.length) {
+    throw new Error(`Shopify rejected the mark-as-paid request: ${payload.errors[0].message}`);
+  }
+
+  const result = payload.data?.orderMarkAsPaid;
+  const financialStatus = result?.order?.displayFinancialStatus || null;
+
+  if (result?.userErrors?.length) {
+    // Shopify refuses when there is nothing outstanding, which includes an
+    // order that is already paid — that is the state we wanted, so treat it as
+    // done rather than an error.
+    if (financialStatus === "PAID") {
+      console.log(`[Shopify sync] Order ${shopifyOrderId} was already paid in Shopify`);
+      return financialStatus;
+    }
+    throw new Error(
+      `Shopify would not mark this order as paid: ${result.userErrors[0].message} ` +
+      `(the order may have no outstanding balance, or the payment is handled by a gateway).`
+    );
+  }
+
+  console.log(`[Shopify sync] Order ${shopifyOrderId} marked as paid in Shopify (${financialStatus})`);
+  return financialStatus;
+}
+
 // Permanently deletes the order from Shopify. This is irreversible, and
 // Shopify only permits it for certain orders — anything that went through an
 // online payment gateway can be cancelled but never deleted.
@@ -570,6 +641,7 @@ module.exports = {
   markUnfulfilledInShopify,
   cancelOrderInShopify,
   deleteOrderInShopify,
+  markOrderPaidInShopify,
   fetchOrderCustomerFieldsFromShopify,
   importOrdersFromShopify,
 };

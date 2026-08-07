@@ -4,6 +4,7 @@ const {
   assignDriverToOrder,
   unassignDriverFromOrder,
   updateOrderStatus,
+  markOrderPaid,
   deleteOrderEverywhere,
   updateCustomerLocation,
 } = require("../services/orderService");
@@ -135,6 +136,21 @@ async function setCustomerLocation(req, res) {
   }
 }
 
+// Records payment for an order in Shopify and mirrors it locally. The delivery
+// status is untouched — this only moves the order off "Payment pending".
+async function payOrder(req, res) {
+  try {
+    const updated = await markOrderPaid(req.params.id, req.storeId);
+    if (!updated) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+    return res.json(updated);
+  } catch (error) {
+    console.error("Error marking order as paid:", error);
+    return res.status(502).json({ error: error.message || "Failed to mark the order as paid" });
+  }
+}
+
 // Permanently removes an order from Shopify and the dashboard. Shopify only
 // allows this for some orders, so a refusal is reported verbatim and nothing
 // is deleted locally.
@@ -173,5 +189,6 @@ module.exports = {
   changeOrderStatus,
   setCustomerLocation,
   importOrders,
+  payOrder,
   removeOrder,
 };
