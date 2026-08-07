@@ -1,4 +1,5 @@
 const pool = require("../config/db");
+const { randomUUID } = require("crypto");
 
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-04";
 
@@ -341,10 +342,104 @@ async function markUnfulfilledInShopify(storeId, shopifyOrderId) {
   console.log(`[Shopify sync] Order ${shopifyOrderId} reverted to Unfulfilled in Shopify`);
 }
 
+// Maps a Shopify order's state to the dashboard's delivery lifecycle for
+// newly imported rows. Existing rows keep whatever status the dispatcher set.
+function mapImportedOrderStatus(order) {
+  if (order.cancelled_at) return "CANCELLED";
+  if (order.fulfillment_status === "fulfilled") return "FULFILLED";
+  return "PENDING";
+}
+
+async function upsertImportedOrder(storeId, order) {
+  const fields = extractOrderCustomerFields(order);
+  await pool.query(
+    `INSERT INTO orders (
+      shopify_order_id, order_number,
+      customer_first_name, customer_last_name, customer_phone, customer_email,
+      shipping_address, city, country,
+      total_price, financial_status, fulfillment_status,
+      order_status, tracking_token, store_id, created_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,COALESCE($16::TIMESTAMPTZ, NOW()))
+    ON CONFLICT (shopify_order_id) DO UPDATE SET
+      order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
+      customer_first_name = COALESCE(EXCLUDED.customer_first_name, orders.customer_first_name),
+      customer_last_name = COALESCE(EXCLUDED.customer_last_name, orders.customer_last_name),
+      customer_phone = COALESCE(EXCLUDED.customer_phone, orders.customer_phone),
+      customer_email = COALESCE(EXCLUDED.customer_email, orders.customer_email),
+      shipping_address = COALESCE(EXCLUDED.shipping_address, orders.shipping_address),
+      city = COALESCE(EXCLUDED.city, orders.city),
+      country = COALESCE(EXCLUDED.country, orders.country),
+      total_price = COALESCE(EXCLUDED.total_price, orders.total_price),
+      financial_status = COALESCE(EXCLUDED.financial_status, orders.financial_status),
+      fulfillment_status = COALESCE(EXCLUDED.fulfillment_status, orders.fulfillment_status),
+      tracking_token = COALESCE(orders.tracking_token, EXCLUDED.tracking_token),
+      store_id = EXCLUDED.store_id`,
+    [
+      order.id,
+      order.name || String(order.order_number || ""),
+      fields.customer_first_name,
+      fields.customer_last_name,
+      fields.customer_phone,
+      fields.customer_email,
+      fields.shipping_address,
+      fields.city,
+      fields.country,
+      fields.total_price ?? 0,
+      fields.financial_status,
+      fields.fulfillment_status,
+      mapImportedOrderStatus(order),
+      randomUUID(),
+      storeId,
+      order.created_at || null,
+    ]
+  );
+}
+
+// Pulls existing orders from Shopify into the local orders table. Runs after
+// every (re)install so the dashboard is never empty even if the local rows
+// were lost or belong to a previous store record. Existing rows are adopted
+// by the current store and keep their dispatcher status and tracking token.
+async function importOrdersFromShopify(storeId, { maxPages = 8 } = {}) {
+  const store = await getStoreCredentials(storeId);
+  if (!store || !store.access_token) return { imported: 0 };
+
+  const headers = { "X-Shopify-Access-Token": store.access_token };
+  let url = `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?status=any&limit=250`;
+  let imported = 0;
+
+  for (let page = 0; page < maxPages && url; page++) {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      const body = await response.text();
+      console.error(`[Shopify import] GET orders failed: ${response.status} ${body}`);
+      break;
+    }
+    const { orders } = await response.json();
+    if (!orders || orders.length === 0) break;
+
+    for (const order of orders) {
+      try {
+        await upsertImportedOrder(storeId, order);
+        imported++;
+      } catch (err) {
+        console.error(`[Shopify import] Order ${order.id} failed:`, err.message);
+      }
+    }
+
+    const link = response.headers.get("link") || "";
+    const nextMatch = link.match(/<([^>]+)>;\s*rel="next"/);
+    url = nextMatch ? nextMatch[1] : null;
+  }
+
+  console.log(`[Shopify import] Store ${storeId}: imported/updated ${imported} orders`);
+  return { imported };
+}
+
 module.exports = {
   syncOrderTagToShopify,
   markDeliveredInShopify,
   markFulfilledInShopify,
   markUnfulfilledInShopify,
   fetchOrderCustomerFieldsFromShopify,
+  importOrdersFromShopify,
 };
