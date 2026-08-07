@@ -1,4 +1,4 @@
-import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, setCustomerLocation, importOrders, deleteOrder, markOrderPaid } from "./api.js";
+import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, importOrders, deleteOrder, markOrderPaid } from "./api.js";
 
 const tableBody = document.querySelector("#ordersTable tbody");
 
@@ -246,9 +246,6 @@ function renderOrders(orders, drivers) {
       ? `<button class="small-btn track-btn" data-tracking-token="${order.tracking_token}" title="Copy tracking link">🔗 Track</button>`
       : "";
 
-    const locationLabel = order.customer_latitude ? "📍 Update Location" : "📍 Set Location";
-    const locationBtn = `<button class="small-btn" data-location-order-id="${order.id}">${locationLabel}</button>`;
-
     // An assigned order offers only Unassign. The driver picker and Assign
     // button come back once the order is free again, so assigning is a
     // one-step action rather than something that can be silently redone.
@@ -272,7 +269,6 @@ function renderOrders(orders, drivers) {
         <div class="action-group">
           ${assignControls}
           ${trackingBtn}
-          ${locationBtn}
         </div>
       </td>
       <td>
@@ -333,34 +329,10 @@ function attachEventListeners() {
   const unassignButtons = document.querySelectorAll("[data-unassign-order-id]");
   const statusButtons = document.querySelectorAll("[data-status-order-id]");
   const trackButtons = document.querySelectorAll("[data-tracking-token]");
-  const locationButtons = document.querySelectorAll("[data-location-order-id]");
 
   trackButtons.forEach((button) => {
     button.addEventListener("click", () => {
       copyTrackingLink(button.getAttribute("data-tracking-token"));
-    });
-  });
-
-  locationButtons.forEach((button) => {
-    button.addEventListener("click", async () => {
-      const orderId = button.getAttribute("data-location-order-id");
-      const mapLink = prompt("Paste the customer's Google Maps link\nor raw coordinates (e.g. 33.94861, 35.67228):");
-
-      if (!mapLink || !mapLink.trim()) return;
-
-      button.textContent = "Saving...";
-      button.disabled = true;
-
-      try {
-        const result = await setCustomerLocation(orderId, mapLink.trim());
-        button.textContent = "📍 Update Location";
-        button.disabled = false;
-        alert(`Location saved! (${result.lat.toFixed(5)}, ${result.lng.toFixed(5)})`);
-      } catch (error) {
-        button.textContent = "📍 Set Location";
-        button.disabled = false;
-        alert(`Error: ${error.message}`);
-      }
     });
   });
 
