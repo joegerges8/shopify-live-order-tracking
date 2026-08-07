@@ -7,6 +7,7 @@ const {
   changeOrderStatus,
   setCustomerLocation,
   importOrders,
+  payOrder,
   removeOrder,
 } = require("../controllers/orderController");
 
@@ -16,5 +17,6 @@ router.delete("/:id", removeOrder);
 router.patch("/:id/assign-driver", assignDriver);
 router.patch("/:id/unassign-driver", unassignDriver);
 router.patch("/:id/status", changeOrderStatus);
+router.patch("/:id/mark-paid", payOrder);
 router.patch("/:id/customer-location", setCustomerLocation);
 module.exports = router;
