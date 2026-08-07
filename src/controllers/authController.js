@@ -53,20 +53,39 @@ async function oauthCallback(req, res) {
     return res.status(400).send("Missing authorization code");
   }
 
-  // Exchange code for access token
-  let access_token, scope;
+  // Exchange code for an access token. expiring=1 asks for the 60-minute
+  // offline token plus a refresh token — Shopify's Admin API no longer accepts
+  // the old non-expiring tokens for public apps.
+  let access_token, scope, refresh_token, expires_in, refresh_token_expires_in;
   try {
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, code }),
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        code,
+        expiring: "1",
+      }).toString(),
     });
-    if (!tokenRes.ok) throw new Error(`Shopify returned ${tokenRes.status}`);
-    ({ access_token, scope } = await tokenRes.json());
+    if (!tokenRes.ok) {
+      const body = await tokenRes.text();
+      throw new Error(`Shopify returned ${tokenRes.status}: ${body.slice(0, 200)}`);
+    }
+    ({ access_token, scope, refresh_token, expires_in, refresh_token_expires_in } =
+      await tokenRes.json());
   } catch (err) {
     console.error("[OAuth] Token exchange failed:", err.message);
     return res.status(500).send("Failed to obtain access token from Shopify");
   }
+
+  const tokenExpiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : null;
+  const refreshTokenExpiresAt = refresh_token_expires_in
+    ? new Date(Date.now() + refresh_token_expires_in * 1000)
+    : null;
 
   // Generate one-time setup token
   const setupToken = crypto.randomBytes(32).toString("hex");
@@ -85,16 +104,25 @@ async function oauthCallback(req, res) {
 
   // Upsert store record
   const result = await pool.query(
-    `INSERT INTO stores (shop_domain, access_token, scope, setup_token, store_name)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO stores (
+       shop_domain, access_token, scope, setup_token, store_name,
+       refresh_token, token_expires_at, refresh_token_expires_at
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (shop_domain) DO UPDATE
        SET access_token = EXCLUDED.access_token,
            scope        = EXCLUDED.scope,
            setup_token  = EXCLUDED.setup_token,
            store_name   = EXCLUDED.store_name,
+           refresh_token = EXCLUDED.refresh_token,
+           token_expires_at = EXCLUDED.token_expires_at,
+           refresh_token_expires_at = EXCLUDED.refresh_token_expires_at,
            active       = TRUE
      RETURNING id, admin_password_hash`,
-    [shop, access_token, scope, setupToken, storeName]
+    [
+      shop, access_token, scope, setupToken, storeName,
+      refresh_token || null, tokenExpiresAt, refreshTokenExpiresAt,
+    ]
   );
   const store = result.rows[0];
 

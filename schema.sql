@@ -1,10 +1,16 @@
 -- stores table
 -- One row per Shopify store that installs Live Dispatch.
 -- Drivers are intentionally NOT scoped to a store; they are shared globally.
+-- Shopify offline access tokens expire after 60 minutes and are renewed with
+-- refresh_token, which is itself valid for 90 days. Both expiries are stored
+-- as absolute timestamps so the backend knows when to rotate them.
 CREATE TABLE stores (
     id SERIAL PRIMARY KEY,
     shop_domain VARCHAR(255) UNIQUE NOT NULL,
     access_token TEXT NOT NULL DEFAULT '',
+    refresh_token TEXT,
+    token_expires_at TIMESTAMPTZ,
+    refresh_token_expires_at TIMESTAMPTZ,
     scope TEXT,
     setup_token TEXT,
     store_name VARCHAR(255),
