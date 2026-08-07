@@ -294,3 +294,32 @@ button:hover {
 .btn-logout:hover {
   background: #b91c1c;
 }
+
+/* ORDERS PAGE HEADER + SYNC */
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-header h1 {
+  margin-bottom: 0;
+}
+
+.sync-status {
+  margin: 10px 0 18px;
+  font-size: 14px;
+  color: #4b5563;
+  min-height: 18px;
+}
+
+.sync-ok {
+  color: #166534;
+}
+
+.sync-error {
+  color: #b91c1c;
+}
