@@ -4,6 +4,7 @@ const {
   assignDriverToOrder,
   unassignDriverFromOrder,
   updateOrderStatus,
+  deleteOrderEverywhere,
   updateCustomerLocation,
 } = require("../services/orderService");
 const { parseMapLink } = require("../utils/parseMapLink");
@@ -134,6 +135,24 @@ async function setCustomerLocation(req, res) {
   }
 }
 
+// Permanently removes an order from Shopify and the dashboard. Shopify only
+// allows this for some orders, so a refusal is reported verbatim and nothing
+// is deleted locally.
+async function removeOrder(req, res) {
+  try {
+    const order = await getOrderById(req.params.id, req.storeId);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    await deleteOrderEverywhere(req.params.id, req.storeId);
+    return res.json({ deleted: true, order_number: order.order_number });
+  } catch (error) {
+    console.error("Error deleting order:", error);
+    return res.status(502).json({ error: error.message || "Failed to delete order" });
+  }
+}
+
 // Pulls the store's Shopify order history into the dashboard on demand. The
 // real failure reason is returned to the caller so the dispatcher can see why
 // a sync came back empty instead of having to read server logs.
@@ -147,4 +166,12 @@ async function importOrders(req, res) {
   }
 }
 
-module.exports = { getOrders, assignDriver, unassignDriver, changeOrderStatus, setCustomerLocation, importOrders };
+module.exports = {
+  getOrders,
+  assignDriver,
+  unassignDriver,
+  changeOrderStatus,
+  setCustomerLocation,
+  importOrders,
+  removeOrder,
+};

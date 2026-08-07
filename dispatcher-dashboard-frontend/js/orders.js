@@ -1,4 +1,4 @@
-import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, setCustomerLocation, importOrders } from "./api.js";
+import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, setCustomerLocation, importOrders, deleteOrder } from "./api.js";
 
 const tableBody = document.querySelector("#ordersTable tbody");
 
@@ -81,6 +81,7 @@ const STATUS_DISPLAY = {
   DELIVERED:        "DELIVERED",
   FULFILLED:        "FULFILLED",
   CANCELLED:        "CANCELLED",
+  DELETED:          "DELETE ORDER",
 };
 
 function createStatusOptions(currentStatus) {
@@ -91,6 +92,8 @@ function createStatusOptions(currentStatus) {
     "DELIVERED",
     "FULFILLED",
     "CANCELLED",
+    // Not a status an order can hold — picking it removes the order outright.
+    "DELETED",
   ];
 
   let options = `<option value="">Select status</option>`;
@@ -222,7 +225,7 @@ function renderOrders(orders, drivers) {
           <select id="status-${order.id}">
             ${createStatusOptions(order.order_status)}
           </select>
-          <button class="small-btn" data-status-order-id="${order.id}">Update</button>
+          <button class="small-btn" data-status-order-id="${order.id}" data-order-number="${order.order_number || ""}">Update</button>
         </div>
       </td>
     `;
@@ -351,6 +354,28 @@ function attachEventListeners() {
 
       if (!status) {
         alert("Please select a status.");
+        return;
+      }
+
+      if (status === "DELETED") {
+        const orderLabel = button.getAttribute("data-order-number") || `#${orderId}`;
+        const confirmed = confirm(
+          `Permanently delete order ${orderLabel}?\n\n` +
+          `It will be removed from this dashboard AND from Shopify. ` +
+          `This cannot be undone.`
+        );
+        if (!confirmed) return;
+
+        button.disabled = true;
+        try {
+          await deleteOrder(orderId);
+          alert(`Order ${orderLabel} was deleted from Shopify and the dashboard.`);
+          await loadOrders();
+        } catch (error) {
+          console.error("Error deleting order:", error);
+          alert(`Could not delete the order:\n\n${error.message}`);
+          button.disabled = false;
+        }
         return;
       }
 

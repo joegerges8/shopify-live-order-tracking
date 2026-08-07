@@ -28,6 +28,22 @@ export async function getOrders() {
   return handleResponse(response);
 }
 
+export async function deleteOrder(orderId) {
+  const response = await fetch(`${BASE_URL}/orders/${orderId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (response.status === 401) {
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminShop");
+    window.location.replace("/dashboard/login.html");
+    throw new Error("Session expired");
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Request failed: ${response.status}`);
+  return data;
+}
+
 export async function importOrders() {
   const response = await fetch(`${BASE_URL}/orders/import`, {
     method: "POST",
