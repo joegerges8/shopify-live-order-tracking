@@ -30,14 +30,17 @@ const REPLACEABLE_DELIVERY_TAGS = new Set([
   "delivery-assigned",
   "delivery-picked-up",
   "delivery-returned",
+  "delivery-delivered",
   "delivery-cancelled",
+  "Delivered",
   ...Object.values(STATUS_TAG_LABELS),
 ]);
 
 function deliveryTagForStatus(status, { driverName } = {}) {
-  if (status === "ASSIGNED") {
+  if (status === "ASSIGNED" || status === "DELIVERED") {
     const name = firstNonBlank(driverName);
-    return name ? `Assigned to ${name}` : "Assigned";
+    if (status === "ASSIGNED") return name ? `Assigned to ${name}` : "Assigned";
+    return name ? `Delivered by ${name}` : "Delivered";
   }
 
   return STATUS_TAG_LABELS[status] || null;
@@ -47,6 +50,7 @@ function isReplaceableDeliveryTag(tag) {
   return (
     REPLACEABLE_DELIVERY_TAGS.has(tag) ||
     /^assigned to\b/i.test(tag) ||
+    /^delivered by\b/i.test(tag) ||
     tag === "Assigned"
   );
 }

@@ -279,7 +279,7 @@ async function updateOrderStatus(orderId, status, storeId) {
     row = await ensureTrackingToken(row);
   }
   if (row) {
-    const driverName = status === "ASSIGNED"
+    const driverName = ["ASSIGNED", "DELIVERED"].includes(status)
       ? await getDriverNameById(row.assigned_driver_id)
       : null;
 
@@ -383,11 +383,13 @@ async function updateDriverOrderStatus(orderId, driverId, status) {
       ? `UPDATE orders
          SET order_status = $1, delivered_at = NOW()
          WHERE id = $2 AND assigned_driver_id = $3
-         RETURNING *`
+         RETURNING *,
+           (SELECT full_name FROM drivers WHERE id = $3) AS driver_name`
       : `UPDATE orders
          SET order_status = $1
          WHERE id = $2 AND assigned_driver_id = $3
-         RETURNING *`;
+         RETURNING *,
+           (SELECT full_name FROM drivers WHERE id = $3) AS driver_name`;
 
   const result = await pool.query(query, [status, orderId, driverId]);
   const row = result.rows[0];

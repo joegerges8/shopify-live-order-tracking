@@ -129,7 +129,9 @@ async function patchMyOrderStatus(req, res) {
       io.to(`order:${updated.tracking_token}`).emit("status_update", { status });
     }
 
-    syncOrderTagToShopify(updated.store_id, updated.shopify_order_id, status).catch(err =>
+    syncOrderTagToShopify(updated.store_id, updated.shopify_order_id, status, {
+      driverName: updated.driver_name,
+    }).catch(err =>
       console.error("[Shopify sync] driver status tag failed:", err.message)
     );
     if (status === "DELIVERED") {
