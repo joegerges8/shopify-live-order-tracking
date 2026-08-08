@@ -107,6 +107,37 @@ export async function updateOrderStatus(orderId, status) {
   return data;
 }
 
+// Dispatcher override for an order's delivery area. The backend classifies
+// most orders automatically from the city; this is the escape hatch for the
+// ones it could not place.
+export async function updateOrderArea(orderId, area) {
+  const response = await fetch(`${BASE_URL}/orders/${orderId}/area`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ area }),
+  });
+  if (response.status === 401) {
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminShop");
+    window.location.replace("/dashboard/login.html");
+    throw new Error("Session expired");
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Request failed: ${response.status}`);
+  return data;
+}
+
+// The canonical area list, served by the backend so the dropdown here and the
+// validation there cannot drift apart.
+export async function getAreas() {
+  const response = await fetch(`${BASE_URL}/orders/areas`, {
+    headers: authHeaders(),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Request failed: ${response.status}`);
+  return data;
+}
+
 export async function deleteDriver(driverId) {
   const response = await fetch(`${BASE_URL}/drivers/${driverId}`, {
     method: "DELETE",

@@ -7,7 +7,9 @@ const {
   markOrderPaid,
   deleteOrderEverywhere,
   updateCustomerLocation,
+  updateOrderArea,
 } = require("../services/orderService");
+const { AREAS, UNKNOWN_AREA } = require("../utils/areaLookup");
 const { parseMapLink } = require("../utils/parseMapLink");
 const { importOrdersFromShopify } = require("../services/shopifyService");
 const pool = require("../config/db");
@@ -107,6 +109,43 @@ async function changeOrderStatus(req, res) {
   }
 }
 
+// The list of areas the dispatcher can pick from. Served from the backend so
+// the dashboard dropdown and the validation above can never drift apart.
+function listAreas(req, res) {
+  return res.json({ areas: AREAS, unknown: UNKNOWN_AREA });
+}
+
+// Lets the dispatcher correct an order's area from the dashboard. The lookup
+// classifies ~96% of orders on its own; this covers the rest — unrecognized
+// city strings that landed in 'Other', and the occasional wrong guess — without
+// waiting for a backend deploy.
+async function changeOrderArea(req, res) {
+  try {
+    const orderId = req.params.id;
+    const { area } = req.body || {};
+
+    if (!area) {
+      return res.status(400).json({ error: "area is required" });
+    }
+
+    // Only a known area or the explicit unknown bucket. Free text here would
+    // fragment the filter chips in the driver app.
+    if (area !== UNKNOWN_AREA && !AREAS.includes(area)) {
+      return res.status(400).json({ error: "Invalid area value" });
+    }
+
+    const updated = await updateOrderArea(orderId, area, req.storeId);
+    if (!updated) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    return res.json(updated);
+  } catch (error) {
+    console.error("Error updating order area:", error);
+    return res.status(500).json({ error: "Failed to update order area" });
+  }
+}
+
 async function setCustomerLocation(req, res) {
   try {
     const orderId = req.params.id;
@@ -187,6 +226,8 @@ module.exports = {
   assignDriver,
   unassignDriver,
   changeOrderStatus,
+  changeOrderArea,
+  listAreas,
   setCustomerLocation,
   importOrders,
   payOrder,

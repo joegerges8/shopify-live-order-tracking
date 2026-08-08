@@ -56,6 +56,10 @@ CREATE TABLE orders (
     customer_email VARCHAR(150),
     shipping_address TEXT,
     city VARCHAR(100),
+    area VARCHAR(50),                         -- delivery area (caza) derived from city
+                                              -- by src/utils/areaLookup.js at write time;
+                                              -- 'Other' when the city cannot be resolved.
+                                              -- A dispatcher can override it per order.
     country VARCHAR(100),
     total_price NUMERIC(10,2),
     financial_status VARCHAR(50),
@@ -73,6 +77,8 @@ CREATE TABLE orders (
                                               -- drop off the dashboard once this is older than
                                               -- DASHBOARD_ORDER_RETENTION_DAYS (default 7)
 );
+-- Migration for existing databases: ALTER TABLE orders ADD COLUMN area VARCHAR(50);
+-- Then backfill existing rows from their city: node scripts/backfill-areas.js
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN fulfilled_at TIMESTAMP;
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN delivered_at TIMESTAMP;
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN store_id INT REFERENCES stores(id) ON DELETE CASCADE;

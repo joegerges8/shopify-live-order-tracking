@@ -447,6 +447,20 @@ async function updateCustomerLocation(orderId, lat, lng, storeId) {
   return result.rows[0];
 }
 
+// Sets the delivery area for one order, used by the dispatcher's manual
+// override. Once set by hand the value sticks: webhook replays and the import
+// path both keep an existing area rather than recomputing it.
+async function updateOrderArea(orderId, area, storeId) {
+  const result = await pool.query(
+    `UPDATE orders
+     SET area = $1
+     WHERE id = $2 AND store_id = $3
+     RETURNING *`,
+    [area, orderId, storeId]
+  );
+  return result.rows[0];
+}
+
 module.exports = {
   getAllOrders,
   getOrderById,
@@ -462,4 +476,5 @@ module.exports = {
   createLocationUpdate,
   getOrderByTrackingToken,
   updateCustomerLocation,
+  updateOrderArea,
 };

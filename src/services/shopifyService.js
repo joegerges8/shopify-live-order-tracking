@@ -1,6 +1,7 @@
 const pool = require("../config/db");
 const { randomUUID } = require("crypto");
 const { getStoreAccess } = require("./shopifyTokens");
+const { resolveAreaOrUnknown } = require("../utils/areaLookup");
 
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-04";
 
@@ -580,10 +581,10 @@ async function upsertImportedOrder(storeId, order) {
     `INSERT INTO orders (
       shopify_order_id, order_number,
       customer_first_name, customer_last_name, customer_phone, customer_email,
-      shipping_address, city, country,
+      shipping_address, city, area, country,
       total_price, financial_status, fulfillment_status,
       order_status, tracking_token, store_id, created_at, fulfilled_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,COALESCE($16::TIMESTAMPTZ, NOW()),$17::TIMESTAMPTZ)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,COALESCE($17::TIMESTAMPTZ, NOW()),$18::TIMESTAMPTZ)
     ON CONFLICT (shopify_order_id) DO UPDATE SET
       order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
       customer_first_name = COALESCE(EXCLUDED.customer_first_name, orders.customer_first_name),
@@ -592,6 +593,8 @@ async function upsertImportedOrder(storeId, order) {
       customer_email = COALESCE(EXCLUDED.customer_email, orders.customer_email),
       shipping_address = COALESCE(EXCLUDED.shipping_address, orders.shipping_address),
       city = COALESCE(EXCLUDED.city, orders.city),
+      -- Existing area wins so a re-import never overwrites a manual correction.
+      area = COALESCE(orders.area, EXCLUDED.area),
       country = COALESCE(EXCLUDED.country, orders.country),
       total_price = COALESCE(EXCLUDED.total_price, orders.total_price),
       financial_status = COALESCE(EXCLUDED.financial_status, orders.financial_status),
@@ -608,6 +611,7 @@ async function upsertImportedOrder(storeId, order) {
       fields.customer_email,
       fields.shipping_address,
       fields.city,
+      resolveAreaOrUnknown(fields.city),
       fields.country,
       fields.total_price ?? 0,
       fields.financial_status,
