@@ -74,11 +74,20 @@
       margin-bottom: 5px;
     }
 
+    /* Sits directly under the status headline — the answer to the only
+       question the customer actually has, so it reads as a peer of the
+       headline rather than as caption text. */
     #eta-text {
-      font-size: 15px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #111;
+      min-height: 0;
+      margin-top: 2px;
+    }
+
+    #eta-text.waiting {
       font-weight: 500;
       color: #6b6b6b;
-      min-height: 0;
     }
 
     /* ── Divider ── */
@@ -412,6 +421,7 @@
       socket.on('eta_update', (eta) => {
         if (!currentData) return;
         currentData.eta = eta;
+        currentData.eta_status = 'ok';
         applyEta(currentData);
         applyMapData(currentData);
       });
@@ -560,7 +570,20 @@
 
     function applyEta(data) {
       const el = document.getElementById('eta-text');
-      el.textContent = data.eta && data.eta.text ? data.eta.text : '';
+
+      if (data.eta && data.eta.text) {
+        el.textContent = data.eta.text;
+        el.classList.remove('waiting');
+        return;
+      }
+
+      // No time yet. Say why in the one case the customer can make sense of —
+      // the driver has the order but has not set off — and stay silent
+      // otherwise rather than showing a guess. `eta_status` carries the full
+      // reason for anyone reading /api/track/:token directly.
+      el.classList.add('waiting');
+      el.textContent =
+        data.eta_status === 'waiting_for_driver' ? 'Driver has not set off yet' : '';
     }
 
     // Draws the driver's route from the polyline the server returned. Falls

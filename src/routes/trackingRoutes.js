@@ -1,7 +1,27 @@
 const express = require("express");
 const router = express.Router();
 const { getOrderByTrackingToken } = require("../services/orderService");
-const { etaForTrackedOrder } = require("../services/etaService");
+const { etaForTrackedOrder, hasDriverStarted } = require("../services/etaService");
+
+// Why there is no ETA, so a blank line on the page can be explained without
+// reading server logs. Returned alongside `eta` on every tracking response.
+//
+//   ok                  — an ETA is present
+//   waiting_for_driver  — no GPS yet, or the driver has not tapped
+//                         "Start Delivery" (their last ping has gone stale)
+//   not_started         — the order is not out for delivery yet
+//   unavailable         — the driver is on the road but the delivery city
+//                         could not be resolved to anywhere we can locate
+function etaStatusFor(order, eta) {
+  if (eta) return "ok";
+  if (!["PICKED_UP", "OUT_FOR_DELIVERY"].includes(order.order_status)) {
+    return "not_started";
+  }
+  if (!order.driver_lat || !hasDriverStarted(order.location_age_seconds)) {
+    return "waiting_for_driver";
+  }
+  return "unavailable";
+}
 
 // Public endpoint — no auth required. The token is the credential.
 // GET /api/track/:token
@@ -32,6 +52,7 @@ router.get("/:token", async (req, res) => {
       customer_longitude: order.customer_longitude,
       delivered_at: order.delivered_at,
       eta,
+      eta_status: etaStatusFor(order, eta),
       driver: order.driver_name ? { name: order.driver_name, phone: order.driver_phone || null } : null,
       driver_location:
         order.driver_lat != null

@@ -241,11 +241,16 @@ function clearEta(orderId) {
 // signal, with no app change or extra endpoint needed. The dispatcher flipping
 // an order to PICKED_UP is a separate step and deliberately does not reveal an
 // ETA on its own: the order may be sitting in the shop.
-function hasDriverStarted(locationUpdatedAt) {
-  if (!locationUpdatedAt) return false;
-  const age = Date.now() - new Date(locationUpdatedAt).getTime();
+// `ageSeconds` is how old the driver's last ping is. It comes from Postgres
+// (location_age_seconds) rather than being computed here, because
+// location_updates.created_at carries no timezone — comparing it against the
+// Node clock would quietly depend on the database and the app agreeing about
+// what timezone they are in, and be wrong by hours when they don't.
+function hasDriverStarted(ageSeconds) {
+  const age = Number(ageSeconds);
   if (!Number.isFinite(age)) return false;
-  return age >= 0 && age <= number("ETA_START_WINDOW_SECONDS", 600) * 1000;
+  // A slightly future-dated ping means clock skew, not a stale driver.
+  return age <= number("ETA_START_WINDOW_SECONDS", 600);
 }
 
 // Builds the ETA for an order row shaped like getOrderByTrackingToken's result
@@ -256,7 +261,7 @@ function hasDriverStarted(locationUpdatedAt) {
 // Returns null whenever there is nothing honest to show: no driver position,
 // the driver has not set off yet, or the city resolves to no place we can find.
 async function etaForTrackedOrder(order) {
-  if (!order?.driver_lat || !hasDriverStarted(order.location_updated_at)) {
+  if (!order?.driver_lat || !hasDriverStarted(order.location_age_seconds)) {
     return null;
   }
 

@@ -91,7 +91,8 @@ async function postMyOrderLocation(req, res) {
           assigned_driver_id: driverId,
           driver_lat: latitude,
           driver_lng: longitude,
-          location_updated_at: created.created_at,
+          // The ping was just written, so its age is zero by construction.
+          location_age_seconds: 0,
         });
         if (eta) io.to(room).emit("eta_update", eta);
       } catch (error) {

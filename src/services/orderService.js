@@ -450,7 +450,12 @@ async function getOrderByTrackingToken(token) {
        d.phone      AS driver_phone,
        lu.latitude  AS driver_lat,
        lu.longitude AS driver_lng,
-       lu.created_at AS location_updated_at
+       lu.created_at AS location_updated_at,
+       -- Age of the last ping, measured by Postgres. The ETA uses this rather
+       -- than comparing timestamps in Node: location_updates.created_at has no
+       -- timezone, so parsing it in the app would silently depend on the two
+       -- processes agreeing about what timezone they are in.
+       EXTRACT(EPOCH FROM (NOW() - lu.created_at)) AS location_age_seconds
      FROM orders o
      LEFT JOIN drivers d ON d.id = o.assigned_driver_id
      LEFT JOIN LATERAL (
@@ -485,9 +490,9 @@ async function countStartedDeliveries(driverId, excludeOrderId) {
        AND EXISTS (
          SELECT 1 FROM location_updates lu
          WHERE lu.order_id = o.id
-           AND lu.created_at > NOW() - ($3 || ' seconds')::interval
+           AND lu.created_at > NOW() - make_interval(secs => $3::int)
        )`,
-    [driverId, excludeOrderId, String(STARTED_WINDOW_SECONDS)]
+    [driverId, excludeOrderId, STARTED_WINDOW_SECONDS]
   );
 
   return result.rows[0]?.count ?? 0;
