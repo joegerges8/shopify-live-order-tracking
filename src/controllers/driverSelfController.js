@@ -98,6 +98,7 @@ async function patchMyOrderStatus(req, res) {
       "PICKED_UP",
       "OUT_FOR_DELIVERY",
       "DELIVERED",
+      "RETURNED",
       "CANCELLED",
     ];
 

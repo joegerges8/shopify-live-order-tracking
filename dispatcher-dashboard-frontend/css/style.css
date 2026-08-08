@@ -212,6 +212,11 @@ button:hover {
   font-weight: 700;
 }
 
+.status-returned {
+  background: #ffe4e6;
+  color: #9f1239;
+}
+
 .status-cancelled {
   background: #fee2e2;
   color: #991b1b;

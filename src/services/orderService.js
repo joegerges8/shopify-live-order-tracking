@@ -379,7 +379,7 @@ async function getOrdersByDriverId(driverId) {
   const result = await pool.query(
     `SELECT * FROM orders
      WHERE assigned_driver_id = $1
-       AND order_status NOT IN ('DELIVERED', 'CANCELLED')
+       AND order_status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED')
      ORDER BY created_at DESC`,
     [driverId]
   );

@@ -21,6 +21,7 @@ const STATUS_TAG_MAP = {
   PENDING:   "delivery-pending",
   ASSIGNED:  "delivery-assigned",
   PICKED_UP: "delivery-picked-up",
+  RETURNED:  "delivery-returned",
   CANCELLED: "delivery-cancelled",
 };
 

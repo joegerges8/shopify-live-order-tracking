@@ -144,6 +144,7 @@ const STATUS_DISPLAY = {
   PICKED_UP:        "PICKED_UP",
   OUT_FOR_DELIVERY: "OUT FOR DELIVERY",
   DELIVERED:        "DELIVERED",
+  RETURNED:         "RETURNED",
   FULFILLED:        "FULFILLED",
   CANCELLED:        "CANCELLED",
   PAID:             "MARK AS PAID",
@@ -162,6 +163,7 @@ function createStatusOptions(currentStatus) {
     "CANCELLED",  // Cancelled
     "DELETED",    // Deleted
     "DELIVERED",  // Delivered
+    "RETURNED",   // Returned by the driver
     "PAID",       // Mark as paid
   ];
 
@@ -189,7 +191,7 @@ function createStatusBadge(status) {
 function updateStats(orders, drivers) {
   const totalOrders = orders.length;
   const pendingOrders = orders.filter((order) =>
-    !["DELIVERED", "FULFILLED", "CANCELLED"].includes(order.order_status)
+    !["DELIVERED", "RETURNED", "FULFILLED", "CANCELLED"].includes(order.order_status)
   ).length;
   const deliveredOrders = orders.filter((order) => order.order_status === "DELIVERED").length;
   const availableDrivers = drivers.filter((driver) => !isDriverBusy(driver.id, orders)).length;
