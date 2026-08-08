@@ -75,6 +75,12 @@ CREATE TABLE orders (
                                               -- for them, so counting them would report the
                                               -- same money twice.
     fulfillment_status VARCHAR(50),
+    line_items JSONB NOT NULL DEFAULT '[]'::JSONB,  -- what is actually in the bag:
+                                              -- [{ title, variant_title, quantity }, …]
+                                              -- copied from the Shopify order at import /
+                                              -- webhook time so the driver app can list the
+                                              -- products without calling Shopify. Empty array
+                                              -- for orders written before this column existed.
     order_status VARCHAR(30) DEFAULT 'UNFULFILLED',
     assigned_driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
     tracking_token TEXT,                      -- shared with customer for live tracking
@@ -92,6 +98,9 @@ CREATE TABLE orders (
 -- Then backfill existing rows from their city: node scripts/backfill-areas.js
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN fulfilled_at TIMESTAMP;
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN delivered_at TIMESTAMP;
+-- Migration for existing databases: ALTER TABLE orders ADD COLUMN line_items JSONB NOT NULL DEFAULT '[]'::JSONB;
+-- Existing rows stay empty until the order is re-imported from Shopify
+-- (the dashboard's "import orders" action backfills them).
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN prepaid BOOLEAN NOT NULL DEFAULT FALSE;
 -- Then backfill the rows that were still undelivered at migration time — for those,
 -- financial_status = 'paid' can only mean the customer paid online:
