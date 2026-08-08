@@ -53,6 +53,7 @@ async function startServer() {
         country VARCHAR(100),
         total_price NUMERIC(10,2),
         financial_status VARCHAR(50),
+        prepaid BOOLEAN NOT NULL DEFAULT FALSE,
         fulfillment_status VARCHAR(50),
         order_status VARCHAR(30) DEFAULT 'UNFULFILLED',
         assigned_driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
@@ -87,6 +88,28 @@ async function startServer() {
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;`);
     // Drives the dashboard's retention window for completed orders.
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMP;`);
+    // Records whether the customer had already paid online before delivery.
+    // financial_status cannot answer that after the fact: delivering a COD
+    // order sets it to 'paid' as well, which made the driver app count that
+    // money twice — once as cash in hand, once in the earnings total.
+    const prepaidColumn = await pool.query(
+      `SELECT 1 FROM information_schema.columns
+       WHERE table_name = 'orders' AND column_name = 'prepaid'`
+    );
+    await pool.query(
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS prepaid BOOLEAN NOT NULL DEFAULT FALSE;`
+    );
+    if (prepaidColumn.rowCount === 0) {
+      // One-off backfill, guarded so it only runs on the migration itself:
+      // an order that had not been delivered yet can only be 'paid' because
+      // the customer paid online. Delivered rows are left FALSE — their
+      // status was overwritten on delivery and the original is unrecoverable.
+      const backfill = await pool.query(
+        `UPDATE orders SET prepaid = TRUE
+         WHERE financial_status = 'paid' AND delivered_at IS NULL`
+      );
+      console.log(`Added orders.prepaid and backfilled ${backfill.rowCount} undelivered paid orders`);
+    }
     await pool.query(
       `ALTER TABLE orders
        ALTER COLUMN order_status SET DEFAULT 'UNFULFILLED'`
