@@ -74,10 +74,11 @@ async function unassignDriver(req, res) {
 async function changeOrderStatus(req, res) {
   try {
     const orderId = req.params.id;
-    const { status } = req.body;
+    const requestedStatus = req.body?.status;
+    const status = requestedStatus === "PENDING" ? "UNFULFILLED" : requestedStatus;
 
     const validStatuses = [
-      "PENDING", "ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED", "RETURNED", "FULFILLED", "CANCELLED",
+      "UNFULFILLED", "ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED", "RETURNED", "FULFILLED", "CANCELLED",
     ];
 
     if (!status) {

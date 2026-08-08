@@ -149,7 +149,9 @@ function createDriverOptions(drivers, orders, selectedDriverId = null) {
 =========================== */
 
 const STATUS_DISPLAY = {
+  CREATED:          "Unfulfilled",
   PENDING:          "Unfulfilled",
+  UNFULFILLED:      "Unfulfilled",
   ASSIGNED:         "Assigned",
   PICKED_UP:        "Picked Up",
   OUT_FOR_DELIVERY: "OUT FOR DELIVERY",
@@ -161,7 +163,12 @@ const STATUS_DISPLAY = {
   DELETED:          "Deleted",
 };
 
+function normalizeOrderStatus(status) {
+  return ["CREATED", "PENDING"].includes(status) || !status ? "UNFULFILLED" : status;
+}
+
 function createStatusOptions(currentStatus) {
+  const normalizedCurrentStatus = normalizeOrderStatus(currentStatus);
   // Dispatcher's preferred order. PAID and DELETED are not delivery statuses:
   // PAID records payment and leaves the delivery status alone, DELETED removes
   // the order outright.
@@ -169,7 +176,7 @@ function createStatusOptions(currentStatus) {
     "ASSIGNED",   // Assigned
     "FULFILLED",  // Fulfilled
     "PICKED_UP",  // Picked Up
-    "PENDING",    // Unfulfilled
+    "UNFULFILLED", // Unfulfilled
     "CANCELLED",  // Cancelled
     "DELETED",    // Deleted
     "RETURNED",   // Returned by the driver
@@ -180,7 +187,7 @@ function createStatusOptions(currentStatus) {
   let options = `<option value="">Select status</option>`;
 
   statuses.forEach((status) => {
-    const selected = status === currentStatus ? "selected" : "";
+    const selected = status === normalizedCurrentStatus ? "selected" : "";
     options += `<option value="${status}" ${selected}>${STATUS_DISPLAY[status] || status}</option>`;
   });
 
@@ -188,7 +195,7 @@ function createStatusOptions(currentStatus) {
 }
 
 function createStatusBadge(status) {
-  if (!status) return "";
+  status = normalizeOrderStatus(status);
   const normalized = status.toLowerCase();
   const display = STATUS_DISPLAY[status] || status;
   return `<span class="status-badge status-${normalized}">${display}</span>`;
@@ -270,7 +277,7 @@ function applyFilters() {
 
   const filteredOrders = allOrders.filter((order) => {
     const orderNumber = String(order.order_number ?? "").toLowerCase();
-    const orderStatus = order.order_status ?? "";
+    const orderStatus = normalizeOrderStatus(order.order_status);
     const city = getOrderCity(order);
     const area = getOrderArea(order);
 
@@ -308,7 +315,9 @@ function renderOrders(orders, drivers) {
     const customerName = getCustomerName(order);
     const city = getOrderCity(order);
 
-    const trackingBtn = order.tracking_token && order.order_status !== "PENDING"
+    const orderStatus = normalizeOrderStatus(order.order_status);
+
+    const trackingBtn = order.tracking_token && orderStatus !== "UNFULFILLED"
       ? `<button class="small-btn track-btn" data-tracking-token="${order.tracking_token}" title="Copy tracking link">🔗 Track</button>`
       : "";
 
@@ -335,7 +344,7 @@ function renderOrders(orders, drivers) {
       </td>
       <td>${order.total_price ?? ""}</td>
       <td>${order.financial_status ?? ""}</td>
-      <td>${createStatusBadge(order.order_status)}</td>
+      <td>${createStatusBadge(orderStatus)}</td>
       <td>${assignedDriverName}</td>
       <td>
         <div class="action-group">
@@ -346,7 +355,7 @@ function renderOrders(orders, drivers) {
       <td>
         <div class="action-group">
           <select id="status-${order.id}">
-            ${createStatusOptions(order.order_status)}
+            ${createStatusOptions(orderStatus)}
           </select>
           <button class="small-btn" data-status-order-id="${order.id}" data-order-number="${order.order_number || ""}">Update</button>
         </div>

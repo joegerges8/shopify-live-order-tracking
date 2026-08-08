@@ -54,7 +54,7 @@ async function startServer() {
         total_price NUMERIC(10,2),
         financial_status VARCHAR(50),
         fulfillment_status VARCHAR(50),
-        order_status VARCHAR(30) DEFAULT 'PENDING',
+        order_status VARCHAR(30) DEFAULT 'UNFULFILLED',
         assigned_driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
         tracking_token TEXT,
         customer_latitude NUMERIC(10,7),
@@ -87,6 +87,15 @@ async function startServer() {
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;`);
     // Drives the dashboard's retention window for completed orders.
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMP;`);
+    await pool.query(
+      `ALTER TABLE orders
+       ALTER COLUMN order_status SET DEFAULT 'UNFULFILLED'`
+    );
+    await pool.query(
+      `UPDATE orders
+       SET order_status = 'UNFULFILLED'
+       WHERE order_status IS NULL OR order_status IN ('CREATED', 'PENDING')`
+    );
 
     // Seed the original single store from env so existing orders remain visible
     const seedShop = (process.env.SHOPIFY_STORE || "").trim();

@@ -222,14 +222,14 @@ async function assignDriverToOrder(orderId, driverId, storeId) {
 async function unassignDriverFromOrder(orderId, storeId) {
   const result = await pool.query(
     `UPDATE orders
-     SET assigned_driver_id = NULL, order_status = 'PENDING'
+     SET assigned_driver_id = NULL, order_status = 'UNFULFILLED'
      WHERE id = $1 AND store_id = $2
      RETURNING *`,
     [orderId, storeId]
   );
   const row = result.rows[0];
   if (row) {
-    syncOrderTagToShopify(storeId, row.shopify_order_id, "PENDING").catch(err =>
+    syncOrderTagToShopify(storeId, row.shopify_order_id, "UNFULFILLED").catch(err =>
       console.error("[Shopify sync] unassign tag failed:", err.message)
     );
   }
@@ -307,7 +307,7 @@ async function updateOrderStatus(orderId, status, storeId) {
         console.error("[Shopify sync] mark fulfilled failed:", err.message)
       );
     }
-    if (status === "PENDING") {
+    if (status === "UNFULFILLED") {
       markUnfulfilledInShopify(storeId, row.shopify_order_id).catch(err =>
         console.error("[Shopify sync] mark unfulfilled failed:", err.message)
       );

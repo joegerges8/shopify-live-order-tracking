@@ -19,7 +19,7 @@ const TRACKING_COMPANY = process.env.TRACKING_COMPANY_NAME || "DispatchHQ";
 const NOTIFY_CUSTOMER = process.env.SHOPIFY_NOTIFY_CUSTOMER !== "false";
 
 const STATUS_TAG_LABELS = {
-  PENDING:   "Unfulfilled",
+  UNFULFILLED: "Unfulfilled",
   PICKED_UP: "Picked Up",
   RETURNED:  "Returned",
   CANCELLED: "Cancelled",
@@ -591,7 +591,7 @@ async function markUnfulfilledInShopify(storeId, shopifyOrderId) {
 function mapImportedOrderStatus(order) {
   if (order.cancelled_at) return "CANCELLED";
   if (order.fulfillment_status === "fulfilled") return "FULFILLED";
-  return "PENDING";
+  return "UNFULFILLED";
 }
 
 // When Shopify already fulfilled an order, keep the date it happened so the

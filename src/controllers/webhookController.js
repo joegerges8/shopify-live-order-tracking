@@ -163,8 +163,8 @@ async function handleOrderCreated(req, res) {
         shipping_address, city, area, country,
         total_price, financial_status, fulfillment_status,
         customer_latitude, customer_longitude, customer_altitude,
-        google_maps_link, tracking_token, store_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        google_maps_link, tracking_token, store_id, order_status
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
       ON CONFLICT (shopify_order_id) DO UPDATE SET
         order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
         customer_first_name = COALESCE(EXCLUDED.customer_first_name, orders.customer_first_name),
@@ -184,6 +184,10 @@ async function handleOrderCreated(req, res) {
         customer_longitude = COALESCE(EXCLUDED.customer_longitude, orders.customer_longitude),
         customer_altitude = COALESCE(EXCLUDED.customer_altitude, orders.customer_altitude),
         google_maps_link = COALESCE(EXCLUDED.google_maps_link, orders.google_maps_link),
+        order_status = CASE
+          WHEN orders.order_status IS NULL OR orders.order_status IN ('CREATED', 'PENDING') THEN EXCLUDED.order_status
+          ELSE orders.order_status
+        END,
         tracking_token = COALESCE(orders.tracking_token, EXCLUDED.tracking_token),
         store_id = COALESCE(orders.store_id, EXCLUDED.store_id)`,
       [
@@ -192,7 +196,7 @@ async function handleOrderCreated(req, res) {
         shippingAddress, city, area, country,
         totalPrice, financialStatus, fulfillmentStatus,
         customerLatitude, customerLongitude, customerAltitude,
-        googleMapsLink, trackingToken, storeId,
+        googleMapsLink, trackingToken, storeId, "UNFULFILLED",
       ]
     );
 

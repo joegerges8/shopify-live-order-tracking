@@ -40,7 +40,7 @@ CREATE TABLE drivers (
 -- Created automatically when a Shopify webhook fires (new order placed).
 -- The dispatcher assigns a driver by setting assigned_driver_id.
 -- order_status tracks the delivery lifecycle:
---   PENDING → ASSIGNED → PICKED_UP → OUT_FOR_DELIVERY → DELIVERED
+--   UNFULFILLED → ASSIGNED → PICKED_UP → OUT_FOR_DELIVERY → DELIVERED
 --   (or RETURNED when the driver brings the order back, or CANCELLED at any point)
 -- delivered_at is stamped by the backend the moment status becomes DELIVERED,
 -- providing an accurate record of when each delivery was completed.
@@ -64,7 +64,7 @@ CREATE TABLE orders (
     total_price NUMERIC(10,2),
     financial_status VARCHAR(50),
     fulfillment_status VARCHAR(50),
-    order_status VARCHAR(30) DEFAULT 'PENDING',
+    order_status VARCHAR(30) DEFAULT 'UNFULFILLED',
     assigned_driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
     tracking_token TEXT,                      -- shared with customer for live tracking
     customer_latitude NUMERIC(10,7),

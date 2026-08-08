@@ -438,6 +438,7 @@
     function headlineFor(status) {
       return {
         PENDING:          'Looking for a driver...',
+        UNFULFILLED:      'Looking for a driver...',
         ASSIGNED:         'Driver is heading to pickup',
         PICKED_UP:        'Order picked up!',
         OUT_FOR_DELIVERY: 'Driver is on the way!',
@@ -448,7 +449,7 @@
     }
 
     function stepIndex(status) {
-      return { PENDING: 0, ASSIGNED: 1, PICKED_UP: 2, OUT_FOR_DELIVERY: 2, DELIVERED: 3, CANCELLED: 0 }[status] ?? 0;
+      return { PENDING: 0, UNFULFILLED: 0, ASSIGNED: 1, PICKED_UP: 2, OUT_FOR_DELIVERY: 2, DELIVERED: 3, CANCELLED: 0 }[status] ?? 0;
     }
 
     function updateProgressSteps(status) {
