@@ -106,7 +106,15 @@ async function backfillMissingCustomerFields(order, storeId) {
          country = COALESCE($7, country),
          total_price = COALESCE($8, total_price),
          financial_status = COALESCE($9, financial_status),
-         fulfillment_status = COALESCE($10, fulfillment_status)
+         fulfillment_status = COALESCE($10, fulfillment_status),
+         -- An order that Shopify already reports as paid while it is still
+         -- out for delivery was paid online. Only ever set, never cleared:
+         -- once the driver delivers, 'paid' stops meaning anything here.
+         prepaid = CASE
+           WHEN delivered_at IS NULL
+                AND LOWER(COALESCE($9, financial_status, '')) = 'paid' THEN TRUE
+           ELSE prepaid
+         END
      WHERE id = $11 AND store_id = $12
      RETURNING *`,
     [

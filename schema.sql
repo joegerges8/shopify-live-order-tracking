@@ -63,6 +63,17 @@ CREATE TABLE orders (
     country VARCHAR(100),
     total_price NUMERIC(10,2),
     financial_status VARCHAR(50),
+    prepaid BOOLEAN NOT NULL DEFAULT FALSE,   -- TRUE when the order already arrived
+                                              -- paid from Shopify (customer paid online).
+                                              -- Written once, when the order is first
+                                              -- imported or received by webhook, and never
+                                              -- touched again — financial_status flips to
+                                              -- 'paid' on delivery for COD orders too, so
+                                              -- it cannot tell the two cases apart later.
+                                              -- The driver app uses it to exclude prepaid
+                                              -- orders from earnings: no cash is collected
+                                              -- for them, so counting them would report the
+                                              -- same money twice.
     fulfillment_status VARCHAR(50),
     order_status VARCHAR(30) DEFAULT 'UNFULFILLED',
     assigned_driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
@@ -81,6 +92,10 @@ CREATE TABLE orders (
 -- Then backfill existing rows from their city: node scripts/backfill-areas.js
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN fulfilled_at TIMESTAMP;
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN delivered_at TIMESTAMP;
+-- Migration for existing databases: ALTER TABLE orders ADD COLUMN prepaid BOOLEAN NOT NULL DEFAULT FALSE;
+-- Then backfill the rows that were still undelivered at migration time — for those,
+-- financial_status = 'paid' can only mean the customer paid online:
+--   UPDATE orders SET prepaid = TRUE WHERE financial_status = 'paid' AND delivered_at IS NULL;
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN store_id INT REFERENCES stores(id) ON DELETE CASCADE;
 -- After backfilling existing rows, run: ALTER TABLE orders ALTER COLUMN store_id SET NOT NULL;
 

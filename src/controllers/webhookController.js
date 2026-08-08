@@ -147,6 +147,12 @@ async function handleOrderCreated(req, res) {
     const financialStatus = order.financial_status || null;
     const fulfillmentStatus = order.fulfillment_status || null;
 
+    // The order arriving already paid means the customer paid online, so no
+    // cash will change hands on delivery. Captured now because delivering a
+    // COD order also sets financial_status to 'paid' — after that the column
+    // can no longer tell an online payment from a collected one.
+    const prepaid = (financialStatus || "").toLowerCase() === "paid";
+
     const customerLatitude = parseNullableNumber(getNoteAttribute(order, "latitude"));
     const customerLongitude = parseNullableNumber(getNoteAttribute(order, "longitude"));
     const customerAltitude = parseNullableNumber(getNoteAttribute(order, "altitude"));
@@ -161,10 +167,10 @@ async function handleOrderCreated(req, res) {
         shopify_order_id, order_number,
         customer_first_name, customer_last_name, customer_phone, customer_email,
         shipping_address, city, area, country,
-        total_price, financial_status, fulfillment_status,
+        total_price, financial_status, fulfillment_status, prepaid,
         customer_latitude, customer_longitude, customer_altitude,
         google_maps_link, tracking_token, store_id, order_status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
       ON CONFLICT (shopify_order_id) DO UPDATE SET
         order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
         customer_first_name = COALESCE(EXCLUDED.customer_first_name, orders.customer_first_name),
@@ -180,6 +186,10 @@ async function handleOrderCreated(req, res) {
         total_price = COALESCE(EXCLUDED.total_price, orders.total_price),
         financial_status = COALESCE(EXCLUDED.financial_status, orders.financial_status),
         fulfillment_status = COALESCE(EXCLUDED.fulfillment_status, orders.fulfillment_status),
+        -- prepaid records how the order arrived, so the stored value always
+        -- wins: a webhook replay after delivery carries financial_status
+        -- 'paid' for COD orders too and would otherwise rewrite history.
+        prepaid = orders.prepaid,
         customer_latitude = COALESCE(EXCLUDED.customer_latitude, orders.customer_latitude),
         customer_longitude = COALESCE(EXCLUDED.customer_longitude, orders.customer_longitude),
         customer_altitude = COALESCE(EXCLUDED.customer_altitude, orders.customer_altitude),
@@ -194,7 +204,7 @@ async function handleOrderCreated(req, res) {
         shopifyOrderId, orderNumber,
         customerFirstName, customerLastName, customerPhone, customerEmail,
         shippingAddress, city, area, country,
-        totalPrice, financialStatus, fulfillmentStatus,
+        totalPrice, financialStatus, fulfillmentStatus, prepaid,
         customerLatitude, customerLongitude, customerAltitude,
         googleMapsLink, trackingToken, storeId, "UNFULFILLED",
       ]

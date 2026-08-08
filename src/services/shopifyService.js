@@ -611,9 +611,9 @@ async function upsertImportedOrder(storeId, order) {
       shopify_order_id, order_number,
       customer_first_name, customer_last_name, customer_phone, customer_email,
       shipping_address, city, area, country,
-      total_price, financial_status, fulfillment_status,
+      total_price, financial_status, fulfillment_status, prepaid,
       order_status, tracking_token, store_id, created_at, fulfilled_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,COALESCE($17::TIMESTAMPTZ, NOW()),$18::TIMESTAMPTZ)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18::TIMESTAMPTZ, NOW()),$19::TIMESTAMPTZ)
     ON CONFLICT (shopify_order_id) DO UPDATE SET
       order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
       customer_first_name = COALESCE(EXCLUDED.customer_first_name, orders.customer_first_name),
@@ -628,6 +628,9 @@ async function upsertImportedOrder(storeId, order) {
       total_price = COALESCE(EXCLUDED.total_price, orders.total_price),
       financial_status = COALESCE(EXCLUDED.financial_status, orders.financial_status),
       fulfillment_status = COALESCE(EXCLUDED.fulfillment_status, orders.fulfillment_status),
+      -- A re-import must not rewrite how the order arrived: by then a COD
+      -- order that has been delivered also reads as 'paid' in Shopify.
+      prepaid = orders.prepaid,
       tracking_token = COALESCE(orders.tracking_token, EXCLUDED.tracking_token),
       fulfilled_at = COALESCE(orders.fulfilled_at, EXCLUDED.fulfilled_at),
       store_id = EXCLUDED.store_id`,
@@ -645,6 +648,11 @@ async function upsertImportedOrder(storeId, order) {
       fields.total_price ?? 0,
       fields.financial_status,
       fields.fulfillment_status,
+      // Same rule as the prepaid backfill: 'paid' only proves the customer
+      // paid online while the order is still undelivered. An order that has
+      // already been fulfilled may have been marked paid on delivery, so it
+      // is imported as not prepaid rather than guessed wrong.
+      (fields.financial_status || "").toLowerCase() === "paid" && !getFulfilledAt(order),
       mapImportedOrderStatus(order),
       randomUUID(),
       storeId,
