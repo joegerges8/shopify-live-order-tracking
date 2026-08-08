@@ -187,6 +187,17 @@ async function getOrderByIdForDriver(orderId, driverId) {
   return result.rows[0];
 }
 
+async function getDriverNameById(driverId) {
+  if (!driverId) return null;
+
+  const result = await pool.query(
+    `SELECT full_name FROM drivers WHERE id = $1 LIMIT 1`,
+    [driverId]
+  );
+
+  return result.rows[0]?.full_name || null;
+}
+
 async function assignDriverToOrder(orderId, driverId, storeId) {
   const result = await pool.query(
     `UPDATE orders
@@ -197,9 +208,13 @@ async function assignDriverToOrder(orderId, driverId, storeId) {
   );
   const row = result.rows[0];
   if (row) {
-    syncOrderTagToShopify(storeId, row.shopify_order_id, "ASSIGNED").catch(err =>
-      console.error("[Shopify sync] assign tag failed:", err.message)
-    );
+    getDriverNameById(driverId)
+      .then(driverName =>
+        syncOrderTagToShopify(storeId, row.shopify_order_id, "ASSIGNED", { driverName })
+      )
+      .catch(err =>
+        console.error("[Shopify sync] assign tag failed:", err.message)
+      );
   }
   return row;
 }
@@ -264,7 +279,11 @@ async function updateOrderStatus(orderId, status, storeId) {
     row = await ensureTrackingToken(row);
   }
   if (row) {
-    syncOrderTagToShopify(storeId, row.shopify_order_id, status).catch(err =>
+    const driverName = status === "ASSIGNED"
+      ? await getDriverNameById(row.assigned_driver_id)
+      : null;
+
+    syncOrderTagToShopify(storeId, row.shopify_order_id, status, { driverName }).catch(err =>
       console.error("[Shopify sync] status tag failed:", err.message)
     );
     if (status === "DELIVERED") {

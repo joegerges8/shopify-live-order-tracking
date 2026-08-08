@@ -18,13 +18,38 @@ const TRACKING_COMPANY = process.env.TRACKING_COMPANY_NAME || "DispatchHQ";
 // the link in it. Set SHOPIFY_NOTIFY_CUSTOMER=false to stay silent.
 const NOTIFY_CUSTOMER = process.env.SHOPIFY_NOTIFY_CUSTOMER !== "false";
 
-const STATUS_TAG_MAP = {
-  PENDING:   "delivery-pending",
-  ASSIGNED:  "delivery-assigned",
-  PICKED_UP: "delivery-picked-up",
-  RETURNED:  "delivery-returned",
-  CANCELLED: "delivery-cancelled",
+const STATUS_TAG_LABELS = {
+  PENDING:   "Unfulfilled",
+  PICKED_UP: "Picked Up",
+  RETURNED:  "Returned",
+  CANCELLED: "Cancelled",
 };
+
+const REPLACEABLE_DELIVERY_TAGS = new Set([
+  "delivery-pending",
+  "delivery-assigned",
+  "delivery-picked-up",
+  "delivery-returned",
+  "delivery-cancelled",
+  ...Object.values(STATUS_TAG_LABELS),
+]);
+
+function deliveryTagForStatus(status, { driverName } = {}) {
+  if (status === "ASSIGNED") {
+    const name = firstNonBlank(driverName);
+    return name ? `Assigned to ${name}` : "Assigned";
+  }
+
+  return STATUS_TAG_LABELS[status] || null;
+}
+
+function isReplaceableDeliveryTag(tag) {
+  return (
+    REPLACEABLE_DELIVERY_TAGS.has(tag) ||
+    /^assigned to\b/i.test(tag) ||
+    tag === "Assigned"
+  );
+}
 
 // Every Shopify call in this file goes through here, so token migration and
 // refresh happen automatically wherever the app talks to the Admin API.
@@ -170,8 +195,9 @@ async function fetchOrderCustomerFieldsFromShopify(storeId, shopifyOrderId) {
   return order ? extractOrderCustomerFields(order) : null;
 }
 
-async function syncOrderTagToShopify(storeId, shopifyOrderId, status) {
-  if (!shopifyOrderId || !STATUS_TAG_MAP[status]) return;
+async function syncOrderTagToShopify(storeId, shopifyOrderId, status, options = {}) {
+  const deliveryTag = deliveryTagForStatus(status, options);
+  if (!shopifyOrderId || !deliveryTag) return;
 
   const store = await getStoreCredentials(storeId);
   if (!store || !store.access_token) return;
@@ -190,9 +216,8 @@ async function syncOrderTagToShopify(storeId, shopifyOrderId, status) {
   }
   const { order } = await getRes.json();
 
-  const deliveryTag = STATUS_TAG_MAP[status];
   const existingTags = order.tags
-    ? order.tags.split(",").map(t => t.trim()).filter(t => t && !t.startsWith("delivery-"))
+    ? order.tags.split(",").map(t => t.trim()).filter(t => t && !isReplaceableDeliveryTag(t))
     : [];
   existingTags.push(deliveryTag);
 
