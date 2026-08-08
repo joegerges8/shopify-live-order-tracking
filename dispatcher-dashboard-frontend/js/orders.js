@@ -150,14 +150,14 @@ function createDriverOptions(drivers, orders, selectedDriverId = null) {
 
 const STATUS_DISPLAY = {
   PENDING:          "Unfulfilled",
-  ASSIGNED:         "Assign",
-  PICKED_UP:        "Pickup",
+  ASSIGNED:         "Assigned",
+  PICKED_UP:        "Picked Up",
   OUT_FOR_DELIVERY: "OUT FOR DELIVERY",
   DELIVERED:        "Delivered",
   RETURNED:         "Returned",
   FULFILLED:        "Fulfilled",
   CANCELLED:        "Cancelled",
-  PAID:             "mark as paid",
+  PAID:             "Mark as Paid",
   DELETED:          "Deleted",
 };
 
@@ -166,15 +166,15 @@ function createStatusOptions(currentStatus) {
   // PAID records payment and leaves the delivery status alone, DELETED removes
   // the order outright.
   const statuses = [
-    "ASSIGNED",   // Assign
+    "ASSIGNED",   // Assigned
     "FULFILLED",  // Fulfilled
-    "PICKED_UP",  // Pickup
+    "PICKED_UP",  // Picked Up
     "PENDING",    // Unfulfilled
     "CANCELLED",  // Cancelled
     "DELETED",    // Deleted
     "RETURNED",   // Returned by the driver
     "DELIVERED",  // Delivered
-    "PAID",       // Mark as paid
+    "PAID",       // Mark as Paid
   ];
 
   let options = `<option value="">Select status</option>`;
