@@ -349,6 +349,16 @@ async function updateOrderStatus(orderId, status, storeId) {
 //
 // Shopify is written first: if it refuses, the dashboard keeps showing the
 // order as unpaid rather than claiming money was recorded when it wasn't.
+//
+// When this happens decides what it means, which is why prepaid keys off
+// delivered_at:
+//   - Before delivery — the dispatcher marking an order paid from the
+//     dashboard means the customer settled it some other way, so the driver
+//     has no cash to collect and the order earns nothing.
+//   - On or after delivery — this is the cash-on-delivery payment itself,
+//     either recorded automatically when the driver marks the order
+//     delivered or entered by hand afterwards if that sync failed. That
+//     money is real, so prepaid stays as it was.
 async function markOrderPaid(orderId, storeId) {
   const order = await getOrderById(orderId, storeId);
   if (!order) return null;
@@ -356,7 +366,9 @@ async function markOrderPaid(orderId, storeId) {
   await markOrderPaidInShopify(storeId, order.shopify_order_id);
 
   const result = await pool.query(
-    `UPDATE orders SET financial_status = 'paid'
+    `UPDATE orders
+     SET financial_status = 'paid',
+         prepaid = CASE WHEN delivered_at IS NULL THEN TRUE ELSE prepaid END
      WHERE id = $1 AND store_id = $2
      RETURNING *`,
     [orderId, storeId]
