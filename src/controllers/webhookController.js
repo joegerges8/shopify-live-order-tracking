@@ -1,6 +1,7 @@
 const pool = require("../config/db");
 const { randomUUID } = require("crypto");
 const { resolveAreaOrUnknown } = require("../utils/areaLookup");
+const { extractLineItems } = require("../utils/lineItems");
 
 function parseWebhookOrder(req) {
   return JSON.parse(req.body.toString("utf8"));
@@ -153,6 +154,10 @@ async function handleOrderCreated(req, res) {
     // can no longer tell an online payment from a collected one.
     const prepaid = (financialStatus || "").toLowerCase() === "paid";
 
+    // The products in the order, kept so the driver app can show what is in
+    // the bag without a Shopify call of its own.
+    const lineItems = extractLineItems(order);
+
     const customerLatitude = parseNullableNumber(getNoteAttribute(order, "latitude"));
     const customerLongitude = parseNullableNumber(getNoteAttribute(order, "longitude"));
     const customerAltitude = parseNullableNumber(getNoteAttribute(order, "altitude"));
@@ -169,8 +174,8 @@ async function handleOrderCreated(req, res) {
         shipping_address, city, area, country,
         total_price, financial_status, fulfillment_status, prepaid,
         customer_latitude, customer_longitude, customer_altitude,
-        google_maps_link, tracking_token, store_id, order_status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+        google_maps_link, tracking_token, store_id, order_status, line_items
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22::JSONB)
       ON CONFLICT (shopify_order_id) DO UPDATE SET
         order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
         customer_first_name = COALESCE(EXCLUDED.customer_first_name, orders.customer_first_name),
@@ -190,6 +195,12 @@ async function handleOrderCreated(req, res) {
         -- wins: a webhook replay after delivery carries financial_status
         -- 'paid' for COD orders too and would otherwise rewrite history.
         prepaid = orders.prepaid,
+        -- A replay whose payload carries no usable line items must not erase
+        -- the ones already stored.
+        line_items = CASE
+          WHEN jsonb_array_length(EXCLUDED.line_items) > 0 THEN EXCLUDED.line_items
+          ELSE orders.line_items
+        END,
         customer_latitude = COALESCE(EXCLUDED.customer_latitude, orders.customer_latitude),
         customer_longitude = COALESCE(EXCLUDED.customer_longitude, orders.customer_longitude),
         customer_altitude = COALESCE(EXCLUDED.customer_altitude, orders.customer_altitude),
@@ -207,6 +218,7 @@ async function handleOrderCreated(req, res) {
         totalPrice, financialStatus, fulfillmentStatus, prepaid,
         customerLatitude, customerLongitude, customerAltitude,
         googleMapsLink, trackingToken, storeId, "UNFULFILLED",
+        JSON.stringify(lineItems),
       ]
     );
 
