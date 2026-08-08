@@ -1,4 +1,4 @@
-import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, importOrders, deleteOrder, markOrderPaid } from "./api.js";
+import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, updateOrderArea, getAreas, importOrders, deleteOrder, markOrderPaid } from "./api.js";
 
 const tableBody = document.querySelector("#ordersTable tbody");
 
@@ -11,9 +11,13 @@ const searchOrderEl = document.getElementById("searchOrder");
 const searchPhoneEl = document.getElementById("searchPhone");
 const statusFilterEl = document.getElementById("statusFilter");
 const cityFilterEl = document.getElementById("cityFilter");
+const areaFilterEl = document.getElementById("areaFilter");
 
 let allOrders = [];
 let allDrivers = [];
+// Populated once from GET /orders/areas; used for the per-row override picker.
+let allAreas = [];
+let unknownArea = "Other";
 
 function getCustomerName(order) {
   return (
@@ -24,6 +28,12 @@ function getCustomerName(order) {
 
 function getOrderCity(order) {
   return order.display_city || order.city || "";
+}
+
+// The delivery area (caza) the backend derived from the city, or the unknown
+// bucket for orders whose city string could not be placed.
+function getOrderArea(order) {
+  return order.area || unknownArea;
 }
 
 /* ===========================
@@ -219,23 +229,58 @@ function populateCityFilter(orders) {
   });
 }
 
+// Only areas that actually have orders appear in the filter, so the dropdown
+// stays short even though the backend knows all 26 cazas.
+function populateAreaFilter(orders) {
+  if (!areaFilterEl) return;
+
+  const previous = areaFilterEl.value;
+  const uniqueAreas = [...new Set(orders.map(getOrderArea).filter(Boolean))].sort();
+
+  areaFilterEl.innerHTML = `<option value="">All areas</option>`;
+  uniqueAreas.forEach((area) => {
+    const option = document.createElement("option");
+    option.value = area;
+    option.textContent = area;
+    areaFilterEl.appendChild(option);
+  });
+
+  // Keep the dispatcher's selection across refreshes.
+  if (uniqueAreas.includes(previous)) areaFilterEl.value = previous;
+}
+
+// Options for a row's area override picker, with the order's current area
+// preselected.
+function createAreaOptions(currentArea) {
+  const options = [...allAreas, unknownArea];
+  return options
+    .map((area) => {
+      const selected = area === currentArea ? "selected" : "";
+      return `<option value="${area}" ${selected}>${area}</option>`;
+    })
+    .join("");
+}
+
 function applyFilters() {
   const searchValue = searchOrderEl.value.trim().toLowerCase();
   const phoneQuery = searchPhoneEl.value.replace(/\D/g, "");
   const selectedStatus = statusFilterEl.value;
   const selectedCity = cityFilterEl.value;
+  const selectedArea = areaFilterEl ? areaFilterEl.value : "";
 
   const filteredOrders = allOrders.filter((order) => {
     const orderNumber = String(order.order_number ?? "").toLowerCase();
     const orderStatus = order.order_status ?? "";
     const city = getOrderCity(order);
+    const area = getOrderArea(order);
 
     const matchesSearch = !searchValue || orderNumber.includes(searchValue);
     const matchesPhone = phoneMatches(order, phoneQuery);
     const matchesStatus = !selectedStatus || orderStatus === selectedStatus;
     const matchesCity = !selectedCity || city === selectedCity;
+    const matchesArea = !selectedArea || area === selectedArea;
 
-    return matchesSearch && matchesPhone && matchesStatus && matchesCity;
+    return matchesSearch && matchesPhone && matchesStatus && matchesCity && matchesArea;
   });
 
   renderOrders(filteredOrders, allDrivers);
@@ -281,7 +326,13 @@ function renderOrders(orders, drivers) {
       <td>${order.order_number ?? ""}</td>
       <td>${customerName}</td>
       <td>${createPhoneCell(order)}</td>
-      <td>${city}</td>
+      <td>
+        ${city}
+        <div class="area-cell">
+          <select id="area-${order.id}" class="area-select">${createAreaOptions(getOrderArea(order))}</select>
+          <button class="small-btn" data-area-order-id="${order.id}">Set</button>
+        </div>
+      </td>
       <td>${order.total_price ?? ""}</td>
       <td>${order.financial_status ?? ""}</td>
       <td>${createStatusBadge(order.order_status)}</td>
@@ -312,8 +363,23 @@ function renderOrders(orders, drivers) {
    LOAD DATA
 =========================== */
 
+// Loads the area list once per page load. A failure here is not fatal: the
+// filter still works off the areas present in the orders, only the per-row
+// override picker would be empty.
+async function loadAreas() {
+  if (allAreas.length) return;
+  try {
+    const data = await getAreas();
+    if (Array.isArray(data.areas)) allAreas = data.areas;
+    if (data.unknown) unknownArea = data.unknown;
+  } catch (error) {
+    console.error("Error loading areas:", error);
+  }
+}
+
 async function loadOrders() {
   try {
+    await loadAreas();
     const [orders, drivers] = await Promise.all([getOrders(), getDrivers()]);
 
     allOrders = orders;
@@ -321,6 +387,7 @@ async function loadOrders() {
 
     updateStats(orders, drivers);
     populateCityFilter(orders);
+    populateAreaFilter(orders);
     applyFilters();
   } catch (error) {
     console.error("Error loading orders:", error);
@@ -349,7 +416,23 @@ function attachEventListeners() {
   const assignButtons = document.querySelectorAll("[data-assign-order-id]");
   const unassignButtons = document.querySelectorAll("[data-unassign-order-id]");
   const statusButtons = document.querySelectorAll("[data-status-order-id]");
+  const areaButtons = document.querySelectorAll("[data-area-order-id]");
   const trackButtons = document.querySelectorAll("[data-tracking-token]");
+
+  areaButtons.forEach((button) => {
+    button.addEventListener("click", async () => {
+      const orderId = button.getAttribute("data-area-order-id");
+      const areaSelect = document.getElementById(`area-${orderId}`);
+      if (!areaSelect) return;
+
+      try {
+        await updateOrderArea(orderId, areaSelect.value);
+        await loadOrders();
+      } catch (error) {
+        alert(`Failed to update area: ${error.message}`);
+      }
+    });
+  });
 
   trackButtons.forEach((button) => {
     button.addEventListener("click", () => {
@@ -482,6 +565,7 @@ searchOrderEl.addEventListener("input", applyFilters);
 searchPhoneEl.addEventListener("input", applyFilters);
 statusFilterEl.addEventListener("change", applyFilters);
 cityFilterEl.addEventListener("change", applyFilters);
+if (areaFilterEl) areaFilterEl.addEventListener("change", applyFilters);
 
 const syncOrdersBtn = document.getElementById("syncOrdersBtn");
 const syncStatusEl = document.getElementById("syncStatus");

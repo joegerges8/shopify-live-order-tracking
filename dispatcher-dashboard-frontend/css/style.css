@@ -212,6 +212,21 @@ button:hover {
   font-weight: 700;
 }
 
+/* Area override control tucked under the city in each row. Deliberately small
+   and muted: it is a correction tool, not something to reach for every order. */
+.area-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.area-select {
+  font-size: 11px;
+  padding: 2px 4px;
+  max-width: 120px;
+}
+
 .status-returned {
   background: #ffe4e6;
   color: #9f1239;
