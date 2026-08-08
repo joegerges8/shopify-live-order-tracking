@@ -12,6 +12,14 @@ const {
   importOrdersFromShopify,
 } = require("./shopifyService");
 
+// How recent a GPS ping must be for an order to count as "the driver is on the
+// road with it". Matches ETA_START_WINDOW_SECONDS in etaService — both answer
+// the same question, one for counting stops and one for revealing the ETA.
+const STARTED_WINDOW_SECONDS =
+  Number(process.env.ETA_START_WINDOW_SECONDS) > 0
+    ? Number(process.env.ETA_START_WINDOW_SECONDS)
+    : 600;
+
 // Guards the empty-dashboard auto-import so a store whose import keeps failing
 // doesn't hit Shopify on every page load.
 const lastAutoImportAt = new Map();
@@ -434,8 +442,9 @@ async function getOrderByTrackingToken(token) {
     `SELECT
        o.id, o.order_number, o.order_status,
        o.customer_first_name, o.customer_last_name,
-       o.shipping_address, o.city,
+       o.shipping_address, o.city, o.area,
        o.customer_latitude, o.customer_longitude,
+       o.assigned_driver_id,
        o.delivered_at,
        d.full_name  AS driver_name,
        d.phone      AS driver_phone,
@@ -455,6 +464,33 @@ async function getOrderByTrackingToken(token) {
     [token]
   );
   return result.rows[0];
+}
+
+// Counts the other orders this driver has started and not yet finished.
+//
+// "Started" means GPS is currently flowing for the order, which is what the
+// driver app begins doing the moment "Start Delivery" is tapped. That is a
+// truer signal than order_status: a driver can have five orders ASSIGNED and
+// still be carrying only one, and only the ones actually in the vehicle should
+// push a customer's ETA later.
+async function countStartedDeliveries(driverId, excludeOrderId) {
+  if (!driverId) return 0;
+
+  const result = await pool.query(
+    `SELECT COUNT(*)::int AS count
+     FROM orders o
+     WHERE o.assigned_driver_id = $1
+       AND o.id <> $2
+       AND o.order_status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED', 'FULFILLED')
+       AND EXISTS (
+         SELECT 1 FROM location_updates lu
+         WHERE lu.order_id = o.id
+           AND lu.created_at > NOW() - ($3 || ' seconds')::interval
+       )`,
+    [driverId, excludeOrderId, String(STARTED_WINDOW_SECONDS)]
+  );
+
+  return result.rows[0]?.count ?? 0;
 }
 
 async function updateCustomerLocation(orderId, lat, lng, storeId) {
@@ -496,6 +532,7 @@ module.exports = {
   getCompletedOrdersByDriverId,
   createLocationUpdate,
   getOrderByTrackingToken,
+  countStartedDeliveries,
   updateCustomerLocation,
   updateOrderArea,
 };

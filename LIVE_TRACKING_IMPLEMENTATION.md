@@ -216,24 +216,61 @@ Duration is 1200ms — slightly longer than a typical GPS update interval so mot
 
 ### Route Polyline + ETA
 
-```js
-directionsService.route({
-  origin:      { lat: driver.latitude, lng: driver.longitude },
-  destination: { lat: customer_latitude, lng: customer_longitude },
-  travelMode:  google.maps.TravelMode.DRIVING,
-}, (result, status) => {
-  if (status !== 'OK') return;
-  directionsRenderer.setDirections(result);                          // draws the route line
-  const eta = result.routes[0]?.legs[0]?.duration?.text;
-  document.getElementById('eta-text').textContent = `~${eta} away`; // e.g. "~8 min away"
-});
+The ETA is computed on the **server** (`src/services/etaService.js`) and arrives
+at the page ready-made — in the `GET /api/track/:token` payload, then pushed on
+the socket as `eta_update` after each GPS ping. The browser does no routing.
+
+**Where the destination comes from.** Most orders have no customer coordinates:
+`customer_latitude` is only filled when a Shopify note attribute or a
+dispatcher-pasted map link supplies one. Rather than require that, the ETA
+resolves the order's own `city` text to a town and looks that town's centre up
+in `src/data/town-coords.json` (`src/utils/townCoords.js`). Against three years
+of real orders this resolves 95% of them. The chain is:
+
+| Tier | Source | Precision |
+|---|---|---|
+| 1 | `customer_latitude/longitude` — a real pin, when one exists | `EXACT` |
+| 2 | town centre for the matched city text | `TOWN` |
+| 3 | caza centroid from the `area` column | `AREA` |
+| 4 | nothing resolvable | no ETA shown |
+
+**The estimate.**
+
+```
+drive time (driver → destination)      # Directions with traffic, or a
+                                       # distance-banded haversine fallback
++ ETA_HANDLING_SECONDS × stops ahead   # other orders the driver has started
++ ETA_LAST_MILE_SECONDS                # town centre → the actual door
+floored at ETA_MIN_SECONDS
 ```
 
-`DirectionsRenderer` is configured with:
-- `suppressMarkers: true` — hides the default green A / red B pins (we have our own markers)
-- `strokeColor: '#4f46e5'` — indigo line, visually distinct from the green destination dot
+`stops ahead` counts the driver's other orders that are currently receiving GPS
+pings (`countStartedDeliveries`). It deliberately assumes this customer is
+served **last**: nothing records the order a driver works through a batch in, so
+quoting late and arriving early is the safer error.
 
-**Throttle:** Directions API has per-second and per-day quotas. The route is only recalculated if at least 30 seconds have passed since the last call — driven by `lastEtaFetch` timestamp.
+**Why a range.** A town centre is not a doorstep, so the page shows
+`arriving 6:20 – 6:45 PM` rather than a single number. The window is ±15% for an
+exact pin, ±25% for a town, ±40% for a caza, widened a further 5 points when the
+driver has other stops.
+
+**When it appears.** Two conditions must both hold: the dispatcher has marked
+the order `PICKED_UP`, **and** the driver has tapped "Start Delivery" in the
+driver app. That tap never reaches the backend, but it is what starts the GPS
+stream — so a location ping newer than `ETA_START_WINDOW_SECONDS` is the signal
+(`hasDriverStarted`), needing no app change or extra endpoint.
+
+**Cost control.** Drivers ping every 15 s per order. `etaService` caches per
+order and only re-routes when at least 60 s have passed *and* the driver has
+moved more than 150 m. With no `GOOGLE_MAPS_SERVER_KEY` set at all it falls back
+to straight-line distance × 1.3 at a distance-banded speed, so the feature works
+before the key is configured.
+
+The page draws the returned `polyline` with
+`google.maps.geometry.encoding.decodePath` (hence `&libraries=geometry` on the
+Maps script tag), and renders a translucent circle instead of the sharp green
+dot when precision is `TOWN` or `AREA` — the map should not claim accuracy the
+data does not have.
 
 ---
 
@@ -265,10 +302,14 @@ Connector lines between dots are filled black when both endpoints are done.
 |---|---|---|---|---|
 | PENDING | No | No | No | No |
 | ASSIGNED | No | No | No | No |
-| PICKED_UP | Yes | Yes | Yes | Yes |
-| OUT_FOR_DELIVERY | Yes | Yes | Yes | Yes |
+| PICKED_UP | Yes | Yes | Yes¹ | Yes |
+| OUT_FOR_DELIVERY | Yes | Yes | Yes¹ | Yes |
 | DELIVERED | No (removed) | No (hidden) | No | No |
 | CANCELLED | No | No | No | No |
+
+¹ Only once the driver has also tapped "Start Delivery" — i.e. GPS is actively
+flowing for this order. An order marked `PICKED_UP` that is still sitting in the
+shop shows the car and badge but no time.
 
 ---
 

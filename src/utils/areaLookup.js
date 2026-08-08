@@ -366,20 +366,26 @@ function containsWord(city, town) {
   return before === " " && after === " ";
 }
 
-// Resolves a raw city string to an area name, or null when nothing matches.
-// Callers store null as UNKNOWN_AREA ("Other").
-function resolveArea(city) {
+// Resolves a raw city string to the town key it matches in TOWN_TO_AREA, or
+// null when nothing matches. This is the actual matcher; resolveArea is a thin
+// wrapper over it.
+//
+// The town key matters on its own because it is finer-grained than the area:
+// Amchit and Jbeil are both "Jbeil" as an area, but they are a 10-minute drive
+// apart, so the ETA calculation resolves the town and looks its coordinates up
+// in town-coords.json rather than settling for the caza.
+function resolveTown(city) {
   const normalized = normalize(city);
   if (!normalized || NOT_A_PLACE.has(normalized)) return null;
 
   // 1. Exact match — the common case for clean city values.
-  if (TOWN_TO_AREA[normalized]) return TOWN_TO_AREA[normalized];
+  if (TOWN_TO_AREA[normalized]) return normalized;
 
   // 2. Whole-word match, longest key first. This is what rescues the long tail
   //    of "<town> + extra words" strings that make up most of the history.
   for (const town of SORTED_TOWNS) {
     if (town.length < 4) continue; // too short to match safely inside a sentence
-    if (containsWord(normalized, town)) return TOWN_TO_AREA[town];
+    if (containsWord(normalized, town)) return town;
   }
 
   // 3. Fuzzy match for typos, single-word inputs only. Multi-word strings are
@@ -406,10 +412,17 @@ function resolveArea(city) {
       }
     }
 
-    if (best && bestDistance <= maxDistance) return TOWN_TO_AREA[best];
+    if (best && bestDistance <= maxDistance) return best;
   }
 
   return null;
+}
+
+// Resolves a raw city string to an area name, or null when nothing matches.
+// Callers store null as UNKNOWN_AREA ("Other").
+function resolveArea(city) {
+  const town = resolveTown(city);
+  return town ? TOWN_TO_AREA[town] : null;
 }
 
 // Convenience wrapper for write paths: always returns a storable string.
@@ -422,6 +435,7 @@ module.exports = {
   UNKNOWN_AREA,
   TOWN_TO_AREA,
   normalize,
+  resolveTown,
   resolveArea,
   resolveAreaOrUnknown,
 };

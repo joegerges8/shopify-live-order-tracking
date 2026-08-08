@@ -382,12 +382,11 @@
     let map               = null;
     let driverMarker      = null;
     let destMarker        = null;
-    let directionsService = null;
-    let directionsRenderer= null;
+    let destCircle        = null;
+    let routeLine         = null;
     let prevDriverPos     = null;
     let currentBearing    = 0;
     let animFrame         = null;
-    let lastEtaFetch      = 0;
     let currentData       = null;
     let pollInterval      = null;
     let bikeIconBase64    = null;
@@ -405,7 +404,16 @@
         if (!currentData) return;
         currentData.driver_location = { latitude, longitude, updated_at };
         applyMapData(currentData);
-        fetchETA();
+      });
+
+      // The ETA is computed on the server and pushed here after each GPS ping,
+      // so every customer sees the same number and the page never calls the
+      // Directions API itself.
+      socket.on('eta_update', (eta) => {
+        if (!currentData) return;
+        currentData.eta = eta;
+        applyEta(currentData);
+        applyMapData(currentData);
       });
 
       socket.on('status_update', ({ status }) => {
@@ -538,26 +546,83 @@
       animFrame = requestAnimationFrame(step);
     }
 
-    // ── ETA via DirectionsService ──────────────────────────────────────────
+    // ── ETA ────────────────────────────────────────────────────────────────
+    //
+    // The ETA arrives ready-made from the backend (GET /api/track/:token, then
+    // pushed on the socket after each GPS ping). The page does no routing of
+    // its own: the server has the traffic-aware Directions call, the town
+    // coordinates and the count of other orders the driver is carrying.
+    //
+    // It is deliberately a range rather than a single number. The destination
+    // is usually the centre of the customer's town, not their doorstep, so a
+    // confident "8 mins" would be false precision — the window widens when the
+    // destination is coarser and narrows when the driver has only this stop.
 
-    function fetchETA() {
-      if (!directionsService || !currentData) return;
-      const loc      = currentData.driver_location;
-      const isActive = ['PICKED_UP', 'OUT_FOR_DELIVERY'].includes(currentData.order_status);
-      if (!loc || !isActive || currentData.customer_latitude == null) return;
-      if (Date.now() - lastEtaFetch < 30_000) return;
-      lastEtaFetch = Date.now();
+    function applyEta(data) {
+      const el = document.getElementById('eta-text');
+      el.textContent = data.eta && data.eta.text ? data.eta.text : '';
+    }
 
-      directionsService.route({
-        origin:      { lat: Number(loc.latitude),                  lng: Number(loc.longitude) },
-        destination: { lat: Number(currentData.customer_latitude), lng: Number(currentData.customer_longitude) },
-        travelMode:  google.maps.TravelMode.DRIVING,
-      }, (result, status) => {
-        if (status !== google.maps.DirectionsStatus.OK) return;
-        directionsRenderer.setMap(map);
-        directionsRenderer.setDirections(result);
-        const duration = result.routes[0]?.legs[0]?.duration?.text;
-        document.getElementById('eta-text').textContent = duration ? `~${duration} away` : '';
+    // Draws the driver's route from the polyline the server returned. Falls
+    // back to drawing nothing — the moving marker still tells the story.
+    function drawRoute(eta) {
+      if (!map || !window.google?.maps?.geometry) return;
+
+      if (!eta || !eta.polyline) {
+        if (routeLine) { routeLine.setMap(null); routeLine = null; }
+        return;
+      }
+
+      const path = google.maps.geometry.encoding.decodePath(eta.polyline);
+
+      if (routeLine) {
+        routeLine.setPath(path);
+        routeLine.setMap(map);
+        return;
+      }
+
+      routeLine = new google.maps.Polyline({
+        path,
+        map,
+        strokeColor:   '#4f46e5',
+        strokeWeight:  5,
+        strokeOpacity: 0.85,
+        zIndex:        1,
+      });
+    }
+
+    // Shows where the driver is heading. An exact pin gets a sharp dot; a town
+    // centre gets a soft circle roughly the size of the uncertainty, because
+    // drawing a precise dot on a town centre would claim accuracy we don't have.
+    function drawDestination(eta) {
+      if (!map || !eta || !eta.destination) return;
+
+      const pos = {
+        lat: Number(eta.destination.latitude),
+        lng: Number(eta.destination.longitude),
+      };
+      if (!Number.isFinite(pos.lat) || !Number.isFinite(pos.lng)) return;
+
+      if (eta.precision === 'EXACT') return; // already drawn as a pin
+
+      const radius = eta.precision === 'AREA' ? 4000 : 900;
+
+      if (destCircle) {
+        destCircle.setCenter(pos);
+        destCircle.setRadius(radius);
+        return;
+      }
+
+      destCircle = new google.maps.Circle({
+        map,
+        center:        pos,
+        radius,
+        fillColor:     '#22c55e',
+        fillOpacity:   0.12,
+        strokeColor:   '#22c55e',
+        strokeOpacity: 0.45,
+        strokeWeight:  2,
+        zIndex:        0,
       });
     }
 
@@ -591,6 +656,10 @@
         }
       }
 
+      // Route line and approximate destination, both driven by the server ETA.
+      drawRoute(isActive ? data.eta : null);
+      drawDestination(data.eta);
+
       // Driver marker (car icon)
       if (data.driver_location && isActive) {
         const newPos = {
@@ -608,11 +677,15 @@
           });
           prevDriverPos = newPos;
 
-          // Fit both driver and destination in view
-          if (destMarker) {
+          // Fit both driver and destination in view. The destination is either
+          // the exact pin or, far more often, the town centre the ETA resolved.
+          const destPoint =
+            (destMarker && destMarker.getPosition()) ||
+            (destCircle && destCircle.getCenter());
+          if (destPoint) {
             const bounds = new google.maps.LatLngBounds();
             bounds.extend(newPos);
-            bounds.extend(destMarker.getPosition());
+            bounds.extend(destPoint);
             map.fitBounds(bounds, { top: 60, right: 60, bottom: 260, left: 60 });
           } else {
             map.setCenter(newPos);
@@ -625,7 +698,7 @@
         driverMarker.setMap(null);
         driverMarker = null;
         prevDriverPos = null;
-        directionsRenderer.setMap(null);
+        if (routeLine) { routeLine.setMap(null); routeLine = null; }
       }
     }
 
@@ -639,7 +712,11 @@
       document.getElementById('live-badge').className =
         'live-badge' + (isActive && data.driver_location ? ' show' : '');
 
-      if (!isActive) document.getElementById('eta-text').textContent = '';
+      // The ETA is shown only once the order is on the road and the driver has
+      // actually set off — the backend withholds it until then, so an empty
+      // eta is the normal case early on, not an error.
+      if (isActive) applyEta(data);
+      else document.getElementById('eta-text').textContent = '';
 
       updateProgressSteps(status);
 
@@ -672,9 +749,6 @@
         currentData = data;
         applyCardData(data);
         applyMapData(data);
-        if (data.driver_location && ['PICKED_UP', 'OUT_FOR_DELIVERY'].includes(data.order_status)) {
-          fetchETA();
-        }
       } catch (_) {
         // Network error — keep polling silently
       }
@@ -718,22 +792,12 @@
         ],
       });
 
-      directionsService  = new google.maps.DirectionsService();
-      directionsRenderer = new google.maps.DirectionsRenderer({
-        suppressMarkers: true,
-        polylineOptions: {
-          strokeColor:   '#4f46e5',
-          strokeWeight:  5,
-          strokeOpacity: 0.85,
-        },
-      });
-
       if (currentData) applyMapData(currentData);
     };
   </script>
 
   <script
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAriVJnIv8YZpcpQOIUy-4f3Tb1i0RTfAg&callback=initTrackingMap"
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAriVJnIv8YZpcpQOIUy-4f3Tb1i0RTfAg&libraries=geometry&callback=initTrackingMap"
     async defer>
   </script>
 
