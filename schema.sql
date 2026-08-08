@@ -41,7 +41,7 @@ CREATE TABLE drivers (
 -- The dispatcher assigns a driver by setting assigned_driver_id.
 -- order_status tracks the delivery lifecycle:
 --   PENDING → ASSIGNED → PICKED_UP → OUT_FOR_DELIVERY → DELIVERED
---   (or CANCELLED at any point)
+--   (or RETURNED when the driver brings the order back, or CANCELLED at any point)
 -- delivered_at is stamped by the backend the moment status becomes DELIVERED,
 -- providing an accurate record of when each delivery was completed.
 -- This column was added after the initial schema via the migration below.
