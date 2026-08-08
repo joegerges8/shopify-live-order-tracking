@@ -151,17 +151,18 @@ const STATUS_DISPLAY = {
 };
 
 function createStatusOptions(currentStatus) {
+  // Dispatcher's preferred order. PAID and DELETED are not delivery statuses:
+  // PAID records payment and leaves the delivery status alone, DELETED removes
+  // the order outright.
   const statuses = [
-    "PENDING",
-    "ASSIGNED",
-    "PICKED_UP",
-    "DELIVERED",
-    "FULFILLED",
-    "CANCELLED",
-    // Neither of these is a delivery status. PAID records payment and leaves
-    // the delivery status alone; DELETED removes the order outright.
-    "PAID",
-    "DELETED",
+    "ASSIGNED",   // Assign
+    "FULFILLED",  // Fulfilled
+    "PICKED_UP",  // Pickup
+    "PENDING",    // Unfulfilled
+    "CANCELLED",  // Cancelled
+    "DELETED",    // Deleted
+    "DELIVERED",  // Delivered
+    "PAID",       // Mark as paid
   ];
 
   let options = `<option value="">Select status</option>`;
