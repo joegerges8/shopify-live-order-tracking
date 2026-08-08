@@ -149,16 +149,16 @@ function createDriverOptions(drivers, orders, selectedDriverId = null) {
 =========================== */
 
 const STATUS_DISPLAY = {
-  PENDING:          "UNFULFILLED",
-  ASSIGNED:         "ASSIGNED",
-  PICKED_UP:        "PICKED_UP",
+  PENDING:          "Unfulfilled",
+  ASSIGNED:         "Assign",
+  PICKED_UP:        "Pickup",
   OUT_FOR_DELIVERY: "OUT FOR DELIVERY",
-  DELIVERED:        "DELIVERED",
-  RETURNED:         "RETURNED",
-  FULFILLED:        "FULFILLED",
-  CANCELLED:        "CANCELLED",
-  PAID:             "MARK AS PAID",
-  DELETED:          "DELETE ORDER",
+  DELIVERED:        "Delivered",
+  RETURNED:         "Returned",
+  FULFILLED:        "Fulfilled",
+  CANCELLED:        "Cancelled",
+  PAID:             "mark as paid",
+  DELETED:          "Deleted",
 };
 
 function createStatusOptions(currentStatus) {
@@ -172,8 +172,8 @@ function createStatusOptions(currentStatus) {
     "PENDING",    // Unfulfilled
     "CANCELLED",  // Cancelled
     "DELETED",    // Deleted
-    "DELIVERED",  // Delivered
     "RETURNED",   // Returned by the driver
+    "DELIVERED",  // Delivered
     "PAID",       // Mark as paid
   ];
 
