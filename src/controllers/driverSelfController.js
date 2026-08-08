@@ -14,6 +14,7 @@ const {
   markOrderPaid,
 } = require("../services/orderService");
 const { syncOrderTagToShopify, markDeliveredInShopify } = require("../services/shopifyService");
+const { etaForTrackedOrder, clearEta } = require("../services/etaService");
 const { getIO } = require("../socket");
 
 // Returns all active orders assigned to the authenticated driver.
@@ -71,11 +72,31 @@ async function postMyOrderLocation(req, res) {
 
     const io = getIO();
     if (io && order.tracking_token) {
-      io.to(`order:${order.tracking_token}`).emit("location_update", {
+      const room = `order:${order.tracking_token}`;
+      io.to(room).emit("location_update", {
         latitude,
         longitude,
         updated_at: created.created_at,
       });
+
+      // Push a fresh ETA alongside the position so the customer's page updates
+      // without polling. etaForTrackedOrder caches internally, so the pings
+      // arriving every 15 seconds do not each cost a Directions call.
+      //
+      // Best-effort: a failed ETA must not fail the driver's location POST,
+      // which is the thing that actually keeps the map alive.
+      try {
+        const eta = await etaForTrackedOrder({
+          ...order,
+          assigned_driver_id: driverId,
+          driver_lat: latitude,
+          driver_lng: longitude,
+          location_updated_at: created.created_at,
+        });
+        if (eta) io.to(room).emit("eta_update", eta);
+      } catch (error) {
+        console.error("ETA push error:", error);
+      }
     }
 
     return res.status(201).json(created);
@@ -122,6 +143,13 @@ async function patchMyOrderStatus(req, res) {
       }
 
       return res.status(403).json({ error: "Not allowed for this order" });
+    }
+
+    // A finished order must not keep serving a cached countdown if its page is
+    // reopened, and a status change can move an order in or out of the window
+    // where an ETA is shown at all.
+    if (["DELIVERED", "RETURNED", "CANCELLED"].includes(status)) {
+      clearEta(orderId);
     }
 
     const io = getIO();

@@ -1,84 +1,52 @@
+const { getRoute } = require("../services/mapsService");
+
+// GET /api/maps/directions — driver-authenticated route lookup used by the
+// driver app to draw its navigation line. The Google call itself lives in
+// mapsService so the customer ETA can reuse it without going through HTTP.
 async function getDirections(req, res) {
   try {
-    const key = (process.env.GOOGLE_MAPS_SERVER_KEY || '').trim();
-    if (!key) {
-      return res.status(501).json({
-        error:
-          'Directions not configured. Set GOOGLE_MAPS_SERVER_KEY on the server.',
-      });
-    }
-
     const originLat = Number(req.query.originLat);
     const originLng = Number(req.query.originLng);
     const destLat = Number(req.query.destLat);
     const destLng = Number(req.query.destLng);
 
-    const nums = [originLat, originLng, destLat, destLng];
-    if (nums.some((n) => !Number.isFinite(n))) {
+    const result = await getRoute({ originLat, originLng, destLat, destLng });
+
+    if (result.ok) {
+      return res.status(200).json(result.route);
+    }
+
+    if (result.status === "NOT_CONFIGURED") {
+      return res.status(501).json({
+        error: "Directions not configured. Set GOOGLE_MAPS_SERVER_KEY on the server.",
+      });
+    }
+
+    if (result.status === "INVALID_REQUEST") {
       return res.status(400).json({
         error:
-          'Invalid coordinates. Provide originLat, originLng, destLat, destLng as numbers.',
+          "Invalid coordinates. Provide originLat, originLng, destLat, destLng as numbers.",
       });
     }
 
-    const url = new URL('https://maps.googleapis.com/maps/api/directions/json');
-    url.searchParams.set('origin', `${originLat},${originLng}`);
-    url.searchParams.set('destination', `${destLat},${destLng}`);
-    url.searchParams.set('mode', 'driving');
-    url.searchParams.set('departure_time', 'now');
-    url.searchParams.set('traffic_model', 'best_guess');
-    url.searchParams.set('key', key);
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
-    let resp;
-    try {
-      resp = await fetch(url.toString(), { signal: controller.signal });
-    } finally {
-      clearTimeout(timeout);
+    if (result.status === "UNREACHABLE" || result.status.startsWith("HTTP_")) {
+      return res.status(502).json({ error: result.message });
     }
 
-    const data = await resp.json().catch(() => null);
-    if (!resp.ok) {
-      return res.status(502).json({
-        error: `Directions request failed (HTTP ${resp.status})`,
-        details: data,
-      });
-    }
-
-    if (!data || data.status !== 'OK' || !Array.isArray(data.routes) || data.routes.length === 0) {
-      // Include Google's own status and error_message so the client can show a
-      // meaningful reason (e.g. REQUEST_DENIED means the API key is wrong or
-      // the Directions API is not enabled; ZERO_RESULTS means no road route exists).
-      const googleStatus = data?.status ?? 'UNKNOWN';
-      const googleMsg = data?.error_message ?? '';
-      const detail = googleMsg ? ` (${googleStatus}: ${googleMsg})` : ` (${googleStatus})`;
-      return res.status(400).json({
-        error: `No route returned from Google Directions API${detail}`,
-        status: googleStatus,
-        message: googleMsg,
-      });
-    }
-
-    const route = data.routes[0];
-    const polyline = route?.overview_polyline?.points;
-    if (!polyline || typeof polyline !== 'string') {
-      return res.status(400).json({ error: 'Missing polyline in Directions response' });
-    }
-
-    const leg = route?.legs?.[0];
-    return res.status(200).json({
-      polyline,
-      distanceText: leg?.distance?.text ?? '',
-      distanceMeters: leg?.distance?.value ?? 0,
-      durationText: leg?.duration?.text ?? '',
-      durationSeconds: leg?.duration?.value ?? 0,
-      durationInTrafficText: leg?.duration_in_traffic?.text ?? leg?.duration?.text ?? '',
-      durationInTrafficSeconds: leg?.duration_in_traffic?.value ?? leg?.duration?.value ?? 0,
+    // Google answered but gave us no usable route. Pass its own status and
+    // message through so the client can show a meaningful reason (REQUEST_DENIED
+    // means the key is wrong or the Directions API is not enabled; ZERO_RESULTS
+    // means no road route exists).
+    const detail = result.message
+      ? ` (${result.status}: ${result.message})`
+      : ` (${result.status})`;
+    return res.status(400).json({
+      error: `No route returned from Google Directions API${detail}`,
+      status: result.status,
+      message: result.message,
     });
   } catch (e) {
-    return res.status(500).json({ error: 'Failed to get directions' });
+    return res.status(500).json({ error: "Failed to get directions" });
   }
 }
 
