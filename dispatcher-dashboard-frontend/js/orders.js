@@ -297,29 +297,71 @@ function applyFilters() {
    RENDER
 =========================== */
 
-// What the driver wrote about the order from the app — "nobody home, tried
-// 3pm", "gate code 4412". It is shown as a second row under the order it
-// belongs to, spanning the table, so the note stays attached to its order
-// instead of becoming a column that is blank for almost every row.
+/* ===========================
+   DRIVER NOTES
+=========================== */
+
+// Which notes the dispatcher has opened, by order id. The table re-renders on
+// its own every 30 seconds, and without this an open note would snap shut
+// mid-read each time.
+const expandedNoteOrderIds = new Set();
+
+function getDriverNote(order) {
+  return String(order.driver_note ?? "").trim();
+}
+
+// The toggle that sits in the order's row. Rendered only for orders whose
+// driver actually wrote something, so a dispatcher scanning the table sees a
+// note marker exactly where there is a note and nothing anywhere else.
+function createDriverNoteToggle(order) {
+  if (!getDriverNote(order)) return "";
+
+  const isOpen = expandedNoteOrderIds.has(String(order.id));
+  return `<button class="small-btn note-btn" type="button"
+             data-note-order-id="${order.id}" aria-expanded="${isOpen}"
+             title="Show the driver's note">📝 Note<span class="note-caret">${isOpen ? "▲" : "▼"}</span></button>`;
+}
+
+// The note itself — "nobody home, tried 3pm", "gate code 4412" — as a
+// full-width row under the order it belongs to. It stays collapsed until the
+// dispatcher opens it, so the table keeps one line per order, and it is a row
+// rather than a column because free text needs the width and a column would be
+// blank for almost every order.
 //
 // Returns null when the driver has written nothing, and the order then renders
-// exactly as it did before: a dispatcher only sees this row when there is
-// something to read.
+// exactly as it did before.
 function createDriverNoteRow(order) {
-  const note = String(order.driver_note ?? "").trim();
+  const note = getDriverNote(order);
   if (!note) return null;
 
   const row = document.createElement("tr");
   row.className = "driver-note-row";
+  row.id = `driver-note-${order.id}`;
+  row.hidden = !expandedNoteOrderIds.has(String(order.id));
   // The note is text a driver typed, so it is escaped rather than trusted as
   // markup, and its line breaks are kept by the stylesheet's pre-wrap.
-  row.innerHTML = `
-    <td colspan="10">
-      <span class="driver-note-label">Driver note</span>
-      <span class="driver-note-text">${escapeHtml(note)}</span>
-    </td>
-  `;
+  row.innerHTML =
+    `<td colspan="10"><div class="driver-note-cell">` +
+    `<span class="driver-note-label">Driver note</span>` +
+    `<span class="driver-note-text">${escapeHtml(note)}</span>` +
+    `</div></td>`;
   return row;
+}
+
+function toggleDriverNote(button) {
+  const orderId = button.getAttribute("data-note-order-id");
+  const row = document.getElementById(`driver-note-${orderId}`);
+  if (!row) return;
+
+  const isOpen = !row.hidden;
+  row.hidden = isOpen;
+  button.setAttribute("aria-expanded", String(!isOpen));
+
+  const caret = button.querySelector(".note-caret");
+  if (caret) caret.textContent = isOpen ? "▼" : "▲";
+
+  if (isOpen) expandedNoteOrderIds.delete(orderId);
+  else expandedNoteOrderIds.add(orderId);
 }
 
 function renderOrders(orders, drivers) {
@@ -357,7 +399,10 @@ function renderOrders(orders, drivers) {
          <button class="small-btn" data-assign-order-id="${order.id}">Assign</button>`;
 
     row.innerHTML = `
-      <td>${order.order_number ?? ""}</td>
+      <td>
+        ${order.order_number ?? ""}
+        ${createDriverNoteToggle(order)}
+      </td>
       <td>${customerName}</td>
       <td>${createPhoneCell(order)}</td>
       <td>
@@ -455,6 +500,11 @@ function attachEventListeners() {
   const statusButtons = document.querySelectorAll("[data-status-order-id]");
   const areaButtons = document.querySelectorAll("[data-area-order-id]");
   const trackButtons = document.querySelectorAll("[data-tracking-token]");
+  const noteButtons = document.querySelectorAll("[data-note-order-id]");
+
+  noteButtons.forEach((button) => {
+    button.addEventListener("click", () => toggleDriverNote(button));
+  });
 
   areaButtons.forEach((button) => {
     button.addEventListener("click", async () => {

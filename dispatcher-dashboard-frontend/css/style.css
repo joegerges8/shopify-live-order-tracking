@@ -380,14 +380,16 @@ button:hover {
   padding-bottom: 10px;
   font-size: 15px;
   color: #713f12;
-  /* Notes are free text typed on a phone: keep the driver's line breaks and
-     wrap long ones instead of stretching the table. */
-  white-space: pre-wrap;
+}
+
+.driver-note-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
 
 .driver-note-label {
-  display: inline-block;
-  margin-right: 10px;
+  flex-shrink: 0;
   padding: 2px 8px;
   border-radius: 999px;
   background: #fde68a;
@@ -401,4 +403,40 @@ button:hover {
 
 .driver-note-text {
   font-weight: 500;
+  /* Notes are free text typed on a phone: keep the driver's line breaks, and
+     wrap long ones instead of stretching the table. Scoped to the text alone
+     so the surrounding markup's own indentation is not rendered too. */
+  white-space: pre-wrap;
+}
+
+/* Toggle in the order row, rendered only for orders that have a driver note.
+   Its presence is the signal that a note exists — the note itself stays folded
+   away so the table keeps one line per order. */
+.note-btn {
+  margin-left: 8px;
+  /* Smaller and warmer than the blue actions around it: this reveals a note,
+     it does not change the order. */
+  padding: 4px 9px;
+  font-size: 12px;
+  background: #fde68a;
+  color: #713f12;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* .small-btn:hover turns every button dark blue, which would swallow the
+   amber on the way past. */
+.note-btn:hover {
+  background: #fcd34d;
+}
+
+.note-caret {
+  margin-left: 6px;
+  font-size: 10px;
+}
+
+/* A collapsed note must stay collapsed: [hidden] alone loses to any rule that
+   gives table rows a display value. */
+.driver-note-row[hidden] {
+  display: none;
 }
