@@ -2,6 +2,7 @@ const pool = require("../config/db");
 const { randomUUID } = require("crypto");
 const { resolveAreaOrUnknown } = require("../utils/areaLookup");
 const { extractLineItems } = require("../utils/lineItems");
+const { extractOrderNote } = require("../utils/orderNote");
 
 function parseWebhookOrder(req) {
   return JSON.parse(req.body.toString("utf8"));
@@ -158,6 +159,12 @@ async function handleOrderCreated(req, res) {
     // the bag without a Shopify call of its own.
     const lineItems = extractLineItems(order);
 
+    // The order note, shown to the driver on the order detail screen. Most
+    // notes are written in the Shopify admin after the order lands, which the
+    // orders/updated webhook picks up; this only catches the ones already
+    // there at checkout.
+    const note = extractOrderNote(order);
+
     const customerLatitude = parseNullableNumber(getNoteAttribute(order, "latitude"));
     const customerLongitude = parseNullableNumber(getNoteAttribute(order, "longitude"));
     const customerAltitude = parseNullableNumber(getNoteAttribute(order, "altitude"));
@@ -174,8 +181,8 @@ async function handleOrderCreated(req, res) {
         shipping_address, city, area, country,
         total_price, financial_status, fulfillment_status, prepaid,
         customer_latitude, customer_longitude, customer_altitude,
-        google_maps_link, tracking_token, store_id, order_status, line_items
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22::JSONB)
+        google_maps_link, tracking_token, store_id, order_status, line_items, note
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22::JSONB,$23)
       ON CONFLICT (shopify_order_id) DO UPDATE SET
         order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
         customer_first_name = COALESCE(EXCLUDED.customer_first_name, orders.customer_first_name),
@@ -201,6 +208,9 @@ async function handleOrderCreated(req, res) {
           WHEN jsonb_array_length(EXCLUDED.line_items) > 0 THEN EXCLUDED.line_items
           ELSE orders.line_items
         END,
+        -- A create replay carrying no note must not wipe one written in the
+        -- Shopify admin since; clearing a note is the updated webhook's job.
+        note = COALESCE(EXCLUDED.note, orders.note),
         customer_latitude = COALESCE(EXCLUDED.customer_latitude, orders.customer_latitude),
         customer_longitude = COALESCE(EXCLUDED.customer_longitude, orders.customer_longitude),
         customer_altitude = COALESCE(EXCLUDED.customer_altitude, orders.customer_altitude),
@@ -218,13 +228,53 @@ async function handleOrderCreated(req, res) {
         totalPrice, financialStatus, fulfillmentStatus, prepaid,
         customerLatitude, customerLongitude, customerAltitude,
         googleMapsLink, trackingToken, storeId, "UNFULFILLED",
-        JSON.stringify(lineItems),
+        JSON.stringify(lineItems), note,
       ]
     );
 
     return res.status(200).send("Webhook received");
   } catch (error) {
     console.error("Webhook error:", error);
+    return res.status(500).send("Server error");
+  }
+}
+
+// orders/updated fires on every edit to an order, which is how a note written
+// in the Shopify admin after the order was placed reaches the driver — the
+// normal case, since the merchant reads the order first and then writes the
+// instructions for the driver.
+//
+// The handler deliberately touches nothing but the note. This topic also fires
+// for the app's own writes (delivery tags, fulfilment, marking COD orders
+// paid), and the payload of those echoes would otherwise fight the dispatcher's
+// state: a driver's status, a corrected area or the prepaid flag would be
+// rewritten from a stale Shopify snapshot. Orders unknown to the database are
+// ignored rather than inserted — orders/create owns that.
+async function handleOrderUpdated(req, res) {
+  try {
+    const order = parseWebhookOrder(req);
+    const storeId = await getStoreId(req.shopDomain);
+    const shopifyOrderId = order.id;
+
+    if (!shopifyOrderId) {
+      return res.status(200).send("Missing order id");
+    }
+    if (!storeId) {
+      console.warn(`[Webhook] Ignoring order update for unknown shop: ${req.shopDomain || "missing shop"}`);
+      return res.status(200).send("Store not found");
+    }
+
+    // Written straight through, null included: the merchant deleting a note in
+    // Shopify has to remove it from the driver's screen too, so this is the
+    // one path that clears the column.
+    await pool.query(
+      `UPDATE orders SET note = $1 WHERE shopify_order_id = $2 AND store_id = $3`,
+      [extractOrderNote(order), shopifyOrderId, storeId]
+    );
+
+    return res.status(200).send("Webhook received");
+  } catch (error) {
+    console.error("Order updated webhook error:", error);
     return res.status(500).send("Server error");
   }
 }
@@ -393,6 +443,7 @@ async function handleShopRedact(req, res) {
 
 module.exports = {
   handleOrderCreated,
+  handleOrderUpdated,
   handleOrderCancelled,
   handleOrderDeleted,
   handleOrderFulfilled,
