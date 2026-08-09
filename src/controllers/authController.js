@@ -150,6 +150,9 @@ async function oauthCallback(req, res) {
 async function registerWebhooks(shop, accessToken) {
   const topics = [
     "orders/create",
+    // Carries the order note when a merchant writes or edits it on an order
+    // that already exists — the usual way a note for the driver is written.
+    "orders/updated",
     "orders/cancelled",
     "orders/delete",
     "orders/fulfilled",
