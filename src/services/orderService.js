@@ -195,9 +195,21 @@ async function getOrderById(orderId, storeId) {
   return result.rows[0];
 }
 
+// Every driver-facing read joins stores for store_name, because one delivery
+// app serves several shops: the driver's WhatsApp message to the customer has
+// to name which shop the order is from. LEFT JOIN, not JOIN — schema.sql notes
+// that databases migrated from the pre-store_id schema can still hold orders
+// with a null store_id until they are backfilled, and an inner join would drop
+// those off the driver's list entirely rather than merely leaving the name
+// blank. shop_domain comes along as the fallback for a store that never got a
+// store_name from Shopify.
 async function getOrderByIdForDriver(orderId, driverId) {
   const result = await pool.query(
-    `SELECT * FROM orders WHERE id = $1 AND assigned_driver_id = $2 LIMIT 1`,
+    `SELECT o.*, s.store_name, s.shop_domain
+     FROM orders o
+     LEFT JOIN stores s ON s.id = o.store_id
+     WHERE o.id = $1 AND o.assigned_driver_id = $2
+     LIMIT 1`,
     [orderId, driverId]
   );
   return result.rows[0];
@@ -443,10 +455,12 @@ async function updateDriverOrderNote(orderId, driverId, note) {
 
 async function getOrdersByDriverId(driverId) {
   const result = await pool.query(
-    `SELECT * FROM orders
-     WHERE assigned_driver_id = $1
-       AND order_status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED')
-     ORDER BY created_at DESC`,
+    `SELECT o.*, s.store_name, s.shop_domain
+     FROM orders o
+     LEFT JOIN stores s ON s.id = o.store_id
+     WHERE o.assigned_driver_id = $1
+       AND o.order_status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED')
+     ORDER BY o.created_at DESC`,
     [driverId]
   );
   return result.rows;
@@ -454,10 +468,12 @@ async function getOrdersByDriverId(driverId) {
 
 async function getCompletedOrdersByDriverId(driverId) {
   const result = await pool.query(
-    `SELECT * FROM orders
-     WHERE assigned_driver_id = $1
-       AND order_status = 'DELIVERED'
-     ORDER BY COALESCE(delivered_at, created_at) DESC
+    `SELECT o.*, s.store_name, s.shop_domain
+     FROM orders o
+     LEFT JOIN stores s ON s.id = o.store_id
+     WHERE o.assigned_driver_id = $1
+       AND o.order_status = 'DELIVERED'
+     ORDER BY COALESCE(o.delivered_at, o.created_at) DESC
      LIMIT 100`,
     [driverId]
   );
