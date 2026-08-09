@@ -90,6 +90,12 @@ CREATE TABLE orders (
                                               -- upstairs bell", "call before arriving" —
                                               -- reach the driver without a second tool.
                                               -- NULL when the order carries no note.
+    driver_note TEXT,                         -- what the driver wrote about this order
+                                              -- from the app ("nobody home, tried 3pm",
+                                              -- "gate code 4412"). Unlike note above it
+                                              -- never syncs to Shopify: the driver owns
+                                              -- it, and only the driver assigned to the
+                                              -- order can write it. NULL until they do.
     order_status VARCHAR(30) DEFAULT 'UNFULFILLED',
     assigned_driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
     tracking_token TEXT,                      -- shared with customer for live tracking
@@ -110,6 +116,7 @@ CREATE TABLE orders (
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN line_items JSONB NOT NULL DEFAULT '[]'::JSONB;
 -- Existing rows stay empty until the order is re-imported from Shopify
 -- (the dashboard's "import orders" action backfills them).
+-- Migration for existing databases: ALTER TABLE orders ADD COLUMN driver_note TEXT;
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN note TEXT;
 -- Existing rows stay NULL until the order is updated in Shopify (the orders/updated
 -- webhook carries the note) or re-imported from the dashboard.

@@ -16,6 +16,7 @@
 //     GET    /api/drivers/me/orders/completed        — completed (delivered) orders
 //     POST   /api/drivers/me/orders/:id/location     — post a GPS ping
 //     PATCH  /api/drivers/me/orders/:id/status       — update delivery status
+//     PATCH  /api/drivers/me/orders/:id/note         — save the driver's own note
 //
 // IMPORTANT: The /me/orders/completed route MUST be defined before the
 // /me/orders/:id/location and /me/orders/:id/status routes. Express matches
@@ -40,6 +41,7 @@ const {
   getMyCompletedOrders,
   postMyOrderLocation,
   patchMyOrderStatus,
+  patchMyOrderNote,
 } = require("../controllers/driverSelfController");
 
 const {
@@ -69,6 +71,9 @@ router.post("/me/orders/:id/location", requireDriverAuth, postMyOrderLocation);
 
 // Updates the delivery status of a specific order (e.g. DELIVERED).
 router.patch("/me/orders/:id/status", requireDriverAuth, patchMyOrderStatus);
+
+// Saves the driver's own note on a specific order.
+router.patch("/me/orders/:id/note", requireDriverAuth, patchMyOrderNote);
 
 // ── Dispatcher / admin routes ──────────────────────────────────────────────
 router.get("/", requireAdminAuth, getDrivers);
