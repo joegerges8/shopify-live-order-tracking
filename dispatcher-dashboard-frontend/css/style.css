@@ -368,3 +368,37 @@ button:hover {
   background: #1da851;
   color: #ffffff;
 }
+
+/* Driver note, shown as a full-width row under the order it belongs to. Only
+   rendered for orders whose driver actually wrote something, so it never
+   appears as an empty cell. The warm background matches the note card in the
+   driver app, and separates the note from the order data above it. */
+.driver-note-row td {
+  background: #fffbeb;
+  border-bottom: 1px solid #e5e7eb;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  font-size: 15px;
+  color: #713f12;
+  /* Notes are free text typed on a phone: keep the driver's line breaks and
+     wrap long ones instead of stretching the table. */
+  white-space: pre-wrap;
+}
+
+.driver-note-label {
+  display: inline-block;
+  margin-right: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fde68a;
+  color: #713f12;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+
+.driver-note-text {
+  font-weight: 500;
+}
