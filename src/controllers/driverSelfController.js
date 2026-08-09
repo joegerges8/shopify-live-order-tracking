@@ -10,6 +10,7 @@ const {
   getCompletedOrdersByDriverId,
   getOrderByIdForDriver,
   updateDriverOrderStatus,
+  updateDriverOrderNote,
   createLocationUpdate,
   markOrderPaid,
 } = require("../services/orderService");
@@ -186,9 +187,65 @@ async function patchMyOrderStatus(req, res) {
   }
 }
 
+// The longest driver note the backend will store. Notes are typed on a phone
+// and read on a phone, so this is generous rather than restrictive; it exists
+// to stop a stuck key or a paste from filling the column.
+const MAX_DRIVER_NOTE_LENGTH = 2000;
+
+// Saves what the driver wrote about one of their own orders. This is the
+// driver's own note — separate from orders.note, which mirrors the Shopify
+// order note and is never written from the app.
+async function patchMyOrderNote(req, res) {
+  try {
+    const orderId = Number(req.params.id);
+    const driverId = req.driverId;
+    const { note } = req.body || {};
+
+    if (!Number.isFinite(orderId)) {
+      return res.status(400).json({ error: "Invalid order id" });
+    }
+
+    // null and "" both mean the driver cleared their note; anything that is
+    // not a string at all is a malformed request rather than an empty note.
+    if (note !== null && note !== undefined && typeof note !== "string") {
+      return res.status(400).json({ error: "note must be a string" });
+    }
+
+    const trimmed = typeof note === "string" ? note.trim() : "";
+    if (trimmed.length > MAX_DRIVER_NOTE_LENGTH) {
+      return res
+        .status(400)
+        .json({ error: `note must be ${MAX_DRIVER_NOTE_LENGTH} characters or fewer` });
+    }
+
+    const updated = await updateDriverOrderNote(
+      orderId,
+      driverId,
+      trimmed.length ? trimmed : null
+    );
+
+    // No row updated means the order does not exist or belongs to another
+    // driver — the same split the status route makes.
+    if (!updated) {
+      const order = await getOrderByIdForDriver(orderId, driverId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+
+      return res.status(403).json({ error: "Not allowed for this order" });
+    }
+
+    return res.json(updated);
+  } catch (error) {
+    console.error("Error updating driver order note:", error);
+    return res.status(500).json({ error: "Failed to update note" });
+  }
+}
+
 module.exports = {
   getMyOrders,
   getMyCompletedOrders,
   postMyOrderLocation,
   patchMyOrderStatus,
+  patchMyOrderNote,
 };

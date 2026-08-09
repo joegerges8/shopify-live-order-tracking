@@ -424,6 +424,23 @@ async function updateDriverOrderStatus(orderId, driverId, status) {
   return status === "DELIVERED" ? ensureTrackingToken(row) : row;
 }
 
+// Saves the note the driver wrote on one of their own orders. The
+// assigned_driver_id check is part of the UPDATE, so a driver cannot write on
+// an order that is not theirs: a mismatch updates no row and returns undefined,
+// which the controller turns into a 403/404.
+//
+// A null note clears the column — that is the driver deleting what they wrote.
+async function updateDriverOrderNote(orderId, driverId, note) {
+  const result = await pool.query(
+    `UPDATE orders
+     SET driver_note = $1
+     WHERE id = $2 AND assigned_driver_id = $3
+     RETURNING *`,
+    [note, orderId, driverId]
+  );
+  return result.rows[0];
+}
+
 async function getOrdersByDriverId(driverId) {
   const result = await pool.query(
     `SELECT * FROM orders
@@ -553,6 +570,7 @@ module.exports = {
   markOrderPaid,
   deleteOrderEverywhere,
   updateDriverOrderStatus,
+  updateDriverOrderNote,
   getOrdersByDriverId,
   getCompletedOrdersByDriverId,
   createLocationUpdate,
