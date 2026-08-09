@@ -297,6 +297,31 @@ function applyFilters() {
    RENDER
 =========================== */
 
+// What the driver wrote about the order from the app — "nobody home, tried
+// 3pm", "gate code 4412". It is shown as a second row under the order it
+// belongs to, spanning the table, so the note stays attached to its order
+// instead of becoming a column that is blank for almost every row.
+//
+// Returns null when the driver has written nothing, and the order then renders
+// exactly as it did before: a dispatcher only sees this row when there is
+// something to read.
+function createDriverNoteRow(order) {
+  const note = String(order.driver_note ?? "").trim();
+  if (!note) return null;
+
+  const row = document.createElement("tr");
+  row.className = "driver-note-row";
+  // The note is text a driver typed, so it is escaped rather than trusted as
+  // markup, and its line breaks are kept by the stylesheet's pre-wrap.
+  row.innerHTML = `
+    <td colspan="10">
+      <span class="driver-note-label">Driver note</span>
+      <span class="driver-note-text">${escapeHtml(note)}</span>
+    </td>
+  `;
+  return row;
+}
+
 function renderOrders(orders, drivers) {
   tableBody.innerHTML = "";
 
@@ -363,6 +388,9 @@ function renderOrders(orders, drivers) {
     `;
 
     tableBody.appendChild(row);
+
+    const driverNoteRow = createDriverNoteRow(order);
+    if (driverNoteRow) tableBody.appendChild(driverNoteRow);
   });
 
   attachEventListeners();
