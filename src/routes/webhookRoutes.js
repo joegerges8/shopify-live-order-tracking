@@ -4,6 +4,7 @@ const router = express.Router();
 const verifyShopifyWebhook = require("../middleware/verifyShopifyWebhook");
 const {
   handleOrderCreated,
+  handleOrderUpdated,
   handleOrderCancelled,
   handleOrderDeleted,
   handleOrderFulfilled,
@@ -18,6 +19,14 @@ router.post(
   express.raw({ type: "*/*" }),
   verifyShopifyWebhook,
   handleOrderCreated
+);
+
+// Carries the order note when it is written or edited in the Shopify admin.
+router.post(
+  "/orders/updated",
+  express.raw({ type: "*/*" }),
+  verifyShopifyWebhook,
+  handleOrderUpdated
 );
 
 router.post(

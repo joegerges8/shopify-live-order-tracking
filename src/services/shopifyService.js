@@ -3,6 +3,7 @@ const { randomUUID } = require("crypto");
 const { getStoreAccess } = require("./shopifyTokens");
 const { resolveAreaOrUnknown } = require("../utils/areaLookup");
 const { extractLineItems } = require("../utils/lineItems");
+const { extractOrderNote } = require("../utils/orderNote");
 
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-04";
 
@@ -613,8 +614,8 @@ async function upsertImportedOrder(storeId, order) {
       customer_first_name, customer_last_name, customer_phone, customer_email,
       shipping_address, city, area, country,
       total_price, financial_status, fulfillment_status, prepaid,
-      order_status, tracking_token, store_id, created_at, fulfilled_at, line_items
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18::TIMESTAMPTZ, NOW()),$19::TIMESTAMPTZ,$20::JSONB)
+      order_status, tracking_token, store_id, created_at, fulfilled_at, line_items, note
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18::TIMESTAMPTZ, NOW()),$19::TIMESTAMPTZ,$20::JSONB,$21)
     ON CONFLICT (shopify_order_id) DO UPDATE SET
       order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
       customer_first_name = COALESCE(EXCLUDED.customer_first_name, orders.customer_first_name),
@@ -638,6 +639,11 @@ async function upsertImportedOrder(storeId, order) {
         WHEN jsonb_array_length(EXCLUDED.line_items) > 0 THEN EXCLUDED.line_items
         ELSE orders.line_items
       END,
+      -- The import reads the note straight from Shopify, which is where it is
+      -- written, so the fetched value wins outright — including an empty one,
+      -- so re-importing also clears notes the merchant has deleted. Importing
+      -- is how orders that predate the note column get theirs.
+      note = EXCLUDED.note,
       tracking_token = COALESCE(orders.tracking_token, EXCLUDED.tracking_token),
       fulfilled_at = COALESCE(orders.fulfilled_at, EXCLUDED.fulfilled_at),
       store_id = EXCLUDED.store_id`,
@@ -666,6 +672,7 @@ async function upsertImportedOrder(storeId, order) {
       order.created_at || null,
       getFulfilledAt(order),
       JSON.stringify(extractLineItems(order)),
+      extractOrderNote(order),
     ]
   );
 }

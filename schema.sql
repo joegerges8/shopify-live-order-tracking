@@ -81,6 +81,15 @@ CREATE TABLE orders (
                                               -- webhook time so the driver app can list the
                                               -- products without calling Shopify. Empty array
                                               -- for orders written before this column existed.
+    note TEXT,                                -- the Shopify order note, copied over at
+                                              -- import / webhook time and shown to the
+                                              -- driver on the order detail screen. This
+                                              -- is the same field the merchant edits in
+                                              -- the Shopify admin ("Notes" on the order),
+                                              -- so instructions written there — "ring the
+                                              -- upstairs bell", "call before arriving" —
+                                              -- reach the driver without a second tool.
+                                              -- NULL when the order carries no note.
     order_status VARCHAR(30) DEFAULT 'UNFULFILLED',
     assigned_driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
     tracking_token TEXT,                      -- shared with customer for live tracking
@@ -101,6 +110,9 @@ CREATE TABLE orders (
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN line_items JSONB NOT NULL DEFAULT '[]'::JSONB;
 -- Existing rows stay empty until the order is re-imported from Shopify
 -- (the dashboard's "import orders" action backfills them).
+-- Migration for existing databases: ALTER TABLE orders ADD COLUMN note TEXT;
+-- Existing rows stay NULL until the order is updated in Shopify (the orders/updated
+-- webhook carries the note) or re-imported from the dashboard.
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN prepaid BOOLEAN NOT NULL DEFAULT FALSE;
 -- Then backfill the rows that were still undelivered at migration time — for those,
 -- financial_status = 'paid' can only mean the customer paid online:

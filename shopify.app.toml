@@ -20,6 +20,12 @@ api_version = "2026-04"
   topics = ["orders/create"]
   uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/orders/create"
 
+  # Delivers the order note when a merchant writes or edits it on an order that
+  # already exists. Only the note is read from this topic — see handleOrderUpdated.
+  [[webhooks.subscriptions]]
+  topics = ["orders/updated"]
+  uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/orders/updated"
+
   [[webhooks.subscriptions]]
   topics = ["orders/cancelled"]
   uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/orders/cancelled"
