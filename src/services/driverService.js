@@ -97,13 +97,42 @@ const LIVE_PING_WINDOW_SECONDS = 60;
 // two queries below have to agree about what "still carrying it" means.
 const FINISHED_ORDER_STATUSES = ["DELIVERED", "RETURNED", "CANCELLED", "FULFILLED"];
 
+// Records where a driver is, independently of any delivery.
+//
+// The driver app posts this on its own timer for as long as it is running, so
+// the dispatcher can see who is out there before deciding who gets the next
+// order. Only the newest fix is kept — the map asks "where are they now", and
+// the trail that matters is the per-order one in location_updates, which this
+// deliberately does not touch. The customer's tracking page reads only that
+// table and is unaffected by anything here.
+async function updateDriverLocation(driverId, latitude, longitude) {
+  const result = await pool.query(
+    `UPDATE drivers
+     SET last_latitude = $1, last_longitude = $2, last_location_at = NOW()
+     WHERE id = $3
+     RETURNING id, last_latitude, last_longitude, last_location_at`,
+    [latitude, longitude, driverId]
+  );
+  return result.rows[0];
+}
+
 // Every driver's most recent position, for the dispatcher's live map.
 //
-// Location pings are recorded per order, not per driver, so "where is this
-// driver" means "the newest ping they filed on any of this store's orders".
-// The store filter is not cosmetic: drivers are shared across stores, and
-// without it one merchant's dashboard would show driver movement — and the
-// order behind it — belonging to another merchant's deliveries.
+// Two things can say where a driver is, and the fresher one wins:
+//
+//   • drivers.last_* — the driver's own position, posted for as long as their
+//     app is running whether or not they are carrying anything. This is what
+//     puts an idle driver on the map, which is the whole point of a dispatch
+//     map: the driver you want for a new order is the one who is free.
+//   • location_updates — the newest ping filed against one of THIS store's
+//     orders. Older app builds post only these, so a driver who has not
+//     updated still appears while they are mid-delivery.
+//
+// The store filter on the second is not cosmetic: it keeps one merchant's
+// dashboard from naming the order another merchant's delivery belongs to. The
+// driver's own position carries no order with it and so is not store-scoped —
+// drivers are shared across every store, and each store's dashboard already
+// lists all of them.
 //
 // The order reported alongside the position is deliberately NOT the one that
 // last ping was filed against. That order may since have been delivered or
@@ -123,14 +152,21 @@ async function getDriverLiveLocations(storeId) {
        d.id,
        d.full_name,
        d.phone,
-       lu.latitude,
-       lu.longitude,
-       lu.created_at AS location_updated_at,
-       -- Measured by Postgres for the same reason the tracking query does it:
-       -- location_updates.created_at carries no timezone, so comparing it to a
-       -- clock in Node would depend on both processes agreeing about which one
-       -- they are in.
-       EXTRACT(EPOCH FROM (NOW() - lu.created_at)) AS location_age_seconds,
+       -- The driver's own fix, and the newest one filed against this store's
+       -- orders. Both are returned and the controller takes the fresher; doing
+       -- it there rather than in a CASE per column keeps this readable.
+       d.last_latitude    AS self_lat,
+       d.last_longitude   AS self_lng,
+       d.last_location_at AS self_updated_at,
+       lu.latitude        AS ping_lat,
+       lu.longitude       AS ping_lng,
+       lu.created_at      AS ping_updated_at,
+       -- Ages measured by Postgres for the same reason the tracking query does
+       -- it: location_updates.created_at carries no timezone, so comparing it
+       -- to a clock in Node would depend on both processes agreeing about
+       -- which one they are in.
+       EXTRACT(EPOCH FROM (NOW() - d.last_location_at)) AS self_age_seconds,
+       EXTRACT(EPOCH FROM (NOW() - lu.created_at))      AS ping_age_seconds,
        o.id            AS order_id,
        o.order_number,
        o.order_status,
@@ -172,9 +208,14 @@ async function getDriverLiveLocations(storeId) {
          AND ao.store_id = $1
          AND ao.order_status <> ALL ($2::text[])
      ) act ON TRUE
-     -- Whoever is moving right now sorts to the top, idle drivers to the
-     -- bottom: the list beside the map reads in the order a dispatcher cares.
-     ORDER BY (lu.created_at IS NULL), lu.created_at DESC, d.full_name`,
+     -- Freshest fix first, from whichever source, and drivers nobody has heard
+     -- from at all last: the list beside the map reads in the order a
+     -- dispatcher cares about.
+     ORDER BY LEAST(
+                COALESCE(EXTRACT(EPOCH FROM (NOW() - d.last_location_at)), 1e12),
+                COALESCE(EXTRACT(EPOCH FROM (NOW() - lu.created_at)), 1e12)
+              ) ASC,
+              d.full_name`,
     [storeId, FINISHED_ORDER_STATUSES]
   );
 
@@ -193,6 +234,7 @@ module.exports = {
   LIVE_PING_WINDOW_SECONDS,
   getAllDrivers,
   getDriverLiveLocations,
+  updateDriverLocation,
   getDriverByPhone,
   getDriverByEmail,
   createDriver,

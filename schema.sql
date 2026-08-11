@@ -32,9 +32,27 @@ CREATE TABLE drivers (
     phone VARCHAR(30) UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     status VARCHAR(30) DEFAULT 'AVAILABLE',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Where the driver is, as opposed to where one of their deliveries is.
+    -- Posted by the driver app whenever it is running, with or without an
+    -- order in hand, and read only by the dispatcher's live map — a driver
+    -- waiting at the shop is exactly who a dispatcher is looking for when a
+    -- new order lands, and location_updates cannot answer that because every
+    -- row in it has to belong to an order.
+    --
+    -- Only the latest fix is kept. This is "where are they now", not a trail:
+    -- the history that matters is the per-order one, which the customer's
+    -- tracking page is built on and which is unaffected by any of this.
+    last_latitude NUMERIC(10,7),
+    last_longitude NUMERIC(10,7),
+    last_location_at TIMESTAMPTZ
 );
 -- Migration for existing databases: ALTER TABLE drivers ADD COLUMN email VARCHAR(150) UNIQUE;
+-- Migration for existing databases:
+--   ALTER TABLE drivers ADD COLUMN last_latitude NUMERIC(10,7);
+--   ALTER TABLE drivers ADD COLUMN last_longitude NUMERIC(10,7);
+--   ALTER TABLE drivers ADD COLUMN last_location_at TIMESTAMPTZ;
+-- Existing rows stay NULL until each driver next opens the app.
 
 -- orders table
 -- Created automatically when a Shopify webhook fires (new order placed).

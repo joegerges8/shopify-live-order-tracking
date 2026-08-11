@@ -19,6 +19,42 @@ async function getDrivers(req, res) {
   }
 }
 
+// The more recent of a driver's two possible positions, or null if neither
+// exists. NUMERIC and EXTRACT both come back from pg as strings, and a map
+// cannot plot a string, so the conversion happens once here.
+function pickFreshestFix(row) {
+  const candidates = [
+    {
+      latitude: row.self_lat,
+      longitude: row.self_lng,
+      updatedAt: row.self_updated_at,
+      ageSeconds: row.self_age_seconds,
+    },
+    {
+      latitude: row.ping_lat,
+      longitude: row.ping_lng,
+      updatedAt: row.ping_updated_at,
+      ageSeconds: row.ping_age_seconds,
+    },
+  ]
+    .filter(
+      (fix) =>
+        fix.latitude != null && fix.longitude != null && fix.ageSeconds != null
+    )
+    .map((fix) => ({
+      latitude: Number(fix.latitude),
+      longitude: Number(fix.longitude),
+      updatedAt: fix.updatedAt,
+      ageSeconds: Number(fix.ageSeconds),
+    }));
+
+  if (!candidates.length) return null;
+
+  return candidates.reduce((freshest, fix) =>
+    fix.ageSeconds < freshest.ageSeconds ? fix : freshest
+  );
+}
+
 // GET /api/drivers/locations — the live map's data.
 //
 // Returns one entry per driver whether or not they are moving, so the panel
@@ -30,6 +66,13 @@ async function getDriverLocations(req, res) {
   try {
     const rows = await getDriverLiveLocations(req.storeId);
 
+    // Each driver's position comes from whichever of the two sources spoke
+    // most recently — their own fix, or the newest ping on one of this store's
+    // orders. In practice the driver's own is fresher whenever the app is
+    // running; the per-order ping is what still answers for a driver on an app
+    // build that predates the driver-level endpoint.
+    const fixes = rows.map(pickFreshestFix);
+
     // Where each driver actually is, in words. The order carries the town it
     // is going to, which is not the same thing and reads as a plain
     // contradiction next to a pin sitting somewhere else entirely.
@@ -38,17 +81,11 @@ async function getDriverLocations(req, res) {
     // so a fleet standing still costs nothing after the first poll. Every
     // lookup already fails soft to null, so no guard is needed here.
     const towns = await Promise.all(
-      rows.map((row) =>
-        row.latitude == null || row.longitude == null
-          ? null
-          : reverseGeocodeCity(row.latitude, row.longitude)
-      )
+      fixes.map((fix) => (fix ? reverseGeocodeCity(fix.latitude, fix.longitude) : null))
     );
 
     const drivers = rows.map((row, index) => {
-      const hasFix = row.latitude != null && row.longitude != null;
-      const ageSeconds =
-        row.location_age_seconds == null ? null : Number(row.location_age_seconds);
+      const fix = fixes[index];
 
       return {
         id: row.id,
@@ -57,14 +94,15 @@ async function getDriverLocations(req, res) {
         active_orders: row.active_orders ?? 0,
         // "Online" is about the GPS, not about being logged in: it means a fix
         // arrived recently enough that the pin can be trusted as where the
-        // driver is now.
-        online: hasFix && ageSeconds !== null && ageSeconds <= LIVE_PING_WINDOW_SECONDS,
-        location: hasFix
+        // driver is now. With the app posting while it runs, this is in
+        // practice "their app is open".
+        online: fix !== null && fix.ageSeconds <= LIVE_PING_WINDOW_SECONDS,
+        location: fix
           ? {
-              latitude: Number(row.latitude),
-              longitude: Number(row.longitude),
-              updated_at: row.location_updated_at,
-              age_seconds: ageSeconds === null ? null : Math.round(ageSeconds),
+              latitude: fix.latitude,
+              longitude: fix.longitude,
+              updated_at: fix.updatedAt,
+              age_seconds: Math.round(fix.ageSeconds),
               // The town the driver is in. null when reverse geocoding is
               // unconfigured or could not name the spot — the map then shows
               // the pin without a caption rather than inventing one.

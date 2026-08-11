@@ -16,7 +16,8 @@ const {
 } = require("../services/orderService");
 const { syncOrderTagToShopify, markDeliveredInShopify } = require("../services/shopifyService");
 const { etaForTrackedOrder, clearEta } = require("../services/etaService");
-const { getIO, emitToDispatch } = require("../socket");
+const { getIO, emitToDispatch, emitToAllDispatch } = require("../socket");
+const { updateDriverLocation } = require("../services/driverService");
 
 // Returns all active orders assigned to the authenticated driver.
 // "Active" means any status except DELIVERED or CANCELLED, so the driver
@@ -39,6 +40,64 @@ async function getMyCompletedOrders(req, res) {
   } catch (error) {
     console.error("Error fetching completed orders:", error);
     return res.status(500).json({ error: "Failed to fetch completed orders" });
+  }
+}
+
+// Records where the driver is, with no order attached.
+//
+// The per-order route below is what feeds the customer's tracking page, and it
+// can only speak for a delivery that is already under way. This one answers
+// the dispatcher's question instead — who is out there, right now, including
+// the drivers standing free who are the ones worth giving the next order to.
+// The driver app posts here for as long as it is running.
+//
+// Nothing about the customer's view is touched: no row is written to
+// location_updates, so no tracking page gains a position it did not have.
+async function postMyLocation(req, res) {
+  try {
+    const driverId = req.driverId;
+    const { latitude, longitude } = req.body || {};
+
+    if (typeof latitude !== "number" || typeof longitude !== "number") {
+      return res
+        .status(400)
+        .json({ error: "latitude and longitude must be numbers" });
+    }
+
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      return res.status(400).json({ error: "latitude or longitude out of range" });
+    }
+
+    const updated = await updateDriverLocation(driverId, latitude, longitude);
+    if (!updated) {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+
+    // Straight to every open dashboard rather than to one store's room: a
+    // position with no order attached belongs to no store in particular, and
+    // drivers are shared across all of them.
+    emitToAllDispatch("driver_location", {
+      driver_id: driverId,
+      latitude,
+      longitude,
+      updated_at: updated.last_location_at,
+    });
+
+    return res.status(201).json({
+      latitude,
+      longitude,
+      updated_at: updated.last_location_at,
+    });
+  } catch (error) {
+    console.error("Error recording driver location:", error);
+    return res.status(500).json({ error: "Failed to record location" });
   }
 }
 
@@ -274,6 +333,7 @@ async function patchMyOrderNote(req, res) {
 module.exports = {
   getMyOrders,
   getMyCompletedOrders,
+  postMyLocation,
   postMyOrderLocation,
   patchMyOrderStatus,
   patchMyOrderNote,
