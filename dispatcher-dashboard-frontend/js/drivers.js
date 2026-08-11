@@ -28,7 +28,7 @@ async function loadDrivers() {
     if (!drivers || drivers.length === 0) {
       tableBody.innerHTML = `
         <tr>
-          <td colspan="5">No drivers found.</td>
+          <td colspan="6">No drivers found.</td>
         </tr>
       `;
       return;
@@ -44,9 +44,24 @@ async function loadDrivers() {
         <td>${driver.phone ?? ""}</td>
         <td>${createStatusBadge(driverStatus)}</td>
         <td>
+          <button class="btn-secondary" data-performance="${driver.id}">
+            Check Performance
+          </button>
+        </td>
+        <td>
           <button class="btn-delete" data-id="${driver.id}">Delete</button>
         </td>
       `;
+
+      // Opens the Performance page already narrowed to this driver, rather
+      // than reproducing the figures in this row. The settlement maths, the
+      // date range and the per-order breakdown all live there, and a second
+      // copy of them here is a second chance to disagree about someone's pay.
+      row
+        .querySelector("[data-performance]")
+        .addEventListener("click", () => {
+          window.location.href = `performance.html?driver=${driver.id}`;
+        });
 
       row.querySelector(".btn-delete").addEventListener("click", async () => {
         // Deleting a driver is not undoable from the dashboard, so it keeps a
@@ -75,7 +90,7 @@ async function loadDrivers() {
     console.error("Error loading drivers:", error);
     tableBody.innerHTML = `
       <tr>
-        <td colspan="5">Failed to load drivers.</td>
+        <td colspan="6">Failed to load drivers.</td>
       </tr>
     `;
   }

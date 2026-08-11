@@ -138,6 +138,36 @@ export async function getAreas() {
   return data;
 }
 
+// Dates are plain YYYY-MM-DD and are read as calendar days in the store's own
+// timezone by the backend. Leaving them out is not the same as guessing them
+// here: an omitted range means "today where the store is", which the browser
+// cannot work out until the response tells it which timezone that is.
+function rangeQuery({ from, to } = {}) {
+  const query = new URLSearchParams();
+  if (from) query.set("from", from);
+  if (to) query.set("to", to);
+  const suffix = query.toString();
+  return suffix ? `?${suffix}` : "";
+}
+
+// Every driver's deliveries, cash and pay for the range.
+export async function getDriverPerformance(range) {
+  const response = await fetch(
+    `${BASE_URL}/drivers/performance${rangeQuery(range)}`,
+    { headers: authHeaders() }
+  );
+  return handleResponse(response);
+}
+
+// The orders behind one driver's figures, for checking a number that looks off.
+export async function getDriverPerformanceOrders(driverId, range) {
+  const response = await fetch(
+    `${BASE_URL}/drivers/${driverId}/performance${rangeQuery(range)}`,
+    { headers: authHeaders() }
+  );
+  return handleResponse(response);
+}
+
 export async function deleteDriver(driverId) {
   const response = await fetch(`${BASE_URL}/drivers/${driverId}`, {
     method: "DELETE",
