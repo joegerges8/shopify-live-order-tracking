@@ -173,6 +173,21 @@ button:hover {
   background: #163172;
 }
 
+/* Track is a real link to the customer's tracking page, not a button that
+   runs script, so it opens in a new tab on its own — and middle-click and
+   "open in new window" work the way a dispatcher expects. These rules only
+   put the anchor back in the shape of the buttons it sits beside. */
+.track-btn {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  color: #ffffff;
+}
+
+.track-btn:hover {
+  color: #ffffff;
+}
+
 /* STATUS BADGES */
 
 .status-badge {
