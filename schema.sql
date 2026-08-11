@@ -140,3 +140,15 @@ CREATE TABLE location_updates (
     longitude NUMERIC(10,7) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- This table only ever grows — one row per GPS ping, every ~15 seconds of every
+-- delivery — and both live views read it the same way: newest row first, for one
+-- order or one driver. These two indexes are what keep those lookups from
+-- scanning the whole history as it piles up.
+CREATE INDEX IF NOT EXISTS idx_location_updates_order_created
+    ON location_updates (order_id, created_at DESC);
+-- Used by the dispatcher live map (GET /api/drivers/locations), which asks for
+-- each driver's most recent fix.
+CREATE INDEX IF NOT EXISTS idx_location_updates_driver_created
+    ON location_updates (driver_id, created_at DESC);
+-- Migration for existing databases: run both CREATE INDEX statements above.

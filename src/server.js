@@ -159,6 +159,11 @@ async function startServer() {
       CREATE INDEX IF NOT EXISTS idx_location_updates_order_created
         ON location_updates (order_id, created_at DESC);
 
+      -- The dispatcher live map asks for each driver's newest fix. Without
+      -- this it walks a table that gains a row every 15 seconds per delivery.
+      CREATE INDEX IF NOT EXISTS idx_location_updates_driver_created
+        ON location_updates (driver_id, created_at DESC);
+
       CREATE INDEX IF NOT EXISTS idx_orders_tracking_token
         ON orders (tracking_token);
 

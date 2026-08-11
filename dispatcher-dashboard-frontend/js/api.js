@@ -1,7 +1,10 @@
 // If served from Railway (recommended): use same-origin API.
 // If opened as a local file (file://): fall back to your Railway API domain.
 const FALLBACK_API_ORIGIN = "https://shopify-live-order-tracking-production.up.railway.app";
-const API_ORIGIN = window.location.protocol === "file:" ? FALLBACK_API_ORIGIN : window.location.origin;
+// Exported because the live map opens a socket to the same host the REST calls
+// go to; two copies of this rule would eventually disagree.
+export const API_ORIGIN =
+  window.location.protocol === "file:" ? FALLBACK_API_ORIGIN : window.location.origin;
 const BASE_URL = `${API_ORIGIN}/api`;
 
 function authHeaders() {
@@ -165,6 +168,16 @@ export async function getDriverPerformanceOrders(driverId, range) {
     `${BASE_URL}/drivers/${driverId}/performance${rangeQuery(range)}`,
     { headers: authHeaders() }
   );
+  return handleResponse(response);
+}
+
+// Every driver's latest GPS fix, for the live map. Drivers with no ping yet
+// come back with location: null rather than being left out, so the fleet list
+// beside the map is the whole fleet.
+export async function getDriverLocations() {
+  const response = await fetch(`${BASE_URL}/drivers/locations`, {
+    headers: authHeaders(),
+  });
   return handleResponse(response);
 }
 

@@ -1033,3 +1033,252 @@ button:hover {
 [hidden] {
   display: none !important;
 }
+
+/* ===========================
+   LIVE MAP
+=========================== */
+
+/* The map is the page, so it gets the height rather than the padding: the
+   layout is pinned to the viewport and the fleet list scrolls inside it,
+   instead of the whole window scrolling and taking the map off-screen. */
+.map-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* The 54px heading the other pages use would eat a fifth of the map. */
+.map-page h1 {
+  font-size: 36px;
+  margin-bottom: 0;
+}
+
+.map-updated {
+  font-size: 13px;
+  color: #6b7280;
+  min-width: 140px;
+  text-align: right;
+}
+
+.map-shell {
+  display: flex;
+  gap: 18px;
+  flex: 1;
+  min-height: 0; /* lets the children scroll instead of stretching the shell */
+  margin-top: 20px;
+  padding-bottom: 24px;
+}
+
+.map-panel {
+  width: 320px;
+  flex-shrink: 0;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.map-panel-head {
+  padding: 16px 18px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.map-panel-count {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.driver-feed {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.driver-feed-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.driver-feed-item:hover {
+  background: #f3f4f6;
+}
+
+/* The driver the map is following. */
+.driver-feed-item.is-selected {
+  background: #eef2ff;
+  border-color: #1e3a8a;
+}
+
+/* No GPS at all — listed, but visibly not on the map. */
+.driver-feed-item.is-unlocated {
+  opacity: 0.6;
+}
+
+.driver-feed-empty {
+  list-style: none;
+  padding: 20px 12px;
+  font-size: 14px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.feed-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #9ca3af;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Green means the fixes are still arriving — the same colour the pin uses, so
+   the list and the map agree at a glance. */
+.driver-feed-item.is-online .feed-avatar {
+  background: #16a34a;
+}
+
+.feed-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-name-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.feed-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+  flex-shrink: 0;
+  animation: feed-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes feed-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: 0.3; transform: scale(1.5); }
+}
+
+.feed-detail {
+  font-size: 13px;
+  color: #374151;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed-meta {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.feed-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feed-action {
+  display: block;
+  text-align: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  color: #1e3a8a;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.feed-action:hover {
+  background: #eef2ff;
+}
+
+.map-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  background: #e5e7eb;
+}
+
+.map-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.map-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 16px;
+  text-align: center;
+  padding: 20px;
+}
+
+.map-fallback-hint {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* Below this the panel and the map cannot both be useful side by side, so the
+   fleet list moves above the map and both get a fixed slice of the screen. */
+@media (max-width: 900px) {
+  .map-page {
+    height: auto;
+    overflow: visible;
+  }
+
+  .map-shell {
+    flex-direction: column;
+  }
+
+  .map-panel {
+    width: 100%;
+    max-height: 260px;
+  }
+
+  .map-canvas-wrap {
+    height: 60vh;
+    min-height: 320px;
+  }
+}

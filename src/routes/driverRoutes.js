@@ -12,6 +12,7 @@
 //   Dispatcher reporting routes (admin JWT required):
 //     GET /api/drivers/performance       — every driver's deliveries, cash and pay
 //     GET /api/drivers/:id/performance   — one driver's figures plus the orders behind them
+//     GET /api/drivers/locations         — every driver's latest GPS fix (live map)
 //
 //   Protected routes (JWT required via requireDriverAuth middleware):
 //     GET    /api/drivers/me                         — get own profile
@@ -50,6 +51,7 @@ const {
 
 const {
   getDrivers,
+  getDriverLocations,
   createNewDriver,
   deleteDriver,
 } = require("../controllers/driverController");
@@ -89,6 +91,10 @@ router.patch("/me/orders/:id/note", requireDriverAuth, patchMyOrderNote);
 // "performance" as a driver ID — the same trap /me/orders/completed sits in.
 router.get("/performance", requireAdminAuth, getPerformance);
 router.get("/:id/performance", requireAdminAuth, getPerformanceForDriver);
+
+// Every driver's latest GPS position — the live map on the dashboard.
+// Sits with the other literal paths, above "/:id", for the same reason.
+router.get("/locations", requireAdminAuth, getDriverLocations);
 
 router.get("/", requireAdminAuth, getDrivers);
 router.post("/", requireAdminAuth, createNewDriver);

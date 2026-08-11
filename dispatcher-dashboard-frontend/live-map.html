@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Map</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="js/auth.js"></script>
+  <script>requireAuth();</script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Dispatcher</h2>
+      <nav>
+        <a href="index.html">Orders</a>
+        <a href="drivers.html">Drivers</a>
+        <a href="live-map.html" class="active">Live Map</a>
+      </nav>
+      <button class="btn-logout" onclick="logout()">Logout</button>
+    </aside>
+
+    <main class="main-content map-page">
+      <div class="page-header">
+        <h1>Live Map</h1>
+        <div class="header-actions">
+          <span id="mapUpdated" class="map-updated"></span>
+          <button id="fitAllBtn" class="small-btn" type="button">Show all</button>
+        </div>
+      </div>
+
+      <div class="map-shell">
+        <!-- The fleet, listed beside the map rather than only pinned on it: a
+             driver with no GPS yet has no pin, and "nobody is out" needs to be
+             readable as plainly as a map full of moving markers. -->
+        <aside class="map-panel">
+          <div class="map-panel-head">
+            <span id="onlineCount" class="map-panel-count">Loading drivers…</span>
+          </div>
+          <ul id="driverList" class="driver-feed"></ul>
+        </aside>
+
+        <div class="map-canvas-wrap">
+          <div id="map" class="map-canvas"></div>
+          <!-- Shown only if Google Maps fails to load. The list on the left
+               still works, so the page degrades to a text view of the fleet
+               instead of a blank rectangle. -->
+          <div id="mapFallback" class="map-fallback" hidden>
+            <p>The map could not be loaded.</p>
+            <p class="map-fallback-hint">Driver positions are still listed on the left.</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Socket.io client — the map's live channel. Loaded before the module so
+       `io` is defined by the time it runs. -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script type="module" src="js/live-map.js"></script>
+</body>
+</html>

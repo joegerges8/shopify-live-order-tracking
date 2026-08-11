@@ -82,6 +82,75 @@ async function updateDriverPassword(driverId, newPasswordHash) {
   );
 }
 
+// How long a GPS ping keeps counting as live.
+//
+// The driver app posts a fix roughly every 15 seconds while a delivery is
+// running, so anything much older than a couple of minutes means the driver
+// finished the run, closed the app or lost signal. The dispatcher map shows
+// those drivers as offline rather than leaving a stale pin sitting on a road
+// they left an hour ago.
+const LIVE_PING_WINDOW_SECONDS = 120;
+
+// Every driver's most recent position, for the dispatcher's live map.
+//
+// Location pings are recorded per order, not per driver, so "where is this
+// driver" means "the newest ping they filed on any of this store's orders".
+// The store filter is not cosmetic: drivers are shared across stores, and
+// without it one merchant's dashboard would show driver movement — and the
+// order behind it — belonging to another merchant's deliveries.
+//
+// Drivers with no ping at all are still returned, with a null location. They
+// are the ones sitting idle, and a dispatcher wants to see that they exist
+// just as much as they want to see who is moving.
+async function getDriverLiveLocations(storeId) {
+  const result = await pool.query(
+    `SELECT
+       d.id,
+       d.full_name,
+       d.phone,
+       lu.latitude,
+       lu.longitude,
+       lu.created_at AS location_updated_at,
+       -- Measured by Postgres for the same reason the tracking query does it:
+       -- location_updates.created_at carries no timezone, so comparing it to a
+       -- clock in Node would depend on both processes agreeing about which one
+       -- they are in.
+       EXTRACT(EPOCH FROM (NOW() - lu.created_at)) AS location_age_seconds,
+       o.id            AS order_id,
+       o.order_number,
+       o.order_status,
+       o.city,
+       o.area,
+       o.customer_first_name,
+       o.customer_last_name,
+       o.tracking_token,
+       act.active_orders
+     FROM drivers d
+     LEFT JOIN LATERAL (
+       SELECT l.latitude, l.longitude, l.created_at, l.order_id
+       FROM location_updates l
+       JOIN orders lo ON lo.id = l.order_id
+       WHERE l.driver_id = d.id AND lo.store_id = $1
+       ORDER BY l.created_at DESC
+       LIMIT 1
+     ) lu ON TRUE
+     LEFT JOIN orders o ON o.id = lu.order_id
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS active_orders
+       FROM orders ao
+       WHERE ao.assigned_driver_id = d.id
+         AND ao.store_id = $1
+         AND ao.order_status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED', 'FULFILLED')
+     ) act ON TRUE
+     -- Whoever is moving right now sorts to the top, idle drivers to the
+     -- bottom: the list beside the map reads in the order a dispatcher cares.
+     ORDER BY (lu.created_at IS NULL), lu.created_at DESC, d.full_name`,
+    [storeId]
+  );
+
+  return result.rows;
+}
+
 async function deleteDriverById(driverId) {
   const result = await pool.query(
     `DELETE FROM drivers WHERE id = $1 RETURNING id`,
@@ -91,7 +160,9 @@ async function deleteDriverById(driverId) {
 }
 
 module.exports = {
+  LIVE_PING_WINDOW_SECONDS,
   getAllDrivers,
+  getDriverLiveLocations,
   getDriverByPhone,
   getDriverByEmail,
   createDriver,
