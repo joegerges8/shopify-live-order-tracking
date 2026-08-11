@@ -9,6 +9,10 @@
 //     GET  /api/drivers/        — list all drivers (dispatcher panel)
 //     POST /api/drivers/        — create a driver (dispatcher panel)
 //
+//   Dispatcher reporting routes (admin JWT required):
+//     GET /api/drivers/performance       — every driver's deliveries, cash and pay
+//     GET /api/drivers/:id/performance   — one driver's figures plus the orders behind them
+//
 //   Protected routes (JWT required via requireDriverAuth middleware):
 //     GET    /api/drivers/me                         — get own profile
 //     POST   /api/drivers/me/password                — change password
@@ -50,6 +54,11 @@ const {
   deleteDriver,
 } = require("../controllers/driverController");
 
+const {
+  getPerformance,
+  getPerformanceForDriver,
+} = require("../controllers/performanceController");
+
 // ── Public auth routes ─────────────────────────────────────────────────────
 router.post("/signup", signupDriver);
 router.post("/login", loginDriver);
@@ -76,6 +85,11 @@ router.patch("/me/orders/:id/status", requireDriverAuth, patchMyOrderStatus);
 router.patch("/me/orders/:id/note", requireDriverAuth, patchMyOrderNote);
 
 // ── Dispatcher / admin routes ──────────────────────────────────────────────
+// Kept above the "/:id" routes below so a future GET /:id cannot swallow
+// "performance" as a driver ID — the same trap /me/orders/completed sits in.
+router.get("/performance", requireAdminAuth, getPerformance);
+router.get("/:id/performance", requireAdminAuth, getPerformanceForDriver);
+
 router.get("/", requireAdminAuth, getDrivers);
 router.post("/", requireAdminAuth, createNewDriver);
 router.delete("/:id", requireAdminAuth, deleteDriver);

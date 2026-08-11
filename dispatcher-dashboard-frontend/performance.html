@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Driver Performance</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="js/auth.js"></script>
+  <script>requireAuth();</script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Dispatcher</h2>
+      <nav>
+        <a href="index.html">Orders</a>
+        <a href="drivers.html">Drivers</a>
+        <a href="performance.html" class="active">Performance</a>
+      </nav>
+      <button class="btn-logout" onclick="logout()">Logout</button>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h1>Driver Performance</h1>
+        <div class="header-actions">
+          <button id="exportBtn" class="small-btn" type="button">Export CSV</button>
+          <button id="printBtn" class="small-btn" type="button">Print sheet</button>
+        </div>
+      </div>
+
+      <!-- The period being counted. Quick buttons cover the day sheet and the
+           weekly/monthly look-back; the two date fields handle everything else. -->
+      <div class="period-bar">
+        <div class="period-presets" role="group" aria-label="Period">
+          <button type="button" class="period-btn" data-preset="today">Today</button>
+          <button type="button" class="period-btn" data-preset="yesterday">Yesterday</button>
+          <button type="button" class="period-btn" data-preset="week">This week</button>
+          <button type="button" class="period-btn" data-preset="month">This month</button>
+        </div>
+
+        <div class="period-range">
+          <label for="fromDate">From</label>
+          <input type="date" id="fromDate" />
+          <label for="toDate">To</label>
+          <input type="date" id="toDate" />
+          <button id="applyRange" class="small-btn" type="button">Apply</button>
+        </div>
+      </div>
+
+      <p id="periodSummary" class="period-summary"></p>
+
+      <div class="stats-grid stats-grid-5">
+        <div class="stat-card">
+          <p class="stat-title">Deliveries</p>
+          <h3 id="totalDeliveries">0</h3>
+          <p class="stat-note" id="deliveriesNote"></p>
+        </div>
+
+        <div class="stat-card">
+          <p class="stat-title">Cash collected</p>
+          <h3 id="totalCash">$0</h3>
+          <p class="stat-note" id="cashNote"></p>
+        </div>
+
+        <div class="stat-card stat-card-pay">
+          <p class="stat-title">Drivers' pay</p>
+          <h3 id="totalPay">$0</h3>
+          <p class="stat-note" id="payNote"></p>
+        </div>
+
+        <div class="stat-card stat-card-net" id="netCard">
+          <p class="stat-title" id="netTitle">Cash you keep</p>
+          <h3 id="totalNet">$0</h3>
+          <p class="stat-note">After paying the drivers</p>
+        </div>
+
+        <div class="stat-card">
+          <p class="stat-title">Still on the road</p>
+          <h3 id="totalOut">0</h3>
+          <p class="stat-note" id="outNote"></p>
+        </div>
+      </div>
+
+      <div class="drivers-toolbar">
+        <h2 class="section-title">Per driver</h2>
+        <label class="checkbox-label">
+          <input type="checkbox" id="showAllDrivers" />
+          Show drivers with no activity
+        </label>
+      </div>
+
+      <div id="driverCards" class="driver-perf-list">
+        <p class="empty-note">Loading…</p>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="js/performance.js"></script>
+</body>
+</html>
