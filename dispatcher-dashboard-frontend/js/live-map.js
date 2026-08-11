@@ -95,29 +95,28 @@ function statusLabel(status) {
    Markers
 =========================== */
 
-// A pin in the shape of the answer: who it is, whether the position can be
-// trusted, and which way they were last heading. Green while the fixes are
-// arriving, grey once they have gone stale — a grey pin is a last known
-// position, not a driver.
-function markerIcon(initials, online, bearing) {
-  const color = online ? "#16a34a" : "#9ca3af";
-  const halo = online
-    ? `<circle cx="30" cy="30" r="27" fill="${color}" opacity="0.16"/>`
-    : "";
+// A pin in the shape of the answer: who it is and which way they are heading.
+//
+// Only drivers whose GPS is arriving right now get one, so there is a single
+// colour and no stale state to draw. A pin on this map always means a driver
+// being followed this minute.
+const PIN_COLOUR = "#16a34a";
+
+function markerIcon(initials, bearing) {
   // The arrow only means something when we know where they were going, which
   // takes two fixes; until then the pin is just the disc.
   const arrow =
     bearing == null
       ? ""
       : `<g transform="rotate(${bearing.toFixed(0)} 30 30)">
-           <path d="M30 3 L36 14 L24 14 Z" fill="${color}"/>
+           <path d="M30 3 L36 14 L24 14 Z" fill="${PIN_COLOUR}"/>
          </g>`;
 
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60">` +
-    halo +
+    `<circle cx="30" cy="30" r="27" fill="${PIN_COLOUR}" opacity="0.16"/>` +
     arrow +
-    `<circle cx="30" cy="30" r="15" fill="${color}" stroke="#ffffff" stroke-width="3"/>` +
+    `<circle cx="30" cy="30" r="15" fill="${PIN_COLOUR}" stroke="#ffffff" stroke-width="3"/>` +
     `<text x="30" y="35" text-anchor="middle" font-family="Arial, sans-serif" ` +
     `font-size="13" font-weight="bold" fill="#ffffff">${initials}</text>` +
     `</svg>`;
@@ -172,9 +171,13 @@ function syncMarker(driver) {
 
   const existing = markers.get(driver.id);
 
-  if (!driver.location) {
-    // No fix at all — nothing to draw. (A driver who *had* a fix keeps it:
-    // the endpoint never takes a position away, it only ages.)
+  // The map shows drivers who are sharing location, and nobody else. A driver
+  // who has closed the app stops sending fixes, goes stale within the live
+  // window and leaves the map — rather than lingering as a pin on a road they
+  // have long since driven off, which is indistinguishable from a driver who
+  // is genuinely parked there. Where they were last seen is not lost: it stays
+  // on their row in the list beside the map.
+  if (!driver.location || !driver.online) {
     if (existing) {
       if (existing.frame) cancelAnimationFrame(existing.frame);
       existing.marker.setMap(null);
@@ -196,8 +199,8 @@ function syncMarker(driver) {
       position: pos,
       map,
       title: driver.full_name || "Driver",
-      icon: markerIcon(initials, driver.online, null),
-      zIndex: driver.online ? 10 : 5,
+      icon: markerIcon(initials, null),
+      zIndex: 10,
     });
     const entry = { id: driver.id, marker, pos, bearing: null, frame: null };
     // Clicking a pin selects the driver, the same as clicking their row —
@@ -217,8 +220,7 @@ function syncMarker(driver) {
     existing.pos = pos;
   }
 
-  existing.marker.setIcon(markerIcon(initials, driver.online, existing.bearing));
-  existing.marker.setZIndex(driver.online ? 10 : 5);
+  existing.marker.setIcon(markerIcon(initials, existing.bearing));
   existing.marker.setTitle(driver.full_name || "Driver");
 }
 
@@ -235,7 +237,9 @@ function syncMarkers() {
 
 function fitAll() {
   if (!map) return;
-  const located = drivers.filter((driver) => driver.location);
+  // Frames who is on the map, which is who is live — fitting to a position
+  // last seen an hour ago would drag the view somewhere nothing is happening.
+  const located = drivers.filter((driver) => driver.location && driver.online);
   if (!located.length) {
     map.setCenter(DEFAULT_CENTER);
     map.setZoom(12);
@@ -280,9 +284,19 @@ function selectDriver(id) {
   if (entry) {
     map.panTo(entry.pos);
     if (map.getZoom() < 15) map.setZoom(15);
-  } else {
-    showToast("That driver has not shared a location yet.", "info");
+    return;
   }
+
+  // No pin to follow. Worth saying which of the two reasons it is, because
+  // "never shared a location" and "closed the app twenty minutes ago" call for
+  // very different phone calls.
+  const driver = drivers.find((candidate) => candidate.id === selectedId);
+  showToast(
+    driver && driver.location
+      ? "That driver is not sharing location right now."
+      : "That driver has not shared a location yet.",
+    "info"
+  );
 }
 
 // Rows are built as nodes with textContent rather than an HTML string: they
@@ -346,10 +360,15 @@ function driverRow(driver) {
   // Where the driver is, not where they are heading. "In" is doing real work
   // here: this line sat next to the delivery city for a while, and a pin in
   // Ballouneh captioned "Tripoli" reads as a bug rather than as a destination.
+  //
+  // Once they stop sharing it becomes "Last seen in Ballouneh". They are off
+  // the map by then, and this row is the only remaining record of where — so
+  // it has to be clear it is history rather than a live position.
   const meta = document.createElement("div");
   meta.className = "feed-meta";
   const when = agoText(driver.location ? driver.location.age_seconds : null);
-  const where = driver.location && driver.location.city ? `In ${driver.location.city} · ` : "";
+  const city = driver.location && driver.location.city;
+  const where = city ? `${driver.online ? "In" : "Last seen in"} ${city} · ` : "";
   meta.textContent = `${where}${when}`;
 
   body.append(nameRow, detail, meta);

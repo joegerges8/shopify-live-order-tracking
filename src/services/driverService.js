@@ -82,14 +82,16 @@ async function updateDriverPassword(driverId, newPasswordHash) {
   );
 }
 
-// How long a GPS ping keeps counting as live.
+// How long a GPS ping keeps counting as live — and so, how quickly a driver
+// who has closed the app leaves the dispatcher's map.
 //
-// The driver app posts a fix roughly every 15 seconds while a delivery is
-// running, so anything much older than a couple of minutes means the driver
-// finished the run, closed the app or lost signal. The dispatcher map shows
-// those drivers as offline rather than leaving a stale pin sitting on a road
-// they left an hour ago.
-const LIVE_PING_WINDOW_SECONDS = 120;
+// The driver app posts a fix roughly every 15 seconds while it is running, so
+// this is four missed pings in a row. That is short enough that swiping the
+// app away shows up on the map inside a minute, and long enough that a tunnel,
+// an underground car park or a moment of bad signal does not flicker a working
+// driver off the screen and back. Raise it if drivers on poor coverage start
+// disappearing mid-delivery.
+const LIVE_PING_WINDOW_SECONDS = 60;
 
 // Statuses that mean the order is off the driver's hands. Kept here because
 // two queries below have to agree about what "still carrying it" means.
