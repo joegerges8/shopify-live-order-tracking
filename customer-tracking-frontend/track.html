@@ -407,6 +407,11 @@
       socket.on('location_update', ({ latitude, longitude, updated_at }) => {
         if (!currentData) return;
         currentData.driver_location = { latitude, longitude, updated_at };
+        // A ping arriving now is the driver's app reporting from the road, so
+        // this is the moment "Order picked up" becomes "Order on the way" —
+        // without waiting for the next poll to say so.
+        currentData.driver_started = true;
+        applyCardData(currentData);
         applyMapData(currentData);
       });
 
@@ -425,6 +430,9 @@
         if (!currentData) return;
         currentData.order_status = status;
         applyCardData(currentData);
+        // The status decides whether the driver belongs on the map at all, so
+        // the map has to follow the card here.
+        applyMapData(currentData);
         if (customerStatusFor(status) === 'DELIVERED') cleanup();
       });
     }
@@ -462,15 +470,30 @@
       }[status] || 'PENDING';
     }
 
-    function headlineFor(status) {
+    // Has the driver set off? The backend answers this from the per-order GPS
+    // pings, which only start when the driver taps "Start Delivery" — the
+    // dispatcher marking the order PICKED_UP does not make it true. A
+    // dispatcher moving the order to OUT_FOR_DELIVERY by hand counts as well.
+    function driverIsOnTheWay(data) {
+      return data.driver_started === true || data.order_status === 'OUT_FOR_DELIVERY';
+    }
+
+    function headlineFor(data) {
+      const customerStatus = customerStatusFor(data.order_status);
+
+      // Picked up covers two very different moments for the customer: the
+      // parcel is with the driver at the shop, or it is moving towards them.
+      if (customerStatus === 'PICKED_UP') {
+        return driverIsOnTheWay(data) ? 'Order on the way' : 'Order picked up';
+      }
+
       return {
         PENDING:     'Order pending',
         UNFULFILLED: 'Order Confirmed',
-        PICKED_UP:   'Order picked up',
         DELIVERED:   'Order delivered!',
         RETURNED:    'Order returned to the store',
         CANCELLED:   'Order cancelled',
-      }[customerStatusFor(status)];
+      }[customerStatus];
     }
 
     function stepIndex(status) {
@@ -591,7 +614,9 @@
       // reason for anyone reading /api/track/:token directly.
       el.classList.add('waiting');
       el.textContent =
-        data.eta_status === 'waiting_for_driver' ? 'Driver has not set off yet' : '';
+        data.eta_status === 'waiting_for_driver' && !driverIsOnTheWay(data)
+          ? 'Driver has not set off yet'
+          : '';
     }
 
     // Draws the driver's route from the polyline the server returned. Falls
@@ -663,6 +688,10 @@
       if (!map) return;
 
       const isActive = ['PICKED_UP', 'OUT_FOR_DELIVERY'].includes(data.order_status);
+      // The driver is only drawn once they have set off. A marker frozen at
+      // the shop is worse than no marker: it looks like a driver who has
+      // stopped moving rather than one who has not left yet.
+      const showDriver = isActive && data.driver_started === true;
 
       // Destination marker (home pin)
       if (data.customer_latitude != null && data.customer_longitude != null && !destMarker) {
@@ -681,18 +710,18 @@
           },
           zIndex: 5,
         });
-        if (!data.driver_location || !isActive) {
+        if (!data.driver_location || !showDriver) {
           map.setCenter(destPos);
           map.setZoom(15);
         }
       }
 
       // Route line and approximate destination, both driven by the server ETA.
-      drawRoute(isActive ? data.eta : null);
+      drawRoute(showDriver ? data.eta : null);
       drawDestination(data.eta);
 
       // Driver marker (car icon)
-      if (data.driver_location && isActive) {
+      if (data.driver_location && showDriver) {
         const newPos = {
           lat: Number(data.driver_location.latitude),
           lng: Number(data.driver_location.longitude),
@@ -725,7 +754,7 @@
           animateMarker(driverMarker, prevDriverPos || newPos, newPos, 1200);
           prevDriverPos = newPos;
         }
-      } else if (driverMarker && !isActive) {
+      } else if (driverMarker && !showDriver) {
         driverMarker.setMap(null);
         driverMarker = null;
         prevDriverPos = null;
@@ -740,9 +769,15 @@
       const customerStatus = customerStatusFor(status);
       const isActive = customerStatus === 'PICKED_UP';
 
-      document.getElementById('status-headline').textContent = headlineFor(status);
+      document.getElementById('status-headline').textContent = headlineFor(data);
+
+      // "Live tracking" is a promise that the dot on the map is where the
+      // driver is right now, so it waits for the driver to actually be on the
+      // road. Between the dispatcher marking the order picked up and the
+      // driver tapping "Start Delivery" the card says only "Order picked up".
+      const isLive = isActive && data.driver_started === true && !!data.driver_location;
       document.getElementById('live-badge').className =
-        'live-badge' + (isActive && data.driver_location ? ' show' : '');
+        'live-badge' + (isLive ? ' show' : '');
 
       // The ETA is shown only once the order is on the road and the driver has
       // actually set off — the backend withholds it until then, so an empty
