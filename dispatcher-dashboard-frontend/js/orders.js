@@ -385,7 +385,7 @@ function renderOrders(orders, drivers) {
     const orderStatus = normalizeOrderStatus(order.order_status);
 
     const trackingBtn = order.tracking_token && orderStatus !== "UNFULFILLED"
-      ? `<button class="small-btn track-btn" data-tracking-token="${order.tracking_token}" title="Copy tracking link">🔗 Track</button>`
+      ? `<button class="small-btn track-btn" data-tracking-token="${order.tracking_token}" title="Open the customer's tracking page">🔗 Track</button>`
       : "";
 
     // An assigned order offers only Unassign. The driver picker and Assign
@@ -485,13 +485,14 @@ async function loadOrders() {
    EVENTS
 =========================== */
 
-function copyTrackingLink(token) {
+// Opens the customer's tracking page in a new tab — the same page the customer
+// sees, so the dispatcher can check on a delivery without leaving the board.
+// If the browser blocks the new tab, the link is shown to copy by hand rather
+// than the click doing nothing at all.
+function openTrackingPage(token) {
   const url = `${window.location.origin}/track/track.html?token=${token}`;
-  navigator.clipboard.writeText(url).then(() => {
-    showToast("Tracking link copied. Send it to the customer.", "success");
-  }).catch(() => {
-    showCopyBox("Copy this tracking link", url);
-  });
+  const opened = window.open(url, "_blank", "noopener");
+  if (!opened) showCopyBox("Open this tracking link", url);
 }
 
 function attachEventListeners() {
@@ -523,7 +524,7 @@ function attachEventListeners() {
 
   trackButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      copyTrackingLink(button.getAttribute("data-tracking-token"));
+      openTrackingPage(button.getAttribute("data-tracking-token"));
     });
   });
 

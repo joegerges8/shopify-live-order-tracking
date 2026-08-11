@@ -17,10 +17,23 @@ function etaStatusFor(order, eta) {
   if (!["PICKED_UP", "OUT_FOR_DELIVERY"].includes(order.order_status)) {
     return "not_started";
   }
-  if (!order.driver_lat || !hasDriverStarted(order.location_age_seconds)) {
+  if (!driverHasSetOff(order)) {
     return "waiting_for_driver";
   }
   return "unavailable";
+}
+
+// Has the driver actually set off? Per-order GPS pings start when — and only
+// when — the driver taps "Start Delivery" in their app, so a recent ping is
+// the honest answer. The dispatcher flipping an order to PICKED_UP is not:
+// the parcel is on the counter, not on the road.
+//
+// An old ping means a delivery that was started at some point and has since
+// gone quiet (app closed, phone asleep), which is not something to show a
+// customer as live either — hence the freshness window rather than a plain
+// null check.
+function driverHasSetOff(order) {
+  return Boolean(order.driver_lat) && hasDriverStarted(order.location_age_seconds);
 }
 
 // Public endpoint — no auth required. The token is the credential.
@@ -51,6 +64,9 @@ router.get("/:token", async (req, res) => {
       customer_latitude: order.customer_latitude,
       customer_longitude: order.customer_longitude,
       delivered_at: order.delivered_at,
+      // What the tracking page uses to tell "picked up" from "on the way": the
+      // headline, the live badge and the driver marker all hang off this.
+      driver_started: driverHasSetOff(order),
       eta,
       eta_status: etaStatusFor(order, eta),
       driver: order.driver_name ? { name: order.driver_name, phone: order.driver_phone || null } : null,
