@@ -41,9 +41,35 @@ const totals = {
 // answer mid-count.
 let report = null;
 
+// Set when the page was opened from a driver's row on the Drivers tab
+// (performance.html?driver=13). The whole page then answers for that one
+// driver — cards, totals and export alike — because someone who arrived by
+// clicking a name is settling up with that person, not reading the store's
+// day. Null means the normal all-drivers view.
+const focusDriverId = readFocusDriverId();
+
+function readFocusDriverId() {
+  const raw = new URLSearchParams(window.location.search).get("driver");
+  const id = Number(raw);
+  return raw && Number.isInteger(id) && id > 0 ? id : null;
+}
+
+// The driver the page is focused on, once a report has been loaded. Null in
+// the all-drivers view, and also when the id in the URL matches nobody — a
+// deleted driver, or a hand-edited link.
+function focusedDriver() {
+  if (!report || focusDriverId === null) return null;
+  return report.drivers.find((driver) => driver.id === focusDriverId) || null;
+}
+
 // Which driver cards have their order list open, by driver id. Kept across
 // reloads so changing the date range does not collapse everything.
+//
+// A card opened from the Drivers tab starts expanded: clicking "Check
+// Performance" on someone's row is a request to see their work, and the
+// orders are the work.
 const expanded = new Set();
+if (focusDriverId !== null) expanded.add(focusDriverId);
 
 /* ===========================
    FORMATTING
@@ -154,14 +180,44 @@ function markActivePreset() {
    RENDERING
 =========================== */
 
+// The figures the header cards show. In the all-drivers view that is the
+// store roll-up the backend sent; focused on one driver it is that driver's
+// own row, reshaped rather than recalculated — every field here already came
+// back computed, so the header cannot drift from the card beneath it.
+function activeTotals() {
+  const driver = focusedDriver();
+  if (!driver) return report.totals;
+
+  return {
+    drivers_worked: driver.delivered > 0 || driver.returned > 0 ? 1 : 0,
+    delivered: driver.delivered,
+    prepaid_deliveries: driver.prepaid_deliveries,
+    returned: driver.returned,
+    cash_collected: driver.cash_collected,
+    prepaid_value: driver.prepaid_value,
+    returned_value: driver.returned_value,
+    orders_out: driver.orders_out,
+    cash_out: driver.cash_out,
+    pay_owed: driver.pay_owed,
+    cash_to_hand_in: driver.cash_to_hand_in,
+  };
+}
+
 function renderTotals() {
-  const t = report.totals;
+  const t = activeTotals();
   const fee = report.fee_per_delivery;
 
   totals.deliveries.textContent = t.delivered;
-  totals.deliveriesNote.textContent =
-    `${t.drivers_worked} driver${t.drivers_worked === 1 ? "" : "s"} worked` +
-    (t.returned ? ` · ${t.returned} returned` : "");
+  // "1 driver worked" is a useless thing to tell someone who is looking at one
+  // driver on purpose, so the focused view spends the line on the returns
+  // instead.
+  const worked = `${t.drivers_worked} driver${t.drivers_worked === 1 ? "" : "s"} worked`;
+  const returns = `${t.returned} returned`;
+  totals.deliveriesNote.textContent = focusedDriver()
+    ? t.returned
+      ? returns
+      : "Completed deliveries"
+    : worked + (t.returned ? ` · ${returns}` : "");
 
   totals.cash.textContent = money(t.cash_collected);
   // Prepaid orders are called out rather than hidden: the driver delivered
@@ -187,7 +243,9 @@ function renderTotals() {
     ? `${money(t.cash_out)} not collected yet`
     : "Nothing outstanding";
 
+  const driver = focusedDriver();
   periodSummaryEl.textContent =
+    (driver ? `${driver.full_name} · ` : "") +
     `${describeRange(report.from, report.to)} — ${report.from} to ${report.to} ` +
     `(${report.timezone})`;
 }
@@ -369,6 +427,19 @@ async function loadOrders(driver, card) {
 function renderDrivers() {
   cardsEl.innerHTML = "";
 
+  // Opened from a driver's row: show that driver and nothing else, including
+  // on a day they did not work — an empty settlement is the answer to "what
+  // does this person owe me", not a reason to show the whole roster instead.
+  if (focusDriverId !== null) {
+    const driver = focusedDriver();
+    if (!driver) {
+      cardsEl.innerHTML = `<p class="empty-note">That driver no longer exists.</p>`;
+      return;
+    }
+    cardsEl.appendChild(driverCard(driver));
+    return;
+  }
+
   // Drivers are shared across stores, so a store's list can include people who
   // have never worked for it. Those are hidden unless asked for — but a driver
   // who is out on a delivery right now always shows, however quiet the period,
@@ -409,9 +480,23 @@ async function load(range) {
   fromInput.value = report.from;
   toInput.value = report.to;
 
+  renderFocusChrome();
   renderTotals();
   markActivePreset();
   renderDrivers();
+}
+
+// Dresses the section header for whichever view is showing. Done after the
+// report lands because the driver's name is only known then.
+function renderFocusChrome() {
+  const driver = focusedDriver();
+  const focusing = focusDriverId !== null;
+
+  document.querySelector("#backToDrivers").hidden = !focusing;
+  document.querySelector("#showAllLabel").hidden = focusing;
+  document.querySelector("#sectionTitle").textContent = driver
+    ? driver.full_name
+    : "Per driver";
 }
 
 /* ===========================
@@ -441,8 +526,17 @@ function exportCsv() {
     "Avg minutes",
   ];
 
-  const rows = report.drivers
-    .filter((d) => d.delivered > 0 || d.returned > 0 || d.orders_out > 0)
+  // The file matches the view: one driver when focused on one, otherwise
+  // everyone who did something. Exporting the whole roster from a single
+  // driver's page would file the wrong sheet against the counted cash.
+  const focused = focusedDriver();
+  const exported = focused
+    ? [focused]
+    : report.drivers.filter(
+        (d) => d.delivered > 0 || d.returned > 0 || d.orders_out > 0
+      );
+
+  const rows = exported
     .map((d) => [
       d.full_name,
       d.phone ?? "",
@@ -460,8 +554,10 @@ function exportCsv() {
       d.avg_minutes_to_deliver ?? "",
     ]);
 
+  // Skipped when focused on one driver: their row is already the total, and a
+  // second line repeating it invites double-counting when the sheet is added up.
   const t = report.totals;
-  rows.push([
+  if (!focused) rows.push([
     "TOTAL",
     "",
     t.delivered,
@@ -488,7 +584,12 @@ function exportCsv() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `driver-performance-${report.from}_to_${report.to}.csv`;
+  // Names carry spaces and accents that make awkward filenames, so the name is
+  // reduced to something a filesystem and an email attachment both accept.
+  const who = focused
+    ? focused.full_name.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase()
+    : "all";
+  link.download = `driver-performance-${who}-${report.from}_to_${report.to}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }

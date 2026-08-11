@@ -994,3 +994,42 @@ button:hover {
 .stat-card-owed h3 {
   color: #b91c1c;
 }
+
+/* A view action sitting next to a destructive one. Outlined rather than solid
+   so "Check Performance" does not carry the same weight as "Delete" in the
+   same row — they are one careless click apart. */
+.btn-secondary {
+  background: #ffffff;
+  color: #1e3a8a;
+  border: 1px solid #1e3a8a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #eef2ff;
+  color: #163172;
+}
+
+/* Back out of a single driver's page to the roster. */
+.back-link {
+  color: #1e3a8a;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+/* The hidden attribute has to beat the display rules above it. Without this,
+   anything given `display: flex` here — the checkbox label, for one — ignores
+   being hidden, because the browser's own [hidden] rule loses on specificity. */
+[hidden] {
+  display: none !important;
+}

@@ -83,8 +83,13 @@
       </div>
 
       <div class="drivers-toolbar">
-        <h2 class="section-title">Per driver</h2>
-        <label class="checkbox-label">
+        <h2 class="section-title" id="sectionTitle">Per driver</h2>
+        <!-- Swapped for a way back when the page was opened from one driver's
+             row on the Drivers tab; the checkbox has nothing to filter then. -->
+        <a href="drivers.html" class="back-link" id="backToDrivers" hidden>
+          ← All drivers
+        </a>
+        <label class="checkbox-label" id="showAllLabel">
           <input type="checkbox" id="showAllDrivers" />
           Show drivers with no activity
         </label>
