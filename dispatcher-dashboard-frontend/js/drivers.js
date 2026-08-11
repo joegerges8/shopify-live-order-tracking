@@ -1,4 +1,5 @@
 import { getDrivers, getOrders, deleteDriver } from "./api.js";
+import { showToast, confirmAction } from "./ui.js";
 
 const tableBody = document.querySelector("#driversTable tbody");
 
@@ -48,12 +49,22 @@ async function loadDrivers() {
       `;
 
       row.querySelector(".btn-delete").addEventListener("click", async () => {
-        if (!confirm(`Delete driver "${driver.full_name}"?`)) return;
+        // Deleting a driver is not undoable from the dashboard, so it keeps a
+        // confirmation step — an in-page modal now, not the browser's.
+        const confirmed = await confirmAction({
+          title: `Delete driver "${driver.full_name}"?`,
+          message: "They will lose access to the driver app. This cannot be undone.",
+          confirmLabel: "Delete driver",
+          danger: true,
+        });
+        if (!confirmed) return;
+
         try {
           await deleteDriver(driver.id);
           row.remove();
+          showToast(`Driver "${driver.full_name}" deleted.`, "success");
         } catch (err) {
-          alert("Failed to delete driver. Please try again.");
+          showToast("Failed to delete driver. Please try again.", "error");
           console.error(err);
         }
       });
