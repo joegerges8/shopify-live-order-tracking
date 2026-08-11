@@ -1,5 +1,5 @@
 import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, updateOrderArea, getAreas, importOrders, deleteOrder, markOrderPaid } from "./api.js";
-import { showToast, confirmAction, showCopyBox } from "./ui.js";
+import { showToast, confirmAction } from "./ui.js";
 
 const tableBody = document.querySelector("#ordersTable tbody");
 
@@ -385,7 +385,9 @@ function renderOrders(orders, drivers) {
     const orderStatus = normalizeOrderStatus(order.order_status);
 
     const trackingBtn = order.tracking_token && orderStatus !== "UNFULFILLED"
-      ? `<button class="small-btn track-btn" data-tracking-token="${order.tracking_token}" title="Open the customer's tracking page">🔗 Track</button>`
+      ? `<a class="small-btn track-btn" href="/track/track.html?token=${encodeURIComponent(order.tracking_token)}"
+             target="_blank" rel="noopener noreferrer"
+             title="Open the customer's tracking page">🔗 Track</a>`
       : "";
 
     // An assigned order offers only Unassign. The driver picker and Assign
@@ -485,22 +487,11 @@ async function loadOrders() {
    EVENTS
 =========================== */
 
-// Opens the customer's tracking page in a new tab — the same page the customer
-// sees, so the dispatcher can check on a delivery without leaving the board.
-// If the browser blocks the new tab, the link is shown to copy by hand rather
-// than the click doing nothing at all.
-function openTrackingPage(token) {
-  const url = `${window.location.origin}/track/track.html?token=${token}`;
-  const opened = window.open(url, "_blank", "noopener");
-  if (!opened) showCopyBox("Open this tracking link", url);
-}
-
 function attachEventListeners() {
   const assignButtons = document.querySelectorAll("[data-assign-order-id]");
   const unassignButtons = document.querySelectorAll("[data-unassign-order-id]");
   const statusButtons = document.querySelectorAll("[data-status-order-id]");
   const areaButtons = document.querySelectorAll("[data-area-order-id]");
-  const trackButtons = document.querySelectorAll("[data-tracking-token]");
   const noteButtons = document.querySelectorAll("[data-note-order-id]");
 
   noteButtons.forEach((button) => {
@@ -519,12 +510,6 @@ function attachEventListeners() {
       } catch (error) {
         showToast(`Failed to update area: ${error.message}`, "error");
       }
-    });
-  });
-
-  trackButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      openTrackingPage(button.getAttribute("data-tracking-token"));
     });
   });
 
