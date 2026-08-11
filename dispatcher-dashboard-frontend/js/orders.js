@@ -1,4 +1,5 @@
 import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, updateOrderArea, getAreas, importOrders, deleteOrder, markOrderPaid } from "./api.js";
+import { showToast, confirmAction, showCopyBox } from "./ui.js";
 
 const tableBody = document.querySelector("#ordersTable tbody");
 
@@ -488,9 +489,9 @@ async function loadOrders() {
 function copyTrackingLink(token) {
   const url = `${window.location.origin}/track/track.html?token=${token}`;
   navigator.clipboard.writeText(url).then(() => {
-    alert("Tracking link copied! Send it to the customer.");
+    showToast("Tracking link copied. Send it to the customer.", "success");
   }).catch(() => {
-    prompt("Copy this tracking link:", url);
+    showCopyBox("Copy this tracking link", url);
   });
 }
 
@@ -516,7 +517,7 @@ function attachEventListeners() {
         await updateOrderArea(orderId, areaSelect.value);
         await loadOrders();
       } catch (error) {
-        alert(`Failed to update area: ${error.message}`);
+        showToast(`Failed to update area: ${error.message}`, "error");
       }
     });
   });
@@ -537,17 +538,17 @@ function attachEventListeners() {
       const driverId = driverSelect.value;
 
       if (!driverId) {
-        alert("Please select a driver.");
+        showToast("Please select a driver.", "error");
         return;
       }
 
       try {
         await assignDriver(orderId, Number(driverId));
-        alert("Driver assigned successfully.");
+        showToast("Driver assigned.", "success");
         await loadOrders();
       } catch (error) {
         console.error("Error assigning driver:", error);
-        alert("Failed to assign driver.");
+        showToast("Failed to assign driver.", "error");
       }
     });
   });
@@ -558,11 +559,11 @@ function attachEventListeners() {
 
       try {
         await unassignDriver(orderId);
-        alert("Driver unassigned successfully.");
+        showToast("Driver unassigned.", "success");
         await loadOrders();
       } catch (error) {
         console.error("Error unassigning driver:", error);
-        alert("Failed to unassign driver.");
+        showToast("Failed to unassign driver.", "error");
       }
     });
   });
@@ -574,27 +575,35 @@ function attachEventListeners() {
       const status = statusSelect.value;
 
       if (!status) {
-        alert("Please select a status.");
+        showToast("Please select a status.", "error");
         return;
       }
 
+      // Paying and deleting still stop to ask — they reach into Shopify and
+      // neither can be taken back by picking a different status afterwards.
+      // The prompt is now an in-page modal rather than the browser's.
       if (status === "PAID") {
         const orderLabel = button.getAttribute("data-order-number") || `#${orderId}`;
-        const confirmed = confirm(
-          `Mark order ${orderLabel} as paid?\n\n` +
-          `This records a payment in Shopify. Undoing it means issuing a refund. ` +
-          `The delivery status stays as it is.`
-        );
+        const confirmed = await confirmAction({
+          title: `Mark order ${orderLabel} as paid?`,
+          message:
+            "This records a payment in Shopify. Undoing it means issuing a refund.\n\n" +
+            "The delivery status stays as it is.",
+          confirmLabel: "Mark as paid",
+        });
         if (!confirmed) return;
 
         button.disabled = true;
         try {
           await markOrderPaid(orderId);
-          alert(`Order ${orderLabel} is now marked as paid in Shopify and the dashboard.`);
+          showToast(
+            `Order ${orderLabel} is now marked as paid in Shopify and the dashboard.`,
+            "success"
+          );
           await loadOrders();
         } catch (error) {
           console.error("Error marking order as paid:", error);
-          alert(`Could not mark the order as paid:\n\n${error.message}`);
+          showToast(`Could not mark the order as paid:\n${error.message}`, "error");
         } finally {
           button.disabled = false;
         }
@@ -603,21 +612,27 @@ function attachEventListeners() {
 
       if (status === "DELETED") {
         const orderLabel = button.getAttribute("data-order-number") || `#${orderId}`;
-        const confirmed = confirm(
-          `Permanently delete order ${orderLabel}?\n\n` +
-          `It will be removed from this dashboard AND from Shopify. ` +
-          `This cannot be undone.`
-        );
+        const confirmed = await confirmAction({
+          title: `Permanently delete order ${orderLabel}?`,
+          message:
+            "It will be removed from this dashboard AND from Shopify.\n\n" +
+            "This cannot be undone.",
+          confirmLabel: "Delete order",
+          danger: true,
+        });
         if (!confirmed) return;
 
         button.disabled = true;
         try {
           await deleteOrder(orderId);
-          alert(`Order ${orderLabel} was deleted from Shopify and the dashboard.`);
+          showToast(
+            `Order ${orderLabel} was deleted from Shopify and the dashboard.`,
+            "success"
+          );
           await loadOrders();
         } catch (error) {
           console.error("Error deleting order:", error);
-          alert(`Could not delete the order:\n\n${error.message}`);
+          showToast(`Could not delete the order:\n${error.message}`, "error");
           button.disabled = false;
         }
         return;
@@ -626,19 +641,23 @@ function attachEventListeners() {
       try {
         const updated = await updateOrderStatus(orderId, status);
         if (updated && updated.shopify_warning) {
-          alert(`Status updated to ${status}, but Shopify was not updated:\n\n${updated.shopify_warning}`);
+          showToast(
+            `Status updated to ${status}, but Shopify was not updated:\n${updated.shopify_warning}`,
+            "error"
+          );
         } else if (status === "CANCELLED") {
-          alert(
-            "Order cancelled in Shopify and the driver was unassigned.\n\n" +
-            "It has been removed from this dashboard. The order is still in Shopify."
+          showToast(
+            "Order cancelled in Shopify and the driver was unassigned.\n" +
+            "It has been removed from this dashboard.",
+            "success"
           );
         } else {
-          alert("Status updated successfully.");
+          showToast(`Status updated to ${status}.`, "success");
         }
         await loadOrders();
       } catch (error) {
         console.error("Error updating status:", error);
-        alert(`Failed to update status: ${error.message}`);
+        showToast(`Failed to update status: ${error.message}`, "error");
       }
     });
   });
