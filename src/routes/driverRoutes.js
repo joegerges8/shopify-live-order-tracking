@@ -19,6 +19,7 @@
 //     POST   /api/drivers/me/password                — change password
 //     GET    /api/drivers/me/orders                  — active assigned orders
 //     GET    /api/drivers/me/orders/completed        — completed (delivered) orders
+//     POST   /api/drivers/me/location                — post own position (live map)
 //     POST   /api/drivers/me/orders/:id/location     — post a GPS ping
 //     PATCH  /api/drivers/me/orders/:id/status       — update delivery status
 //     PATCH  /api/drivers/me/orders/:id/note         — save the driver's own note
@@ -44,6 +45,7 @@ const {
 const {
   getMyOrders,
   getMyCompletedOrders,
+  postMyLocation,
   postMyOrderLocation,
   patchMyOrderStatus,
   patchMyOrderNote,
@@ -72,6 +74,11 @@ router.post("/me/password", requireDriverAuth, changePassword);
 
 // Returns only active (non-delivered, non-cancelled) orders for this driver.
 router.get("/me/orders", requireDriverAuth, getMyOrders);
+
+// Posts the driver's own position, with no order attached — what the
+// dispatcher's live map runs on. Declared before the /me/orders/... routes so
+// it cannot be mistaken for one of them.
+router.post("/me/location", requireDriverAuth, postMyLocation);
 
 // Returns completed (DELIVERED) orders for this driver.
 // Declared before /me/orders/:id/... to prevent "completed" being parsed as an ID.

@@ -2,11 +2,16 @@ const jwt = require('jsonwebtoken');
 
 let _io = null;
 
-// The dispatcher's live map room, one per store. Driver positions are pushed
-// here as they arrive so the map moves without polling.
+// The dispatcher's live map room, one per store. Order-bound driver positions
+// are pushed here as they arrive so the map moves without polling.
 function dispatchRoom(storeId) {
   return `dispatch:${storeId}`;
 }
+
+// Every authenticated dashboard, regardless of store. A driver's own position
+// carries no order with it, so there is no store it belongs to — and drivers
+// are shared across all of them anyway.
+const ALL_DISPATCH_ROOM = 'dispatch:all';
 
 function init(httpServer) {
   const { Server } = require('socket.io');
@@ -26,6 +31,7 @@ function init(httpServer) {
         const payload = jwt.verify(dispatch, process.env.JWT_SECRET);
         if (payload && payload.type === 'admin' && payload.storeId) {
           socket.join(dispatchRoom(payload.storeId));
+          socket.join(ALL_DISPATCH_ROOM);
         }
       } catch {
         // Expired or forged token — no room. The map falls back to polling
@@ -49,4 +55,11 @@ function emitToDispatch(storeId, event, payload) {
   _io.to(dispatchRoom(storeId)).emit(event, payload);
 }
 
-module.exports = { init, getIO, emitToDispatch };
+// Push to every open dashboard. Used for a driver's own position, which is not
+// about any one store's order — see postMyLocation.
+function emitToAllDispatch(event, payload) {
+  if (!_io) return;
+  _io.to(ALL_DISPATCH_ROOM).emit(event, payload);
+}
+
+module.exports = { init, getIO, emitToDispatch, emitToAllDispatch };

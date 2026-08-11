@@ -84,6 +84,12 @@ async function startServer() {
     await pool.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMPTZ;`);
     await pool.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS refresh_token_expires_at TIMESTAMPTZ;`);
     await pool.query(`ALTER TABLE drivers ADD COLUMN IF NOT EXISTS email VARCHAR(150) UNIQUE;`);
+    // The driver's own last position, for the dispatcher's live map. Separate
+    // from location_updates because that table is per-order, and a driver
+    // waiting for their next job does not have one.
+    await pool.query(`ALTER TABLE drivers ADD COLUMN IF NOT EXISTS last_latitude NUMERIC(10,7);`);
+    await pool.query(`ALTER TABLE drivers ADD COLUMN IF NOT EXISTS last_longitude NUMERIC(10,7);`);
+    await pool.query(`ALTER TABLE drivers ADD COLUMN IF NOT EXISTS last_location_at TIMESTAMPTZ;`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS store_id INT REFERENCES stores(id);`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;`);
     // Drives the dashboard's retention window for completed orders.
