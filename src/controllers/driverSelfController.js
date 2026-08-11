@@ -16,7 +16,7 @@ const {
 } = require("../services/orderService");
 const { syncOrderTagToShopify, markDeliveredInShopify } = require("../services/shopifyService");
 const { etaForTrackedOrder, clearEta } = require("../services/etaService");
-const { getIO } = require("../socket");
+const { getIO, emitToDispatch } = require("../socket");
 
 // Returns all active orders assigned to the authenticated driver.
 // "Active" means any status except DELIVERED or CANCELLED, so the driver
@@ -69,6 +69,23 @@ async function postMyOrderLocation(req, res) {
       driver_id: driverId,
       latitude,
       longitude,
+    });
+
+    // The same fix, sent to the dispatcher's live map. It goes out before the
+    // ETA work below so a Directions hiccup cannot delay the pin moving, and
+    // it carries no lookup of its own — the map already knows the driver's
+    // name from GET /api/drivers/locations and refetches if this id is new.
+    emitToDispatch(order.store_id, "driver_location", {
+      driver_id: driverId,
+      latitude,
+      longitude,
+      updated_at: created.created_at,
+      order: {
+        id: order.id,
+        order_number: order.order_number,
+        order_status: order.order_status,
+        city: order.city,
+      },
     });
 
     const io = getIO();
@@ -158,6 +175,18 @@ async function patchMyOrderStatus(req, res) {
     if (io && updated.tracking_token) {
       io.to(`order:${updated.tracking_token}`).emit("status_update", { status });
     }
+
+    // The live map labels each driver with what they are carrying, so a
+    // delivery finishing has to reach it too — otherwise a driver sits on the
+    // map marked "out for delivery" until the next poll.
+    emitToDispatch(updated.store_id, "driver_status", {
+      driver_id: driverId,
+      order: {
+        id: updated.id,
+        order_number: updated.order_number,
+        order_status: status,
+      },
+    });
 
     syncOrderTagToShopify(updated.store_id, updated.shopify_order_id, status, {
       driverName: updated.driver_name,
