@@ -12,10 +12,12 @@
   <div class="layout">
     <aside class="sidebar">
       <h2>Dispatcher</h2>
+      <!-- No entry of its own in the menu: this page is reached from the
+           Check Performance button on a driver's row, so Drivers is the tab
+           it belongs under and the one that stays lit while it is open. -->
       <nav>
         <a href="index.html">Orders</a>
-        <a href="drivers.html">Drivers</a>
-        <a href="performance.html" class="active">Performance</a>
+        <a href="drivers.html" class="active">Drivers</a>
       </nav>
       <button class="btn-logout" onclick="logout()">Logout</button>
     </aside>
