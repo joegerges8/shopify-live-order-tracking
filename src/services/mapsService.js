@@ -9,6 +9,7 @@
 // have to make an HTTP call to our own API just to reuse the logic.
 
 const DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json";
+const GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const REQUEST_TIMEOUT_MS = 10000;
 
 function serverKey() {
@@ -107,4 +108,137 @@ async function getRoute({ originLat, originLng, destLat, destLng }) {
   };
 }
 
-module.exports = { getRoute, isConfigured };
+// ── Reverse geocoding ───────────────────────────────────────────────────────
+//
+// Turning a driver's coordinates into the name of the town they are in, for
+// the dispatcher's live map. The delivery city is already on the order; this
+// answers the different question of where the driver actually is right now.
+
+// Coordinates are rounded to this many decimals before being used as a cache
+// key. Two decimals is roughly a kilometre — coarser than any town, so a
+// driver crossing one asks Google a handful of times rather than once every
+// fifteen seconds, and the answer is the same town either way. The cost of the
+// rounding is only at a boundary, where the name may flip a street early.
+const GEOCODE_PRECISION = 2;
+
+// Town names do not change, so the lifetime here is about bounding memory and
+// not about freshness. The cap evicts oldest-first once a busy fleet has
+// wandered over enough of the map.
+const GEOCODE_TTL_MS = 24 * 60 * 60 * 1000;
+const GEOCODE_CACHE_LIMIT = 5000;
+
+const geocodeCache = new Map();
+
+function cacheKey(lat, lng) {
+  return `${lat.toFixed(GEOCODE_PRECISION)},${lng.toFixed(GEOCODE_PRECISION)}`;
+}
+
+function readCache(key) {
+  const hit = geocodeCache.get(key);
+  if (!hit) return undefined;
+
+  if (Date.now() - hit.at > GEOCODE_TTL_MS) {
+    geocodeCache.delete(key);
+    return undefined;
+  }
+
+  return hit.city;
+}
+
+function writeCache(key, city) {
+  // Map iterates in insertion order, so the first key is the oldest.
+  if (geocodeCache.size >= GEOCODE_CACHE_LIMIT) {
+    const oldest = geocodeCache.keys().next().value;
+    geocodeCache.delete(oldest);
+  }
+  geocodeCache.set(key, { city, at: Date.now() });
+}
+
+// Which address component to call "the town", most specific first. Google
+// returns a stack of them for one point — a street, a neighbourhood, a town, a
+// district, a governorate — and the useful one for "where is my driver" is the
+// smallest named place a dispatcher would recognise.
+const PLACE_TYPES = [
+  "locality",
+  "administrative_area_level_3",
+  "sublocality",
+  "neighborhood",
+  "administrative_area_level_2",
+];
+
+function pickPlaceName(results) {
+  if (!Array.isArray(results)) return null;
+
+  for (const type of PLACE_TYPES) {
+    for (const result of results) {
+      const components = result?.address_components;
+      if (!Array.isArray(components)) continue;
+
+      const match = components.find(
+        (component) => Array.isArray(component.types) && component.types.includes(type)
+      );
+      if (match?.long_name) return match.long_name;
+    }
+  }
+
+  return null;
+}
+
+// The town a coordinate falls in, or null when it cannot be worked out.
+//
+// Never throws and never rejects: the live map calls this for every driver on
+// every poll, and a Google outage has to cost a line of text, not the map. A
+// missing GOOGLE_MAPS_SERVER_KEY is the same — the rest of the response is
+// still useful without it.
+async function reverseGeocodeCity(latitude, longitude) {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const key = cacheKey(lat, lng);
+  const cached = readCache(key);
+  // A previous lookup that found nothing is cached as null and honoured here,
+  // so a driver parked in the middle of nowhere is not re-asked about forever.
+  if (cached !== undefined) return cached;
+
+  const apiKey = serverKey();
+  if (!apiKey) return null;
+
+  const url = new URL(GEOCODE_URL);
+  url.searchParams.set("latlng", `${lat},${lng}`);
+  // The dashboard is in English; without this Google answers in the script of
+  // whatever region the point is in, which puts Arabic town names on an
+  // otherwise English page.
+  url.searchParams.set("language", "en");
+  url.searchParams.set("key", apiKey);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url.toString(), { signal: controller.signal });
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || !data || (data.status !== "OK" && data.status !== "ZERO_RESULTS")) {
+      // A refused key or an exhausted quota is a server-side problem worth
+      // seeing in the logs, but it is not cached — the next poll may succeed.
+      if (data?.status && data.status !== "ZERO_RESULTS") {
+        console.error(
+          `[Geocode] ${data.status}${data.error_message ? `: ${data.error_message}` : ""}`
+        );
+      }
+      return null;
+    }
+
+    const city = pickPlaceName(data.results);
+    writeCache(key, city);
+    return city;
+  } catch (error) {
+    // Timeout or network failure. Not cached, for the same reason.
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+module.exports = { getRoute, isConfigured, reverseGeocodeCity };

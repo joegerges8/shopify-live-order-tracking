@@ -7,6 +7,7 @@ const {
   createDriver,
   deleteDriverById,
 } = require("../services/driverService");
+const { reverseGeocodeCity } = require("../services/mapsService");
 
 async function getDrivers(req, res) {
   try {
@@ -29,7 +30,22 @@ async function getDriverLocations(req, res) {
   try {
     const rows = await getDriverLiveLocations(req.storeId);
 
-    const drivers = rows.map((row) => {
+    // Where each driver actually is, in words. The order carries the town it
+    // is going to, which is not the same thing and reads as a plain
+    // contradiction next to a pin sitting somewhere else entirely.
+    //
+    // Resolved in parallel and cached by rough coordinate inside mapsService,
+    // so a fleet standing still costs nothing after the first poll. Every
+    // lookup already fails soft to null, so no guard is needed here.
+    const towns = await Promise.all(
+      rows.map((row) =>
+        row.latitude == null || row.longitude == null
+          ? null
+          : reverseGeocodeCity(row.latitude, row.longitude)
+      )
+    );
+
+    const drivers = rows.map((row, index) => {
       const hasFix = row.latitude != null && row.longitude != null;
       const ageSeconds =
         row.location_age_seconds == null ? null : Number(row.location_age_seconds);
@@ -49,10 +65,14 @@ async function getDriverLocations(req, res) {
               longitude: Number(row.longitude),
               updated_at: row.location_updated_at,
               age_seconds: ageSeconds === null ? null : Math.round(ageSeconds),
+              // The town the driver is in. null when reverse geocoding is
+              // unconfigured or could not name the spot — the map then shows
+              // the pin without a caption rather than inventing one.
+              city: towns[index] || null,
             }
           : null,
-        // The delivery the last ping was filed against — what the driver is
-        // carrying, which is the other half of "where is everyone".
+        // The delivery they are on now — see getDriverLiveLocations for why
+        // this is looked up fresh rather than read off the last ping.
         order: row.order_id
           ? {
               id: row.order_id,
