@@ -350,8 +350,14 @@ async function handleOrderFulfilled(req, res) {
 
     await pool.query(
       `UPDATE orders
-       SET order_status = 'FULFILLED',
-           delivered_at = NOW(),
+       SET order_status = CASE
+             WHEN order_status = 'PICKED_UP' THEN order_status
+             ELSE 'FULFILLED'
+           END,
+           delivered_at = CASE
+             WHEN order_status = 'PICKED_UP' THEN delivered_at
+             ELSE NOW()
+           END,
            fulfilled_at = NOW(),
            financial_status = COALESCE($2, financial_status),
            fulfillment_status = COALESCE($3, fulfillment_status)
@@ -361,7 +367,7 @@ async function handleOrderFulfilled(req, res) {
       [shopifyOrderId, order.financial_status || null, order.fulfillment_status || null, storeId]
     );
 
-    console.log(`[Webhook] Order ${shopifyOrderId} fulfilled in Shopify → marked DELIVERED`);
+    console.log(`[Webhook] Order ${shopifyOrderId} fulfilled in Shopify`);
     return res.status(200).send("Webhook received");
   } catch (error) {
     console.error("Webhook fulfilled error:", error);

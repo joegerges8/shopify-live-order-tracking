@@ -393,6 +393,7 @@ async function markFulfilledInShopify(storeId, shopifyOrderId, order) {
   const fulfillmentId = await ensureFulfillment(base, headers, shopifyOrderId, order);
   if (!fulfillmentId) return;
   console.log(`[Shopify sync] Order ${shopifyOrderId} marked as Fulfilled in Shopify`);
+  return true;
 }
 
 // Cancels the order in Shopify — the same as clicking Cancel order in the

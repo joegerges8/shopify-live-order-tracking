@@ -175,7 +175,6 @@ function createStatusOptions(currentStatus) {
   // the order outright.
   const statuses = [
     "ASSIGNED",   // Assigned
-    "FULFILLED",  // Fulfilled
     "PICKED_UP",  // Picked Up
     "UNFULFILLED", // Unfulfilled
     "CANCELLED",  // Cancelled

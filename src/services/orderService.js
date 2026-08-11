@@ -303,7 +303,7 @@ async function ensureTrackingToken(row) {
 async function updateOrderStatus(orderId, status, storeId) {
   const result = await pool.query(statusUpdateQuery(status), [status, orderId, storeId]);
   let row = result.rows[0];
-  if (row && (status === "FULFILLED" || status === "DELIVERED")) {
+  if (row && (status === "PICKED_UP" || status === "FULFILLED" || status === "DELIVERED")) {
     row = await ensureTrackingToken(row);
   }
   if (row) {
@@ -334,6 +334,26 @@ async function updateOrderStatus(orderId, status, storeId) {
       markFulfilledInShopify(storeId, row.shopify_order_id, row).catch(err =>
         console.error("[Shopify sync] mark fulfilled failed:", err.message)
       );
+    }
+    if (status === "PICKED_UP") {
+      try {
+        const fulfilled = await markFulfilledInShopify(storeId, row.shopify_order_id, row);
+        if (fulfilled) {
+          const fulfilledResult = await pool.query(
+            `UPDATE orders
+             SET fulfilled_at = COALESCE(fulfilled_at, NOW()),
+                 fulfillment_status = 'fulfilled'
+             WHERE id = $1 AND store_id = $2
+             RETURNING *`,
+            [row.id, storeId]
+          );
+          row = fulfilledResult.rows[0] || row;
+        }
+      } catch (error) {
+        console.error("[Shopify sync] mark fulfilled on pickup failed:", error.message);
+        row.shopify_warning =
+          `Marked picked up, but Shopify was not fulfilled: ${error.message}`;
+      }
     }
     if (status === "UNFULFILLED") {
       markUnfulfilledInShopify(storeId, row.shopify_order_id).catch(err =>

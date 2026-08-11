@@ -320,22 +320,17 @@
     <div class="progress-track">
       <div class="step">
         <div class="step-dot" id="step-0">✓</div>
-        <div class="step-label" id="step-0-lbl">Placed</div>
+        <div class="step-label" id="step-0-lbl">Pending</div>
       </div>
       <div class="step-connector" id="conn-0"></div>
       <div class="step">
         <div class="step-dot" id="step-1">2</div>
-        <div class="step-label" id="step-1-lbl">Driver</div>
+        <div class="step-label" id="step-1-lbl">Picked Up</div>
       </div>
       <div class="step-connector" id="conn-1"></div>
       <div class="step">
         <div class="step-dot" id="step-2">3</div>
-        <div class="step-label" id="step-2-lbl">Picked Up</div>
-      </div>
-      <div class="step-connector" id="conn-2"></div>
-      <div class="step">
-        <div class="step-dot" id="step-3">4</div>
-        <div class="step-label" id="step-3-lbl">Delivered</div>
+        <div class="step-label" id="step-2-lbl">Delivered</div>
       </div>
     </div>
 
@@ -430,7 +425,7 @@
         if (!currentData) return;
         currentData.order_status = status;
         applyCardData(currentData);
-        if (status === 'DELIVERED') cleanup();
+        if (customerStatusFor(status) === 'DELIVERED') cleanup();
       });
     }
 
@@ -453,27 +448,40 @@
 
     // ── Status helpers ─────────────────────────────────────────────────────
 
+    function customerStatusFor(status) {
+      return {
+        PENDING:          'PENDING',
+        UNFULFILLED:      'UNFULFILLED',
+        ASSIGNED:         'PENDING',
+        PICKED_UP:        'PICKED_UP',
+        OUT_FOR_DELIVERY: 'PICKED_UP',
+        DELIVERED:        'DELIVERED',
+        FULFILLED:        'DELIVERED',
+        RETURNED:         'RETURNED',
+        CANCELLED:        'CANCELLED',
+      }[status] || 'PENDING';
+    }
+
     function headlineFor(status) {
       return {
-        PENDING:          'Order Confirmed',
-        UNFULFILLED:      'Order Confirmed',
-        ASSIGNED:         'Driver is heading to pickup',
-        PICKED_UP:        'Order on the way',
-        DELIVERED:        'Order delivered!',
-        RETURNED:         'Order returned to the store',
-        CANCELLED:        'Order cancelled',
-      }[status] || status;
+        PENDING:     'Order pending',
+        UNFULFILLED: 'Order Confirmed',
+        PICKED_UP:   'Order picked up',
+        DELIVERED:   'Order delivered!',
+        RETURNED:    'Order returned to the store',
+        CANCELLED:   'Order cancelled',
+      }[customerStatusFor(status)];
     }
 
     function stepIndex(status) {
-      return { PENDING: 0, UNFULFILLED: 0, ASSIGNED: 1, PICKED_UP: 2, OUT_FOR_DELIVERY: 2, DELIVERED: 3, CANCELLED: 0 }[status] ?? 0;
+      return { PENDING: 0, UNFULFILLED: 0, PICKED_UP: 1, DELIVERED: 2 }[customerStatusFor(status)] ?? 0;
     }
 
     function updateProgressSteps(status) {
       const active  = stepIndex(status);
-      const allDone = status === 'DELIVERED';
+      const allDone = customerStatusFor(status) === 'DELIVERED';
 
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 3; i++) {
         const dot   = document.getElementById(`step-${i}`);
         const label = document.getElementById(`step-${i}-lbl`);
         const isDone   = allDone || i === 0 || i < active;
@@ -484,7 +492,7 @@
         dot.textContent = isDone ? '✓' : String(i + 1);
       }
 
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 2; i++) {
         document.getElementById(`conn-${i}`).className =
           'step-connector' + (allDone || i < active ? ' done' : '');
       }
@@ -729,7 +737,8 @@
 
     function applyCardData(data) {
       const status   = data.order_status;
-      const isActive = ['PICKED_UP', 'OUT_FOR_DELIVERY'].includes(status);
+      const customerStatus = customerStatusFor(status);
+      const isActive = customerStatus === 'PICKED_UP';
 
       document.getElementById('status-headline').textContent = headlineFor(status);
       document.getElementById('live-badge').className =
@@ -758,7 +767,7 @@
         whatsappLink.style.display = 'none';
       }
 
-      if (status === 'DELIVERED') cleanup();
+      if (customerStatus === 'DELIVERED') cleanup();
     }
 
     // ── Fetch tracking data (initial + fallback polling) ───────────────────
