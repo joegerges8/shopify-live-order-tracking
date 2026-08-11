@@ -317,10 +317,9 @@ function driverRow(driver) {
     nameRow.appendChild(dot);
   }
 
-  // What they are carrying. The order behind the last fix is the useful line
-  // when they are out; the count of assignments is the useful line when they
-  // are not moving yet. The destination town goes on the line below with the
-  // clock — the column is narrow, and order and status are what get read first.
+  // The delivery they are on now. The backend answers this from the orders
+  // table rather than from the last GPS ping, so an order that has been
+  // delivered or returned drops off this line instead of clinging to it.
   const detail = document.createElement("div");
   detail.className = "feed-detail";
   if (driver.order && driver.order.order_number) {
@@ -328,21 +327,29 @@ function driverRow(driver) {
       ? driver.order.order_number
       : `#${driver.order.order_number}`;
     detail.textContent = `${number} · ${statusLabel(driver.order.order_status)}`;
+    // Where the order is going, kept off the visible line — the column is
+    // narrow, and confusing it with where the driver is was the whole problem.
+    detail.title = driver.order.city
+      ? `${detail.textContent} · delivering to ${driver.order.city}`
+      : detail.textContent;
   } else if (driver.active_orders > 0) {
     detail.textContent =
       driver.active_orders === 1
         ? "1 order assigned · not started"
         : `${driver.active_orders} orders assigned · not started`;
+    detail.title = detail.textContent;
   } else {
     detail.textContent = "No active delivery";
+    detail.title = detail.textContent;
   }
-  // Whatever the column had to clip stays reachable on hover.
-  detail.title = detail.textContent;
 
+  // Where the driver is, not where they are heading. "In" is doing real work
+  // here: this line sat next to the delivery city for a while, and a pin in
+  // Ballouneh captioned "Tripoli" reads as a bug rather than as a destination.
   const meta = document.createElement("div");
   meta.className = "feed-meta";
   const when = agoText(driver.location ? driver.location.age_seconds : null);
-  const where = driver.order && driver.order.city ? `${driver.order.city} · ` : "";
+  const where = driver.location && driver.location.city ? `In ${driver.location.city} · ` : "";
   meta.textContent = `${where}${when}`;
 
   body.append(nameRow, detail, meta);
@@ -474,10 +481,22 @@ function connectSocket() {
       latitude: ping.latitude,
       longitude: ping.longitude,
       updated_at: ping.updated_at,
+      // The town name is not carried on the ping — it costs a geocode, which
+      // belongs on the poll. Keeping the last known one avoids the caption
+      // blinking out between polls while the driver is plainly still there.
+      city: driver.location ? driver.location.city : null,
       age_seconds: 0,
     };
     driver.online = true;
-    if (ping.order) driver.order = { ...(driver.order || {}), ...ping.order };
+
+    // Which delivery the driver is on is the poll's answer, never the ping's:
+    // the ping only knows which order it was filed against, which is exactly
+    // the stale reading this line used to copy onto the row. What it is good
+    // for is noticing they have moved onto a different order than the one the
+    // panel is showing — that means the panel is out of date, so refetch.
+    if (ping.order && (!driver.order || driver.order.id !== ping.order.id)) {
+      scheduleRefetch();
+    }
 
     syncMarker(driver);
     renderList();
@@ -488,15 +507,18 @@ function connectSocket() {
     const driver = drivers.find((candidate) => candidate.id === event.driver_id);
     if (!driver || !event.order) return;
 
-    // Only relabel the delivery the pin is actually attached to. A driver
-    // carrying three orders can finish one of the others without their pin
-    // meaning anything different.
+    // Relabel the delivery on the row straight away when it is the one that
+    // changed, so the dispatcher sees it land rather than waiting for a poll.
     if (driver.order && driver.order.id === event.order.id) {
       driver.order.order_status = event.order.order_status;
+      renderList();
     }
-    // The count of what they are still carrying changed either way, and the
-    // poll below will correct it within seconds.
-    renderList();
+
+    // Then confirm with the server. A status change can move an order out of
+    // the driver's hands entirely — delivered, returned — and what should
+    // replace it on the row (their next order, or nothing) is not something
+    // this event can say.
+    scheduleRefetch();
   });
 }
 

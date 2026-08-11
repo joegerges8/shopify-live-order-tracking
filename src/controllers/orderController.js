@@ -12,6 +12,7 @@ const {
 const { AREAS, UNKNOWN_AREA } = require("../utils/areaLookup");
 const { parseMapLink } = require("../utils/parseMapLink");
 const { importOrdersFromShopify } = require("../services/shopifyService");
+const { getIO, emitToDispatch } = require("../socket");
 const pool = require("../config/db");
 
 async function getOrders(req, res) {
@@ -103,6 +104,35 @@ async function changeOrderStatus(req, res) {
     }
 
     const updatedOrder = await updateOrderStatus(orderId, status, req.storeId);
+
+    // A status set from the dashboard has to travel as far as one set from the
+    // driver's phone. It did not: the driver app's path pushed to both the
+    // customer's tracking page and the live map, while this one pushed to
+    // nothing, so a dispatcher marking an order PICKED_UP saw their own map
+    // and the customer's page sit unchanged until something happened to
+    // re-poll them.
+    const io = getIO();
+    if (io && updatedOrder && updatedOrder.tracking_token) {
+      io.to(`order:${updatedOrder.tracking_token}`).emit("status_update", { status });
+    }
+
+    // Cancelling releases the driver, so the updated row has no driver id to
+    // read — but the map is showing that driver holding this order right now
+    // and is precisely who needs telling. The pre-update row still knows.
+    const affectedDriverId =
+      updatedOrder?.assigned_driver_id ?? order.assigned_driver_id;
+
+    if (updatedOrder && affectedDriverId) {
+      emitToDispatch(req.storeId, "driver_status", {
+        driver_id: affectedDriverId,
+        order: {
+          id: updatedOrder.id,
+          order_number: updatedOrder.order_number,
+          order_status: status,
+        },
+      });
+    }
+
     return res.json(updatedOrder);
   } catch (error) {
     console.error("Error updating order status:", error);

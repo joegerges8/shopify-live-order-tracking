@@ -91,6 +91,10 @@ async function updateDriverPassword(driverId, newPasswordHash) {
 // they left an hour ago.
 const LIVE_PING_WINDOW_SECONDS = 120;
 
+// Statuses that mean the order is off the driver's hands. Kept here because
+// two queries below have to agree about what "still carrying it" means.
+const FINISHED_ORDER_STATUSES = ["DELIVERED", "RETURNED", "CANCELLED", "FULFILLED"];
+
 // Every driver's most recent position, for the dispatcher's live map.
 //
 // Location pings are recorded per order, not per driver, so "where is this
@@ -98,6 +102,15 @@ const LIVE_PING_WINDOW_SECONDS = 120;
 // The store filter is not cosmetic: drivers are shared across stores, and
 // without it one merchant's dashboard would show driver movement — and the
 // order behind it — belonging to another merchant's deliveries.
+//
+// The order reported alongside the position is deliberately NOT the one that
+// last ping was filed against. That order may since have been delivered or
+// returned, and reading it back left the map insisting a driver was still on a
+// job they had finished — a pin labelled "Returned" for as long as the last
+// ping stayed on file. What a dispatcher is asking is "what is this driver
+// carrying now", so the answer is looked up fresh from the orders table: the
+// pinged order while it is still live, otherwise their newest open one,
+// otherwise nothing at all.
 //
 // Drivers with no ping at all are still returned, with a null location. They
 // are the ones sitting idle, and a dispatcher wants to see that they exist
@@ -134,18 +147,33 @@ async function getDriverLiveLocations(storeId) {
        ORDER BY l.created_at DESC
        LIMIT 1
      ) lu ON TRUE
-     LEFT JOIN orders o ON o.id = lu.order_id
+     -- What the driver is carrying now, which is a different question from
+     -- which order the last ping was filed against. The order being pinged
+     -- wins while it is still open, so a driver mid-delivery is labelled with
+     -- the delivery they are actually on; a finished one falls through to
+     -- their next open order, and a driver with none at all gets no order
+     -- rather than the ghost of their last one.
+     LEFT JOIN LATERAL (
+       SELECT ao.id, ao.order_number, ao.order_status, ao.city, ao.area,
+              ao.customer_first_name, ao.customer_last_name, ao.tracking_token
+       FROM orders ao
+       WHERE ao.assigned_driver_id = d.id
+         AND ao.store_id = $1
+         AND ao.order_status <> ALL ($2::text[])
+       ORDER BY COALESCE(ao.id = lu.order_id, FALSE) DESC, ao.created_at DESC
+       LIMIT 1
+     ) o ON TRUE
      LEFT JOIN LATERAL (
        SELECT COUNT(*)::int AS active_orders
        FROM orders ao
        WHERE ao.assigned_driver_id = d.id
          AND ao.store_id = $1
-         AND ao.order_status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED', 'FULFILLED')
+         AND ao.order_status <> ALL ($2::text[])
      ) act ON TRUE
      -- Whoever is moving right now sorts to the top, idle drivers to the
      -- bottom: the list beside the map reads in the order a dispatcher cares.
      ORDER BY (lu.created_at IS NULL), lu.created_at DESC, d.full_name`,
-    [storeId]
+    [storeId, FINISHED_ORDER_STATUSES]
   );
 
   return result.rows;
