@@ -1326,7 +1326,16 @@ button:hover {
   background: #e5e7eb;
 }
 
+/* Pinned to the wrapper's edges rather than sized at height: 100%. A
+   percentage height only resolves against a parent with a definite height, and
+   the wrapper is a flex item whose height comes from the layout around it —
+   when that height is decided by flex-grow rather than by its own property,
+   the percentage collapses to zero and Google Maps draws into a strip with no
+   height, which is a blank page with no error to show for it. Insets do not
+   care how the wrapper got its size. */
 .map-canvas {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
 }
@@ -1611,7 +1620,11 @@ button:hover {
     max-height: 260px;
   }
 
+  /* Stacked, the map takes the height it is given rather than whatever is left
+     over: flex-grow on a column whose container has no definite height of its
+     own is how the map ended up an unpredictable size. */
   .map-canvas-wrap {
+    flex: none;
     height: 60vh;
     min-height: 320px;
   }
