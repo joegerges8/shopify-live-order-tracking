@@ -6,7 +6,7 @@
   <title>Dispatcher Login</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
-    body { background: #f3f4f6; color: #1f2937; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    body { background: #f3f4f6; color: #1f2937; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; -webkit-text-size-adjust: 100%; }
     .login-card {
       background: white;
       padding: 44px 40px;
@@ -41,6 +41,7 @@
     button:hover { background: #163172; }
     #errorMsg { color: #dc2626; font-size: 14px; margin-top: 14px; text-align: center; min-height: 20px; }
     .hint { font-size: 12px; color: #9ca3af; margin-top: -14px; margin-bottom: 20px; }
+      @media (max-width: 480px) { .login-card { padding: 28px 20px; } }
   </style>
 </head>
 <body>

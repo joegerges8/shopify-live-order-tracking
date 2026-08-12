@@ -6,7 +6,7 @@
   <title>Set Up Your Dashboard</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
-    body { background: #f3f4f6; color: #1f2937; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    body { background: #f3f4f6; color: #1f2937; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; -webkit-text-size-adjust: 100%; }
     .card {
       background: white;
       padding: 44px 40px;
@@ -53,6 +53,7 @@
     button:hover { background: #163172; }
     button:disabled { background: #93c5fd; cursor: not-allowed; }
     #errorMsg { color: #dc2626; font-size: 14px; margin-top: 14px; text-align: center; min-height: 20px; }
+      @media (max-width: 480px) { .card { padding: 28px 20px; } }
   </style>
 </head>
 <body>

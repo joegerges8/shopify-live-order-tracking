@@ -1616,3 +1616,342 @@ button:hover {
     min-height: 320px;
   }
 }
+
+/* ===========================================================================
+   PHONES
+
+   A dispatcher on the road opens this on a phone, and none of the desktop
+   layout survives 390 pixels: a fixed sidebar eats half the width, and a
+   ten-column table can only be read by dragging it sideways a column at a
+   time.
+
+   Two things change below 768px. The sidebar becomes a bar across the top, so
+   the nav is one thumb-reach away and the content gets the full width. And the
+   tables restack into one card per row — every cell keeps its column heading,
+   printed from the data-label the renderers write, so a value is never left
+   without the word that says what it is.
+
+   The rules are last in the file on purpose: they have to beat the laptop
+   block above them on the widths where both apply.
+   =========================================================================== */
+
+@media (max-width: 768px) {
+  /* Stops iOS inflating text in the restacked cards. */
+  body {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .layout {
+    flex-direction: column;
+  }
+
+  /* Sticky: the tables get long, and scrolling back to the top of a hundred
+     orders to reach Drivers is not a navigation. */
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 900;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+  }
+
+  .sidebar h2 {
+    font-size: 19px;
+    margin-bottom: 0;
+    margin-right: auto;
+  }
+
+  /* Second line, full width: the three tabs read as a row of their own rather
+     than being squeezed in beside the title and the logout button. */
+  .sidebar nav {
+    order: 3;
+    width: 100%;
+    flex-direction: row;
+    gap: 20px;
+  }
+
+  .sidebar nav a {
+    font-size: 15px;
+  }
+
+  .btn-logout {
+    margin-top: 0;
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .main-content {
+    padding: 14px 12px;
+  }
+
+  .main-content h1,
+  .map-page h1 {
+    font-size: 24px;
+    margin-bottom: 12px;
+  }
+
+  .page-header {
+    gap: 10px;
+  }
+
+  .stats-grid,
+  .stats-grid-5 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .stat-card {
+    padding: 12px 14px;
+  }
+
+  .stat-card h3 {
+    font-size: 22px;
+  }
+
+  .filters-bar {
+    gap: 8px;
+  }
+
+  /* 16px is the threshold below which iOS zooms the page in when a field takes
+     focus, and it does not zoom back out. Every control the dispatcher types
+     into or picks from stays at or above it. */
+  .filters-bar input,
+  .filters-bar select,
+  .driver-form input,
+  .period-range input[type="date"] {
+    font-size: 16px;
+    padding: 11px 12px;
+  }
+
+  .filters-bar input,
+  .driver-form input {
+    flex: 1 1 100%;
+  }
+
+  .filters-bar select {
+    flex: 1 1 45%;
+  }
+
+  /* --- Tables become cards ------------------------------------------------
+     The container stops being the white surface; each row becomes one. */
+
+  .table-container {
+    background: none;
+    box-shadow: none;
+    padding: 0;
+    overflow-x: visible;
+  }
+
+  .table-container table,
+  .table-container thead,
+  .table-container tbody,
+  .table-container tr,
+  .table-container td {
+    display: block;
+    width: auto;
+  }
+
+  /* The headings are not lost — they are reprinted inside each cell below. */
+  .table-container thead {
+    display: none;
+  }
+
+  .table-container tbody tr {
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    padding: 4px 14px;
+    margin-bottom: 12px;
+  }
+
+  .table-container tbody td {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 14px;
+    text-align: right;
+  }
+
+  .table-container tbody tr td:last-child {
+    border-bottom: none;
+  }
+
+  /* The column heading, carried down by the renderers. margin-right: auto is
+     what pins the label left and the value right on the same line. */
+  .table-container tbody td[data-label]::before {
+    content: attr(data-label);
+    margin-right: auto;
+    flex-shrink: 0;
+    color: #6b7280;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-align: left;
+  }
+
+  /* "No orders found" and the load failures span the table and have no
+     heading to print. */
+  .table-container tbody td:not([data-label]) {
+    justify-content: center;
+    text-align: center;
+    color: #6b7280;
+  }
+
+  .action-group {
+    min-width: 150px;
+  }
+
+  /* Anything the dispatcher taps gets a finger-sized target. */
+  .action-group select,
+  .action-group .small-btn,
+  .action-group .track-btn,
+  .btn-secondary,
+  .btn-delete {
+    min-height: 40px;
+    font-size: 15px;
+  }
+
+  .action-group select {
+    font-size: 16px;
+  }
+
+  .track-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .phone-btn {
+    min-height: 36px;
+    font-size: 14px;
+  }
+
+  .area-select {
+    max-width: 130px;
+    font-size: 14px;
+    padding: 7px 6px;
+  }
+
+  .area-cell {
+    margin-top: 0;
+  }
+
+  /* The note keeps its own card, directly under the order it belongs to, and
+     reads left to right like the prose it is. */
+  .driver-note-row td,
+  .table-container .driver-note-row td:not([data-label]) {
+    justify-content: flex-start;
+    text-align: left;
+    color: #713f12;
+  }
+
+  .table-container tbody tr.driver-note-row {
+    background: #fffbeb;
+    margin-top: -6px;
+  }
+
+  /* --- Live map ------------------------------------------------------------
+     The panel and the map are already stacked by the 900px rules; on a phone
+     the map needs to keep enough height to be worth looking at. */
+
+  .map-shell {
+    margin-top: 12px;
+    gap: 12px;
+  }
+
+  .map-panel {
+    max-height: 220px;
+  }
+
+  .map-canvas-wrap {
+    height: 55vh;
+    min-height: 280px;
+  }
+
+  .map-updated {
+    min-width: 0;
+    text-align: left;
+  }
+
+  /* --- Performance --------------------------------------------------------- */
+
+  .period-bar {
+    gap: 10px;
+    margin: 12px 0 8px;
+  }
+
+  .period-presets,
+  .period-range {
+    width: 100%;
+  }
+
+  .period-btn {
+    flex: 1 1 auto;
+    padding: 9px 12px;
+  }
+
+  .drivers-toolbar {
+    gap: 10px;
+  }
+
+  .driver-perf-card {
+    padding: 14px;
+  }
+
+  .settlement-total span:last-child {
+    font-size: 22px;
+  }
+
+  /* --- Toasts and modals ---------------------------------------------------
+     Anchored to both edges instead of hanging off the right, where a 420px
+     toast would have run off the screen. */
+
+  .toast-host {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
+
+  .toast {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .modal {
+    padding: 20px 18px 16px;
+  }
+
+  .modal-actions {
+    margin-top: 18px;
+  }
+
+  .modal-btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+}
+
+/* Narrow phones: the three-across figures on a driver's performance card stop
+   fitting on one line and start breaking mid-word. */
+@media (max-width: 430px) {
+  .driver-perf-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sidebar nav {
+    gap: 16px;
+  }
+
+  .table-container tbody tr {
+    padding: 4px 12px;
+  }
+}

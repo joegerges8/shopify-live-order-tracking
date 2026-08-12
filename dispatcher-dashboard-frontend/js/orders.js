@@ -400,31 +400,35 @@ function renderOrders(orders, drivers) {
          </select>
          <button class="small-btn" data-assign-order-id="${order.id}">Assign</button>`;
 
+    // data-label carries the column heading down into the cell itself. On a
+    // phone the table is restacked into one card per order, where there is no
+    // header row left to read a value against, and the stylesheet prints these
+    // as the label beside each value.
     row.innerHTML = `
-      <td>
+      <td data-label="Order #">
         ${order.order_number ?? ""}
         ${createDriverNoteToggle(order)}
       </td>
-      <td>${customerName}</td>
-      <td>${createPhoneCell(order)}</td>
-      <td>
+      <td data-label="Customer">${customerName}</td>
+      <td data-label="Phone">${createPhoneCell(order)}</td>
+      <td data-label="City">
         ${city}
         <div class="area-cell">
           <select id="area-${order.id}" class="area-select">${createAreaOptions(getOrderArea(order))}</select>
           <button class="small-btn" data-area-order-id="${order.id}">Set</button>
         </div>
       </td>
-      <td>${order.total_price ?? ""}</td>
-      <td>${order.financial_status ?? ""}</td>
-      <td>${createStatusBadge(orderStatus)}</td>
-      <td>${assignedDriverName}</td>
-      <td>
+      <td data-label="Total">${order.total_price ?? ""}</td>
+      <td data-label="Financial Status">${order.financial_status ?? ""}</td>
+      <td data-label="Order Status">${createStatusBadge(orderStatus)}</td>
+      <td data-label="Assigned Driver">${assignedDriverName}</td>
+      <td data-label="Assign Driver">
         <div class="action-group">
           ${assignControls}
           ${trackingBtn}
         </div>
       </td>
-      <td>
+      <td data-label="Update Status">
         <div class="action-group">
           <select id="status-${order.id}">
             ${createStatusOptions(orderStatus)}

@@ -38,17 +38,19 @@ async function loadDrivers() {
       const row = document.createElement("tr");
       const driverStatus = isDriverBusy(driver.id, orders) ? "ASSIGNED" : "AVAILABLE";
 
+      // data-label repeats the column heading inside the cell, for the phone
+      // layout where each driver becomes a card and the header row is gone.
       row.innerHTML = `
-        <td>${driver.id ?? ""}</td>
-        <td>${driver.full_name ?? ""}</td>
-        <td>${driver.phone ?? ""}</td>
-        <td>${createStatusBadge(driverStatus)}</td>
-        <td>
+        <td data-label="ID">${driver.id ?? ""}</td>
+        <td data-label="Full Name">${driver.full_name ?? ""}</td>
+        <td data-label="Phone">${driver.phone ?? ""}</td>
+        <td data-label="Status">${createStatusBadge(driverStatus)}</td>
+        <td data-label="Performance">
           <button class="btn-secondary" data-performance="${driver.id}">
             Check Performance
           </button>
         </td>
-        <td>
+        <td data-label="Actions">
           <button class="btn-delete" data-id="${driver.id}">Delete</button>
         </td>
       `;
