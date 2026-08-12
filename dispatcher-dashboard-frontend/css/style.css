@@ -1351,6 +1351,249 @@ button:hover {
   color: #6b7280;
 }
 
+/* ===========================================================================
+   LAPTOP SCREENS
+
+   The dashboard was drawn against a desktop monitor: a 260px sidebar, a 54px
+   page heading and a ten-column orders table with 16px cells. A 15" laptop
+   reports somewhere between 1280 and 1536 CSS pixels wide (1366x768 natively,
+   or 1920x1080 at the 125%–150% scaling Windows sets by default there), and at
+   that width the table ran off the right edge — Update Status was unreachable
+   without scrolling sideways — while the heading and the stat cards pushed the
+   first order below the fold.
+
+   Everything below shrinks chrome, never data: padding, type scale and control
+   sizes come down so all ten columns and the first rows land inside the
+   window. Above 1600px the original desktop sizing is untouched.
+   =========================================================================== */
+
+@media (max-width: 1600px) {
+  .sidebar {
+    width: 200px;
+    padding: 18px 16px;
+  }
+
+  .sidebar h2 {
+    font-size: 22px;
+    margin-bottom: 24px;
+  }
+
+  .sidebar nav {
+    gap: 12px;
+  }
+
+  .sidebar nav a {
+    font-size: 15px;
+  }
+
+  .btn-logout {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .main-content {
+    padding: 20px 22px;
+  }
+
+  .main-content h1 {
+    font-size: 32px;
+    margin-bottom: 16px;
+  }
+
+  .map-page h1 {
+    font-size: 26px;
+  }
+
+  .section-title {
+    font-size: 19px;
+  }
+
+  .sync-status {
+    margin: 6px 0 12px;
+    font-size: 13px;
+  }
+
+  .stats-grid {
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .stat-card {
+    padding: 14px 16px;
+    border-radius: 12px;
+  }
+
+  .stat-title {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+
+  .stat-card h3 {
+    font-size: 26px;
+  }
+
+  .filters-bar {
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  /* The 220px floor made five filters wider than the content area on their
+     own. They share the row instead, each still wide enough for its label. */
+  .filters-bar input,
+  .filters-bar select {
+    flex: 1 1 150px;
+    min-width: 0;
+    padding: 9px 11px;
+    font-size: 14px;
+  }
+
+  .table-container,
+  .drivers-list {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  table th,
+  table td {
+    padding: 10px 8px;
+    font-size: 13px;
+  }
+
+  table th {
+    font-size: 13px;
+  }
+
+  .status-badge {
+    padding: 4px 9px;
+    font-size: 11px;
+  }
+
+  .small-btn,
+  .btn-secondary {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+
+  .action-group {
+    min-width: 118px;
+    gap: 6px;
+  }
+
+  .action-group select {
+    padding: 7px 8px;
+    font-size: 12px;
+  }
+
+  .area-select {
+    max-width: 100px;
+  }
+
+  .driver-form input {
+    min-width: 170px;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  .driver-card {
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+
+  .driver-card strong {
+    font-size: 16px;
+  }
+
+  .driver-note-row td {
+    font-size: 13px;
+  }
+
+  /* Performance cards at 420px minimum could only ever be one per row on a
+     laptop; at 340px two settle side by side again. */
+  .driver-perf-list {
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 14px;
+  }
+
+  .driver-perf-card {
+    padding: 16px;
+  }
+
+  .driver-perf-head h3 {
+    font-size: 18px;
+  }
+
+  .driver-perf-stats strong {
+    font-size: 17px;
+  }
+
+  .settlement-total span:last-child {
+    font-size: 24px;
+  }
+}
+
+/* The fleet list is beside the map, so on a laptop it is width taken from the
+   map itself. Bounded to widths where the two still sit side by side — below
+   900px they stack and the panel goes full width. */
+@media (min-width: 901px) and (max-width: 1600px) {
+  .map-panel {
+    width: 300px;
+  }
+
+  .map-shell {
+    gap: 14px;
+    margin-top: 14px;
+    padding-bottom: 16px;
+  }
+}
+
+/* 1366x768 and 1920x1080-at-150%: the narrow end of the same laptop. A little
+   tighter again. The stat cards stay on one row — vertical space is what is
+   scarce on a 768px-tall screen, and wrapping them costs a whole order row. */
+@media (max-width: 1400px) {
+  .sidebar {
+    width: 176px;
+  }
+
+  .main-content {
+    padding: 16px 18px;
+  }
+
+  .main-content h1 {
+    font-size: 28px;
+  }
+
+  .stat-card {
+    padding: 12px 14px;
+  }
+
+  .stat-card h3 {
+    font-size: 23px;
+  }
+
+  table th,
+  table td {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  table th {
+    font-size: 12px;
+  }
+
+  .action-group {
+    min-width: 104px;
+  }
+
+  .phone-btn {
+    gap: 5px;
+  }
+
+  .phone-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
 /* Below this the panel and the map cannot both be useful side by side, so the
    fleet list moves above the map and both get a fixed slice of the screen. */
 @media (max-width: 900px) {
