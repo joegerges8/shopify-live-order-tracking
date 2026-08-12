@@ -334,7 +334,13 @@ async function handleOrderDeleted(req, res) {
 }
 
 // Fired by Shopify when all items in an order are fulfilled from the Shopify admin.
-// Marks the dispatcher order as DELIVERED so both dashboards stay in sync.
+// Marks the dispatcher order as FULFILLED so both dashboards stay in sync.
+//
+// Fulfilling in Shopify means the goods are packed and ready, not that they
+// reached the customer — the delivery itself still has to happen. So this sets
+// fulfilled_at and leaves delivered_at alone: that timestamp belongs to the
+// driver or dispatcher marking the order DELIVERED, and is what
+// performanceService counts as a completed delivery.
 async function handleOrderFulfilled(req, res) {
   try {
     const order = parseWebhookOrder(req);
@@ -353,10 +359,6 @@ async function handleOrderFulfilled(req, res) {
        SET order_status = CASE
              WHEN order_status = 'PICKED_UP' THEN order_status
              ELSE 'FULFILLED'
-           END,
-           delivered_at = CASE
-             WHEN order_status = 'PICKED_UP' THEN delivered_at
-             ELSE NOW()
            END,
            fulfilled_at = NOW(),
            financial_status = COALESCE($2, financial_status),

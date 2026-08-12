@@ -456,6 +456,12 @@
 
     // ── Status helpers ─────────────────────────────────────────────────────
 
+    // FULFILLED means the order was fulfilled in the Shopify admin — the goods
+    // are packed and ready, and nothing has left the shop yet. To the customer
+    // that is the same moment as UNFULFILLED, not the end of the journey: a
+    // driver still has to pick the order up and deliver it. Only DELIVERED,
+    // which the driver or dispatcher sets once the parcel is handed over, ends
+    // the tracking page.
     function customerStatusFor(status) {
       return {
         PENDING:          'PENDING',
@@ -464,7 +470,7 @@
         PICKED_UP:        'PICKED_UP',
         OUT_FOR_DELIVERY: 'PICKED_UP',
         DELIVERED:        'DELIVERED',
-        FULFILLED:        'DELIVERED',
+        FULFILLED:        'UNFULFILLED',
         RETURNED:         'RETURNED',
         CANCELLED:        'CANCELLED',
       }[status] || 'PENDING';
