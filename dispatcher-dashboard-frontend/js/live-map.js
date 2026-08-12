@@ -194,8 +194,9 @@ function markerTitle(driver) {
   const carrying = (driver.orders || [])
     .map((order) => `${orderNumberText(order)} · ${statusLabel(order.order_status)}`)
     .join(", ");
-  const where = driver.location && driver.location.city
-    ? `${driver.online ? "in" : "last seen in"} ${driver.location.city}`
+  const place = displayCity(driver);
+  const where = place
+    ? `${driver.online ? "in" : "last seen in"} ${place.name}${place.exact ? "" : " (approx)"}`
     : null;
 
   return [name, where, carrying || "no active delivery"].filter(Boolean).join(" — ");
@@ -301,6 +302,134 @@ function fitAll() {
     });
   });
   map.fitBounds(bounds, 60);
+}
+
+/* ===========================
+   Naming the town a driver is in
+=========================== */
+
+// The server also answers this, but it can only ask Google when the install
+// has a GOOGLE_MAPS_SERVER_KEY; without one it falls back to the nearest of a
+// few hundred town centres it keeps locally, and near a boundary that names
+// the wrong village — a driver standing in Ballouneh reported as Jeita.
+//
+// This page is already holding a working Google Maps key, so it asks Google
+// itself and puts the exact answer over the top. When the geocoder cannot
+// answer either the server's approximate name is still shown, worded as
+// "Near Jeita" rather than "In Jeita" so it never claims to be exact.
+
+// How far a driver has to travel before their town is looked up again. Towns
+// are hundreds of metres across at least, so this is fine grained enough to
+// catch the moment one is left, while a driver crossing the country costs a
+// lookup every few hundred metres rather than one per GPS fix.
+const GEOCODE_MOVE_METERS = 400;
+
+// Which address component to call "the town", most specific first — the same
+// order the server uses, so the two agree about what a place is called.
+const PLACE_TYPES = [
+  "locality",
+  "administrative_area_level_3",
+  "sublocality",
+  "neighborhood",
+  "administrative_area_level_2",
+];
+
+let geocoder = null;
+// driver id → { lat, lng, city }: the last position we asked about and what
+// came back, so a stationary fleet costs nothing after the first answer.
+const geocodedByDriver = new Map();
+const geocodesInFlight = new Set();
+let geocoderRefused = false;
+
+function metresBetween(a, b) {
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function driverPos(driver) {
+  if (!driver.location) return null;
+  const lat = Number(driver.location.latitude);
+  const lng = Number(driver.location.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
+function pickPlaceName(results) {
+  if (!Array.isArray(results)) return null;
+
+  for (const type of PLACE_TYPES) {
+    for (const result of results) {
+      const match = (result.address_components || []).find(
+        (component) => (component.types || []).includes(type)
+      );
+      if (match && match.long_name) return match.long_name;
+    }
+  }
+
+  return null;
+}
+
+// What to put on the row: the name, and whether it can be trusted to the
+// street or is only the nearest place we know of.
+function displayCity(driver) {
+  const pos = driverPos(driver);
+  const known = geocodedByDriver.get(driver.id);
+
+  if (pos && known && known.city && metresBetween(known, pos) < GEOCODE_MOVE_METERS) {
+    return { name: known.city, exact: true };
+  }
+
+  const city = driver.location && driver.location.city;
+  if (!city) return null;
+
+  return { name: city, exact: driver.location.city_precision !== "APPROXIMATE" };
+}
+
+// Asks Google where each driver is, for the ones we do not already have a
+// recent answer for. Called after every fetch and every ping; the distance
+// check above is what keeps that from being a lookup per GPS fix.
+function refreshCities() {
+  if (!geocoder || geocoderRefused) return;
+
+  drivers.forEach((driver) => {
+    const pos = driverPos(driver);
+    if (!pos || geocodesInFlight.has(driver.id)) return;
+
+    const known = geocodedByDriver.get(driver.id);
+    if (known && metresBetween(known, pos) < GEOCODE_MOVE_METERS) return;
+
+    geocodesInFlight.add(driver.id);
+    geocoder.geocode({ location: pos }, (results, status) => {
+      geocodesInFlight.delete(driver.id);
+
+      if (status !== "OK") {
+        // ZERO_RESULTS is a real answer about an empty patch of map; anything
+        // else means the Geocoding API is not available to this key, and
+        // retrying it for every driver on every poll would only burn requests.
+        if (status !== "ZERO_RESULTS") {
+          geocoderRefused = true;
+          console.warn(
+            `[Live map] Google could not name driver locations (${status}). ` +
+            `Falling back to the nearest known town, which is approximate. ` +
+            `Enable the Geocoding API for this key, or set GOOGLE_MAPS_SERVER_KEY ` +
+            `on the server, for exact town names.`
+          );
+        }
+        return;
+      }
+
+      const city = pickPlaceName(results);
+      if (!city) return;
+
+      geocodedByDriver.set(driver.id, { ...pos, city });
+      renderList();
+      syncMarker(driver);
+    });
+  });
 }
 
 /* ===========================
@@ -461,15 +590,30 @@ function driverRow(driver) {
   // reads as a bug rather than as a destination.
   //
   // Once they stop sharing it becomes "Last seen in Ballouneh · 20 min ago",
-  // which is exactly what the grey pin on the map is saying. The town comes
-  // from the server, which asks Google and falls back to the nearest town in
-  // its own table, so this line survives a missing key or a bad minute.
+  // which is exactly what the grey pin on the map is saying.
+  //
+  // "In" is a promise that this is the town the pin is standing in, so it is
+  // only used for a name Google gave us. When all we have is the nearest town
+  // centre from the local table the word becomes "Near", because that name can
+  // be the village next door and reading it as exact is how a dispatcher ends
+  // up looking for a driver in the wrong place.
   const meta = document.createElement("div");
   meta.className = "feed-meta";
   const when = agoText(driver.location ? driver.location.age_seconds : null);
-  const city = driver.location && driver.location.city;
-  const where = city ? `${driver.online ? "In" : "Last seen in"} ${city} · ` : "";
+  const place = displayCity(driver);
+  let where = "";
+  if (place) {
+    const preposition = place.exact ? "in" : "near";
+    where = driver.online
+      ? `${preposition === "in" ? "In" : "Near"} ${place.name} · `
+      : `Last seen ${preposition} ${place.name} · `;
+  }
   meta.textContent = `${where}${when}`;
+  if (place && !place.exact) {
+    meta.title =
+      "Nearest known town — an exact name needs the Geocoding API enabled " +
+      "for this dashboard's Google Maps key.";
+  }
 
   body.append(nameRow, detail, meta);
 
@@ -543,6 +687,7 @@ async function loadDrivers() {
 
     renderList();
     syncMarkers();
+    refreshCities();
     stampUpdated();
   } catch (error) {
     // A 401 has already redirected to login by this point; anything else is
@@ -589,10 +734,12 @@ function connectSocket() {
       latitude: ping.latitude,
       longitude: ping.longitude,
       updated_at: ping.updated_at,
-      // The town name is not carried on the ping — it costs a geocode, which
-      // belongs on the poll. Keeping the last known one avoids the caption
-      // blinking out between polls while the driver is plainly still there.
+      // The town name is not carried on the ping. Keeping the last known one
+      // avoids the caption blinking out between polls while the driver is
+      // plainly still there; refreshCities below looks up a new one once they
+      // have moved far enough for it to have changed.
       city: driver.location ? driver.location.city : null,
+      city_precision: driver.location ? driver.location.city_precision : null,
       age_seconds: 0,
     };
     driver.online = true;
@@ -613,6 +760,7 @@ function connectSocket() {
 
     syncMarker(driver);
     renderList();
+    refreshCities();
     stampUpdated();
   });
 
@@ -693,6 +841,11 @@ function initMap() {
       { featureType: "road", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
     ],
   });
+
+  // Only available once the Maps script has loaded, which is also the moment
+  // there is something to name — before this the server's answer stands alone.
+  geocoder = new google.maps.Geocoder();
+  refreshCities();
 
   syncMarkers();
   if (!hasFitOnce && drivers.length) {
