@@ -13,10 +13,17 @@
 //     drivers who came on shift, orders that changed hands, and anything the
 //     socket missed while the laptop lid was shut.
 //
-// A driver only appears on the map while their app is sharing GPS — that is,
-// during a delivery they have started. Drivers who are idle have no pin and no
-// last position to show; they are listed on the left as offline instead, which
-// is the honest rendering of "we do not know where they are".
+// Every driver who has ever filed a position gets a pin, and the pin says
+// which kind of position it is. Green and moving means the fixes are still
+// arriving. Grey and dashed means this is where they were last seen — the app
+// was closed, the phone died, or they drove into a valley — and the row beside
+// it says how long ago. That is a great deal more useful than an empty map:
+// "he was in Jounieh twenty minutes ago" is where you start looking.
+//
+// Each pin is labelled with what the driver is carrying. A driver can be on
+// several deliveries at once — one trip out of the shop with four bags in it —
+// so the panel lists every open order they hold, marks the ones actually on
+// the road, and gives each its own link to the customer's tracking page.
 
 import { getDriverLocations, API_ORIGIN } from "./api.js";
 import { showToast } from "./ui.js";
@@ -95,28 +102,42 @@ function statusLabel(status) {
    Markers
 =========================== */
 
-// A pin in the shape of the answer: who it is and which way they are heading.
+// A pin in the shape of the answer: who it is, which way they are heading, and
+// whether this is where they are or only where they were.
 //
-// Only drivers whose GPS is arriving right now get one, so there is a single
-// colour and no stale state to draw. A pin on this map always means a driver
-// being followed this minute.
-const PIN_COLOUR = "#16a34a";
+// The two states have to be told apart at a glance and without reading, since
+// a dispatcher scanning the map for the nearest free driver must not mistake a
+// half-hour-old position for a live one. Green with a solid halo is live.
+// Grey with a dashed ring is a last known position, and it loses the heading
+// arrow with it — the direction someone was travelling in twenty minutes ago
+// is not information, it is decoration.
+const LIVE_COLOUR = "#16a34a";
+const STALE_COLOUR = "#9ca3af";
 
-function markerIcon(initials, bearing) {
+function markerIcon(initials, bearing, online) {
+  const colour = online ? LIVE_COLOUR : STALE_COLOUR;
+
   // The arrow only means something when we know where they were going, which
   // takes two fixes; until then the pin is just the disc.
   const arrow =
-    bearing == null
+    !online || bearing == null
       ? ""
       : `<g transform="rotate(${bearing.toFixed(0)} 30 30)">
-           <path d="M30 3 L36 14 L24 14 Z" fill="${PIN_COLOUR}"/>
+           <path d="M30 3 L36 14 L24 14 Z" fill="${colour}"/>
          </g>`;
+
+  const halo = online
+    ? `<circle cx="30" cy="30" r="27" fill="${colour}" opacity="0.16"/>`
+    : `<circle cx="30" cy="30" r="24" fill="none" stroke="${colour}" ` +
+      `stroke-width="2" stroke-dasharray="5 4" opacity="0.85"/>`;
 
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60">` +
-    `<circle cx="30" cy="30" r="27" fill="${PIN_COLOUR}" opacity="0.16"/>` +
+    halo +
     arrow +
-    `<circle cx="30" cy="30" r="15" fill="${PIN_COLOUR}" stroke="#ffffff" stroke-width="3"/>` +
+    `<circle cx="30" cy="30" r="15" fill="${colour}" stroke="#ffffff" stroke-width="3"` +
+    (online ? "" : ` opacity="0.9"`) +
+    `/>` +
     `<text x="30" y="35" text-anchor="middle" font-family="Arial, sans-serif" ` +
     `font-size="13" font-weight="bold" fill="#ffffff">${initials}</text>` +
     `</svg>`;
@@ -166,18 +187,33 @@ function glideTo(entry, to) {
   entry.frame = requestAnimationFrame(step);
 }
 
+// The label a pin carries when hovered or read by a screen reader: the driver,
+// then what they are doing, so the map answers on its own without the panel.
+function markerTitle(driver) {
+  const name = driver.full_name || "Driver";
+  const carrying = (driver.orders || [])
+    .map((order) => `${orderNumberText(order)} · ${statusLabel(order.order_status)}`)
+    .join(", ");
+  const where = driver.location && driver.location.city
+    ? `${driver.online ? "in" : "last seen in"} ${driver.location.city}`
+    : null;
+
+  return [name, where, carrying || "no active delivery"].filter(Boolean).join(" — ");
+}
+
 function syncMarker(driver) {
   if (!map) return;
 
   const existing = markers.get(driver.id);
 
-  // The map shows drivers who are sharing location, and nobody else. A driver
-  // who has closed the app stops sending fixes, goes stale within the live
-  // window and leaves the map — rather than lingering as a pin on a road they
-  // have long since driven off, which is indistinguishable from a driver who
-  // is genuinely parked there. Where they were last seen is not lost: it stays
-  // on their row in the list beside the map.
-  if (!driver.location || !driver.online) {
+  // Only a driver we have never had a position for has no pin at all. Once one
+  // has arrived it stays on the map: while the fixes keep coming it is where
+  // the driver is, and when they stop it turns grey and becomes where the
+  // driver was last seen. The row beside the map says how long ago that was,
+  // so the two readings cannot be confused — and a dispatcher looking for a
+  // driver who has gone quiet is given the one thing that actually helps,
+  // which is the last place anyone saw them.
+  if (!driver.location) {
     if (existing) {
       if (existing.frame) cancelAnimationFrame(existing.frame);
       existing.marker.setMap(null);
@@ -198,9 +234,11 @@ function syncMarker(driver) {
     const marker = new google.maps.Marker({
       position: pos,
       map,
-      title: driver.full_name || "Driver",
-      icon: markerIcon(initials, null),
-      zIndex: 10,
+      title: markerTitle(driver),
+      icon: markerIcon(initials, null, driver.online),
+      // Live pins sit above last-seen ones, so a driver who is out there now is
+      // never hidden behind the ghost of one who went home.
+      zIndex: driver.online ? 10 : 5,
     });
     const entry = { id: driver.id, marker, pos, bearing: null, frame: null };
     // Clicking a pin selects the driver, the same as clicking their row —
@@ -220,8 +258,9 @@ function syncMarker(driver) {
     existing.pos = pos;
   }
 
-  existing.marker.setIcon(markerIcon(initials, existing.bearing));
-  existing.marker.setTitle(driver.full_name || "Driver");
+  existing.marker.setIcon(markerIcon(initials, existing.bearing, driver.online));
+  existing.marker.setZIndex(driver.online ? 10 : 5);
+  existing.marker.setTitle(markerTitle(driver));
 }
 
 function syncMarkers() {
@@ -237,9 +276,10 @@ function syncMarkers() {
 
 function fitAll() {
   if (!map) return;
-  // Frames who is on the map, which is who is live — fitting to a position
-  // last seen an hour ago would drag the view somewhere nothing is happening.
-  const located = drivers.filter((driver) => driver.location && driver.online);
+  // Frames every pin on the map, last-seen ones included: "show all" that left
+  // a driver off the screen would be answering a different question from the
+  // one the button asks.
+  const located = drivers.filter((driver) => driver.location);
   if (!located.length) {
     map.setCenter(DEFAULT_CENTER);
     map.setZoom(12);
@@ -287,16 +327,82 @@ function selectDriver(id) {
     return;
   }
 
-  // No pin to follow. Worth saying which of the two reasons it is, because
-  // "never shared a location" and "closed the app twenty minutes ago" call for
-  // very different phone calls.
-  const driver = drivers.find((candidate) => candidate.id === selectedId);
-  showToast(
-    driver && driver.location
-      ? "That driver is not sharing location right now."
-      : "That driver has not shared a location yet.",
-    "info"
-  );
+  // No pin at all, which now means only one thing: this driver has never
+  // shared a position. A driver who has gone quiet still has a last-seen pin
+  // to fly to, and the click above lands on it.
+  showToast("That driver has not shared a location yet.", "info");
+}
+
+// Order numbers are stored with and without the leading hash depending on how
+// the order reached us, and "#2706" is how everyone refers to them.
+function orderNumberText(order) {
+  const number = String(order.order_number || "").trim();
+  if (!number) return `Order ${order.id}`;
+  return number.startsWith("#") ? number : `#${number}`;
+}
+
+// One delivery on the driver's row: which order, from which shop, how far
+// along, and a way straight to what the customer waiting for it can see.
+//
+// Whether it is under way is the distinction that matters most here, and it is
+// the one the panel used to lose. A driver holding four orders has tapped
+// "Start Delivery" on some of them and not on others; the started ones are the
+// deliveries in progress and are marked live, the rest are still in the box.
+function orderLine(order) {
+  const line = document.createElement("div");
+  line.className = "feed-order";
+  if (order.started) line.classList.add("is-started");
+
+  const main = document.createElement("div");
+  main.className = "feed-order-main";
+
+  const text = document.createElement("span");
+  text.className = "feed-order-text";
+  text.textContent = `${orderNumberText(order)} · ${statusLabel(order.order_status)}`;
+
+  // Where the order is going, kept off the visible line — the column is
+  // narrow, and confusing it with where the driver is was the whole problem.
+  text.title = order.city
+    ? `${text.textContent} · delivering to ${order.city}`
+    : text.textContent;
+
+  main.appendChild(text);
+
+  // The customer's own view of this delivery — the quickest way to check what
+  // the person waiting is being told before answering the phone to them. One
+  // per order, because with four in hand a single button cannot say which
+  // delivery it would open.
+  if (order.tracking_token) {
+    const track = document.createElement("a");
+    track.className = "feed-order-track";
+    track.href = `${API_ORIGIN}/track/track.html?token=${encodeURIComponent(order.tracking_token)}`;
+    track.textContent = "Track";
+    track.title = `Open the customer's tracking page for ${orderNumberText(order)}`;
+    track.target = "_blank";
+    track.rel = "noopener";
+    // The row itself is the "follow this driver" control, so anything
+    // clickable inside it has to stop the click before it reaches the row.
+    track.addEventListener("click", (event) => event.stopPropagation());
+    main.appendChild(track);
+  }
+
+  line.appendChild(main);
+
+  // Which shop the bag came from. A driver runs for several, and an order
+  // number on its own does not say which counter it was picked up at.
+  //
+  // On its own line rather than tacked onto the one above: a number, a status
+  // and a shop name do not fit across a column this narrow, and the half that
+  // got cut off was always the shop.
+  if (order.store_name) {
+    const store = document.createElement("div");
+    store.className = "feed-order-store";
+    store.textContent = order.store_name;
+    store.title = order.store_name;
+    line.appendChild(store);
+  }
+
+  return line;
 }
 
 // Rows are built as nodes with textContent rather than an HTML string: they
@@ -331,39 +437,33 @@ function driverRow(driver) {
     nameRow.appendChild(dot);
   }
 
-  // The delivery they are on now. The backend answers this from the orders
-  // table rather than from the last GPS ping, so an order that has been
-  // delivered or returned drops off this line instead of clinging to it.
+  // Everything they are carrying, one line each. The backend answers this from
+  // the orders table rather than from the last GPS ping, so an order that has
+  // been delivered or returned drops off instead of clinging on.
+  const orders = Array.isArray(driver.orders) ? driver.orders : [];
+
   const detail = document.createElement("div");
-  detail.className = "feed-detail";
-  if (driver.order && driver.order.order_number) {
-    const number = driver.order.order_number.startsWith("#")
-      ? driver.order.order_number
-      : `#${driver.order.order_number}`;
-    detail.textContent = `${number} · ${statusLabel(driver.order.order_status)}`;
-    // Where the order is going, kept off the visible line — the column is
-    // narrow, and confusing it with where the driver is was the whole problem.
-    detail.title = driver.order.city
-      ? `${detail.textContent} · delivering to ${driver.order.city}`
-      : detail.textContent;
-  } else if (driver.active_orders > 0) {
-    detail.textContent =
-      driver.active_orders === 1
-        ? "1 order assigned · not started"
-        : `${driver.active_orders} orders assigned · not started`;
-    detail.title = detail.textContent;
+  detail.className = "feed-orders";
+
+  if (!orders.length) {
+    const none = document.createElement("div");
+    none.className = "feed-detail";
+    none.textContent = "No active delivery";
+    detail.appendChild(none);
   } else {
-    detail.textContent = "No active delivery";
-    detail.title = detail.textContent;
+    orders.forEach((order) => detail.appendChild(orderLine(order)));
   }
 
-  // Where the driver is, not where they are heading. "In" is doing real work
-  // here: this line sat next to the delivery city for a while, and a pin in
-  // Ballouneh captioned "Tripoli" reads as a bug rather than as a destination.
+  // Which town the driver is in, directly under the orders they are carrying:
+  // the two questions a dispatcher asks together are "what has he got" and
+  // "where has he got to". "In" is doing real work here — this line sits
+  // against the delivery city, and a driver in Ballouneh captioned "Tripoli"
+  // reads as a bug rather than as a destination.
   //
-  // Once they stop sharing it becomes "Last seen in Ballouneh". They are off
-  // the map by then, and this row is the only remaining record of where — so
-  // it has to be clear it is history rather than a live position.
+  // Once they stop sharing it becomes "Last seen in Ballouneh · 20 min ago",
+  // which is exactly what the grey pin on the map is saying. The town comes
+  // from the server, which asks Google and falls back to the nearest town in
+  // its own table, so this line survives a missing key or a bad minute.
   const meta = document.createElement("div");
   meta.className = "feed-meta";
   const when = agoText(driver.location ? driver.location.age_seconds : null);
@@ -393,17 +493,6 @@ function driverRow(driver) {
   }
 
   if (driver.phone) addAction("Call", `tel:${driver.phone}`, driver.phone);
-
-  // The customer's own view of this delivery — the quickest way to check what
-  // the person waiting is being told before answering the phone to them.
-  if (driver.order && driver.order.tracking_token) {
-    addAction(
-      "Track",
-      `${API_ORIGIN}/track/track.html?token=${encodeURIComponent(driver.order.tracking_token)}`,
-      "Open the customer's tracking page",
-      true
-    );
-  }
 
   item.append(avatar, body, actions);
   item.addEventListener("click", () => selectDriver(driver.id));
@@ -508,13 +597,18 @@ function connectSocket() {
     };
     driver.online = true;
 
-    // Which delivery the driver is on is the poll's answer, never the ping's:
-    // the ping only knows which order it was filed against, which is exactly
-    // the stale reading this line used to copy onto the row. What it is good
-    // for is noticing they have moved onto a different order than the one the
-    // panel is showing — that means the panel is out of date, so refetch.
-    if (ping.order && (!driver.order || driver.order.id !== ping.order.id)) {
-      scheduleRefetch();
+    // What the driver is carrying is the poll's answer, never the ping's: the
+    // ping only knows which order it was filed against, which is exactly the
+    // stale reading this used to copy onto the row. What it is good for is the
+    // one fact it cannot be wrong about — that this order is being pinged, so
+    // that delivery is under way — and for noticing an order the panel has
+    // never heard of, which means the panel is out of date.
+    if (ping.order) {
+      const carried = (driver.orders || []).find(
+        (order) => order.id === ping.order.id
+      );
+      if (!carried) scheduleRefetch();
+      else if (!carried.started) carried.started = true;
     }
 
     syncMarker(driver);
@@ -526,11 +620,15 @@ function connectSocket() {
     const driver = drivers.find((candidate) => candidate.id === event.driver_id);
     if (!driver || !event.order) return;
 
-    // Relabel the delivery on the row straight away when it is the one that
-    // changed, so the dispatcher sees it land rather than waiting for a poll.
-    if (driver.order && driver.order.id === event.order.id) {
-      driver.order.order_status = event.order.order_status;
+    // Relabel the delivery on the row straight away, so the dispatcher sees
+    // the change land rather than waiting for a poll.
+    const carried = (driver.orders || []).find(
+      (order) => order.id === event.order.id
+    );
+    if (carried) {
+      carried.order_status = event.order.order_status;
       renderList();
+      syncMarker(driver);
     }
 
     // Then confirm with the server. A status change can move an order out of
@@ -557,6 +655,14 @@ function ageLocations() {
     const stillOnline = driver.location.age_seconds <= liveWindowSeconds;
     if (stillOnline !== driver.online) {
       driver.online = stillOnline;
+      // No fixes arriving means no delivery is streaming either, whatever the
+      // last poll said. The orders stay on the row — they are still in the
+      // driver's hands — but none of them is under way as far as we can tell.
+      if (!stillOnline) {
+        (driver.orders || []).forEach((order) => {
+          order.started = false;
+        });
+      }
       syncMarker(driver);
       changed = true;
     }

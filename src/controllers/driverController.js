@@ -55,6 +55,34 @@ function pickFreshestFix(row) {
   );
 }
 
+// One order the driver is holding, in the shape the live map's panel reads.
+//
+// `started` is the answer to "is this one of the deliveries he is doing right
+// now": the driver app streams GPS against an order from the moment "Start
+// Delivery" is tapped and stops when it is finished, so a ping inside the same
+// live window the pins use means that delivery is on the road. Orders that are
+// assigned but untouched come back with started false rather than being hidden
+// — the dispatcher wants to see both, told apart.
+function toPanelOrder(row) {
+  const pingAge = row.ping_age_seconds == null ? null : Number(row.ping_age_seconds);
+
+  return {
+    id: row.id,
+    order_number: row.order_number,
+    order_status: row.order_status,
+    // Where the order is going. Not to be confused with the town the driver is
+    // in, which is on the location below.
+    city: row.city,
+    area: row.area,
+    store_name: row.store_name || null,
+    customer_name:
+      [row.customer_first_name, row.customer_last_name].filter(Boolean).join(" ") || null,
+    tracking_token: row.tracking_token,
+    started: pingAge != null && pingAge <= LIVE_PING_WINDOW_SECONDS,
+    last_ping_seconds: pingAge == null ? null : Math.round(pingAge),
+  };
+}
+
 // GET /api/drivers/locations — the live map's data.
 //
 // Returns one entry per driver whether or not they are moving, so the panel
@@ -86,6 +114,12 @@ async function getDriverLocations(req, res) {
 
     const drivers = rows.map((row, index) => {
       const fix = fixes[index];
+      const orders = (row.orders || []).map(toPanelOrder);
+      // The delivery the driver is actually on, which is the first one under
+      // way — the query has already sorted those to the front. Falling back to
+      // the newest order they are holding keeps a driver who has not set off
+      // yet labelled with what they are about to take out.
+      const current = orders.find((order) => order.started) || orders[0] || null;
 
       return {
         id: row.id,
@@ -109,22 +143,13 @@ async function getDriverLocations(req, res) {
               city: towns[index] || null,
             }
           : null,
-        // The delivery they are on now — see getDriverLiveLocations for why
-        // this is looked up fresh rather than read off the last ping.
-        order: row.order_id
-          ? {
-              id: row.order_id,
-              order_number: row.order_number,
-              order_status: row.order_status,
-              city: row.city,
-              area: row.area,
-              customer_name:
-                [row.customer_first_name, row.customer_last_name]
-                  .filter(Boolean)
-                  .join(" ") || null,
-              tracking_token: row.tracking_token,
-            }
-          : null,
+        // Everything the driver is holding for this store, deliveries under
+        // way first — see getDriverLiveLocations for why this is looked up
+        // fresh rather than read off the last ping.
+        orders,
+        // The single delivery a caller that only wants one should show. Kept
+        // alongside the list so older clients keep working unchanged.
+        order: current,
       };
     });
 

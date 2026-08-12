@@ -134,14 +134,29 @@ async function updateDriverLocation(driverId, latitude, longitude) {
 // drivers are shared across every store, and each store's dashboard already
 // lists all of them.
 //
-// The order reported alongside the position is deliberately NOT the one that
-// last ping was filed against. That order may since have been delivered or
-// returned, and reading it back left the map insisting a driver was still on a
-// job they had finished — a pin labelled "Returned" for as long as the last
-// ping stayed on file. What a dispatcher is asking is "what is this driver
-// carrying now", so the answer is looked up fresh from the orders table: the
-// pinged order while it is still live, otherwise their newest open one,
-// otherwise nothing at all.
+// The orders reported alongside the position are deliberately NOT read off the
+// last ping. That order may since have been delivered or returned, and reading
+// it back left the map insisting a driver was still on a job they had finished
+// — a pin labelled "Returned" for as long as the last ping stayed on file.
+// What a dispatcher is asking is "what is this driver carrying now", so the
+// answer is looked up fresh from the orders table.
+//
+// Every open order the driver is holding comes back, not just one. A driver
+// leaving the shop with four bags is doing four deliveries at once, and a panel
+// that names one of them makes the other three invisible — including to the
+// dispatcher trying to work out who can take a fifth. Each order carries the
+// age of its own newest ping, which is what separates the ones the driver has
+// actually set off on (the app streams GPS per order from the moment "Start
+// Delivery" is tapped) from the ones still sitting in the box. The list is
+// ordered accordingly: deliveries under way first, freshest ping first, then
+// everything not yet started.
+//
+// Each order also carries the store it belongs to. On a single-store dashboard
+// that is one name repeated, which is the point — the driver is carrying work
+// from several shops and the order number alone does not say which one the
+// dispatcher is looking at. Only this store's orders are ever listed: the
+// store filter is what keeps one merchant's dashboard from naming another
+// merchant's customer.
 //
 // Drivers with no ping at all are still returned, with a null location. They
 // are the ones sitting idle, and a dispatcher wants to see that they exist
@@ -167,47 +182,53 @@ async function getDriverLiveLocations(storeId) {
        -- which one they are in.
        EXTRACT(EPOCH FROM (NOW() - d.last_location_at)) AS self_age_seconds,
        EXTRACT(EPOCH FROM (NOW() - lu.created_at))      AS ping_age_seconds,
-       o.id            AS order_id,
-       o.order_number,
-       o.order_status,
-       o.city,
-       o.area,
-       o.customer_first_name,
-       o.customer_last_name,
-       o.tracking_token,
-       act.active_orders
+       COALESCE(held.orders, '[]'::json) AS orders,
+       COALESCE(held.active_orders, 0)   AS active_orders
      FROM drivers d
      LEFT JOIN LATERAL (
-       SELECT l.latitude, l.longitude, l.created_at, l.order_id
+       SELECT l.latitude, l.longitude, l.created_at
        FROM location_updates l
        JOIN orders lo ON lo.id = l.order_id
        WHERE l.driver_id = d.id AND lo.store_id = $1
        ORDER BY l.created_at DESC
        LIMIT 1
      ) lu ON TRUE
-     -- What the driver is carrying now, which is a different question from
-     -- which order the last ping was filed against. The order being pinged
-     -- wins while it is still open, so a driver mid-delivery is labelled with
-     -- the delivery they are actually on; a finished one falls through to
-     -- their next open order, and a driver with none at all gets no order
-     -- rather than the ghost of their last one.
+     -- Everything the driver is holding for this store, deliveries under way
+     -- first. Aggregated into one JSON column rather than joined out into
+     -- extra rows, so a driver on four orders is still one row here and the
+     -- controller does not have to stitch them back together.
      LEFT JOIN LATERAL (
-       SELECT ao.id, ao.order_number, ao.order_status, ao.city, ao.area,
-              ao.customer_first_name, ao.customer_last_name, ao.tracking_token
-       FROM orders ao
-       WHERE ao.assigned_driver_id = d.id
-         AND ao.store_id = $1
-         AND ao.order_status <> ALL ($2::text[])
-       ORDER BY COALESCE(ao.id = lu.order_id, FALSE) DESC, ao.created_at DESC
-       LIMIT 1
-     ) o ON TRUE
-     LEFT JOIN LATERAL (
-       SELECT COUNT(*)::int AS active_orders
-       FROM orders ao
-       WHERE ao.assigned_driver_id = d.id
-         AND ao.store_id = $1
-         AND ao.order_status <> ALL ($2::text[])
-     ) act ON TRUE
+       SELECT
+         json_agg(
+           held_order
+           ORDER BY held_order.ping_age_seconds ASC NULLS LAST,
+                    held_order.created_at DESC
+         ) AS orders,
+         COUNT(*)::int AS active_orders
+       FROM (
+         SELECT ao.id, ao.order_number, ao.order_status, ao.city, ao.area,
+                ao.customer_first_name, ao.customer_last_name,
+                ao.tracking_token, ao.created_at,
+                -- Which shop the bag came from. Falls back to the domain for
+                -- an install that never filled in a display name.
+                COALESCE(NULLIF(s.store_name, ''), s.shop_domain) AS store_name,
+                -- How long since this particular order was last pinged. NULL
+                -- means it has never been: assigned, still in the box, not on
+                -- the road. The controller turns the age into "under way now"
+                -- against the same live window the pins use.
+                EXTRACT(EPOCH FROM (NOW() - ping.last_ping_at)) AS ping_age_seconds
+         FROM orders ao
+         JOIN stores s ON s.id = ao.store_id
+         LEFT JOIN LATERAL (
+           SELECT MAX(l.created_at) AS last_ping_at
+           FROM location_updates l
+           WHERE l.order_id = ao.id AND l.driver_id = d.id
+         ) ping ON TRUE
+         WHERE ao.assigned_driver_id = d.id
+           AND ao.store_id = $1
+           AND ao.order_status <> ALL ($2::text[])
+       ) held_order
+     ) held ON TRUE
      -- Freshest fix first, from whichever source, and drivers nobody has heard
      -- from at all last: the list beside the map reads in the order a
      -- dispatcher cares about.
