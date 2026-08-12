@@ -473,15 +473,55 @@ async function updateDriverOrderNote(orderId, driverId, note) {
   return result.rows[0];
 }
 
-async function getOrdersByDriverId(driverId) {
+// The most orders one driver can be carrying at once. Well past a real batch
+// run — it exists so a malformed or hostile "carrying" list cannot turn this
+// into an unbounded query.
+const MAX_CARRIED_ORDERS = 50;
+
+// Cleans the caller's list of carried order ids into integers this query can
+// safely interpolate: anything non-numeric is dropped rather than trusted.
+function normalizeCarriedIds(carryingIds) {
+  if (!Array.isArray(carryingIds)) return [];
+
+  const ids = [];
+  for (const raw of carryingIds) {
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    if (!ids.includes(id)) ids.push(id);
+    if (ids.length >= MAX_CARRIED_ORDERS) break;
+  }
+  return ids;
+}
+
+// The orders a driver still has to act on, plus — by explicit id — the ones
+// they told us they are carrying right now.
+//
+// The plain list deliberately leaves out DELIVERED, RETURNED and CANCELLED
+// orders: they need nothing further from the driver. That makes absence from
+// it ambiguous for the app, which cannot tell "the dispatcher took this order
+// away from you" (stop tracking it) from "this order's status happens to be
+// terminal" (keep going — the driver is the one carrying it). A driver taking
+// a returned order back out is exactly that second case, and it was being read
+// as the first.
+//
+// [carryingIds] resolves the ambiguity. Those ids are returned whatever their
+// status, still filtered by assigned_driver_id so a driver can only ever ask
+// about their own orders, and each row carries its real order_status so the
+// app can tell an order it should let go of from one it should keep.
+async function getOrdersByDriverId(driverId, carryingIds = []) {
+  const carrying = normalizeCarriedIds(carryingIds);
+
   const result = await pool.query(
     `SELECT o.*, s.store_name, s.shop_domain
      FROM orders o
      LEFT JOIN stores s ON s.id = o.store_id
      WHERE o.assigned_driver_id = $1
-       AND o.order_status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED')
+       AND (
+         o.order_status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED')
+         OR o.id = ANY($2::int[])
+       )
      ORDER BY o.created_at DESC`,
-    [driverId]
+    [driverId, carrying]
   );
   return result.rows;
 }

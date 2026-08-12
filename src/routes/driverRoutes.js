@@ -72,7 +72,10 @@ router.post("/login", loginDriver);
 router.get("/me", requireDriverAuth, getMe);
 router.post("/me/password", requireDriverAuth, changePassword);
 
-// Returns only active (non-delivered, non-cancelled) orders for this driver.
+// Returns only active (non-delivered, non-returned, non-cancelled) orders for
+// this driver, plus any ids passed as ?carrying=1,2,3 — the deliveries the app
+// has under way, which it needs back whatever their status so it can tell them
+// apart from orders that have been taken off the driver.
 router.get("/me/orders", requireDriverAuth, getMyOrders);
 
 // Posts the driver's own position, with no order attached — what the

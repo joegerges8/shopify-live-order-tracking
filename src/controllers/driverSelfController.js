@@ -19,12 +19,30 @@ const { etaForTrackedOrder, clearEta } = require("../services/etaService");
 const { getIO, emitToDispatch, emitToAllDispatch } = require("../socket");
 const { updateDriverLocation } = require("../services/driverService");
 
+// Reads the optional ?carrying=1,2,3 parameter: the orders the driver app says
+// it has out for delivery right now. Accepts a comma-separated string or a
+// repeated parameter, since both are ordinary ways to send a list.
+function parseCarrying(value) {
+  if (value === undefined || value === null) return [];
+
+  const parts = Array.isArray(value) ? value : String(value).split(",");
+  return parts.map(part => String(part).trim()).filter(Boolean);
+}
+
 // Returns all active orders assigned to the authenticated driver.
-// "Active" means any status except DELIVERED or CANCELLED, so the driver
-// only sees orders they still need to act on.
+// "Active" means any status except DELIVERED, RETURNED or CANCELLED, so the
+// driver only sees orders they still need to act on.
+//
+// ?carrying=1,2,3 adds back the orders the driver has actually started, by id,
+// whatever status they are in. Without it the app has no way to tell an order
+// that was taken off it from one whose status simply went terminal, and it was
+// dropping in-progress deliveries on the strength of that guess. Ids belonging
+// to another driver are ignored by the query, so this widens what a driver can
+// see about their own orders and nothing else.
 async function getMyOrders(req, res) {
   try {
-    const orders = await getOrdersByDriverId(req.driverId);
+    const carrying = parseCarrying(req.query.carrying);
+    const orders = await getOrdersByDriverId(req.driverId, carrying);
     return res.json(orders);
   } catch (error) {
     console.error("Error fetching driver orders:", error);
