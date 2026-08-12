@@ -8,6 +8,8 @@
 // Kept as a service rather than living in the controller so the ETA does not
 // have to make an HTTP call to our own API just to reuse the logic.
 
+const { nearestTown } = require("../utils/townCoords");
+
 const DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json";
 const GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const REQUEST_TIMEOUT_MS = 10000;
@@ -187,14 +189,26 @@ function pickPlaceName(results) {
 // The town a coordinate falls in, or null when it cannot be worked out.
 //
 // Never throws and never rejects: the live map calls this for every driver on
-// every poll, and a Google outage has to cost a line of text, not the map. A
-// missing GOOGLE_MAPS_SERVER_KEY is the same — the rest of the response is
-// still useful without it.
+// every poll, and a Google outage has to cost a line of text, not the map.
+//
+// Google is asked first because it knows the street; when it cannot answer —
+// no GOOGLE_MAPS_SERVER_KEY configured, quota exhausted, request timed out,
+// nothing at those coordinates — the local town table answers instead with the
+// nearest town centre. That fallback is why the map can caption a driver at
+// all on an install that has never had a server key: "In Achrafieh" is a
+// rougher answer than Google's, and a far better one than no answer.
 async function reverseGeocodeCity(latitude, longitude) {
   const lat = Number(latitude);
   const lng = Number(longitude);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
+  const fromGoogle = await googleReverseGeocodeCity(lat, lng);
+  return fromGoogle || nearestTown(lat, lng);
+}
+
+// Google's own answer, or null. Split out so the fallback above reads as one
+// line and every "we could not find out" path lands in the same place.
+async function googleReverseGeocodeCity(lat, lng) {
   const key = cacheKey(lat, lng);
   const cached = readCache(key);
   // A previous lookup that found nothing is cached as null and honoured here,

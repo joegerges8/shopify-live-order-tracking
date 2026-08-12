@@ -1086,7 +1086,10 @@ button:hover {
 }
 
 .map-panel {
-  width: 320px;
+  /* Wide enough for an order number, its status and a Track button side by
+     side. At 320px the status was being cut in half on every started
+     delivery. */
+  width: 360px;
   flex-shrink: 0;
   background: #ffffff;
   border-radius: 16px;
@@ -1117,7 +1120,10 @@ button:hover {
 
 .driver-feed-item {
   display: flex;
-  align-items: center;
+  /* Top-aligned rather than centred: a row is as tall as the driver has
+     orders, and an avatar floating in the middle of five lines reads as
+     belonging to none of them. */
+  align-items: flex-start;
   gap: 12px;
   padding: 12px 10px;
   border-radius: 12px;
@@ -1211,10 +1217,80 @@ button:hover {
   text-overflow: ellipsis;
 }
 
+/* Everything the driver is carrying, one line per order. A driver on four
+   deliveries gets four lines: the panel grows down rather than picking one
+   order to name and hiding the rest. */
+.feed-orders {
+  margin-top: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feed-order {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.feed-order-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* min-width lets it shrink below its text: without it a long status pushes
+   the Track button out of the column instead of ellipsising. */
+.feed-order-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The shop the order was picked up from, under its number. Quiet: on a
+   single-shop dashboard it is the same name on every line, and it is only
+   being read when a driver is carrying for more than one. */
+.feed-order-store {
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The deliveries actually on the road — GPS is streaming for these. Grey is
+   what is still sitting in the driver's box, waiting to be started. */
+.feed-order.is-started .feed-order-text {
+  color: #111827;
+  font-weight: 600;
+}
+
+/* One per order, because with several in hand a single button could not say
+   which delivery it would open. */
+.feed-order-track {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  color: #1e3a8a;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  line-height: 17px;
+}
+
+.feed-order-track:hover {
+  background: #eef2ff;
+}
+
+/* Where the driver is. Set apart from the orders above it, which are where
+   the deliveries are going — the gap is what stops the last order's shop name
+   and the driver's town reading as one line about the same thing. */
 .feed-meta {
   font-size: 12px;
   color: #6b7280;
-  margin-top: 2px;
+  margin-top: 8px;
 }
 
 .feed-actions {

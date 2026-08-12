@@ -76,6 +76,102 @@ function getAreaCoords(area) {
   return coords ? { latitude: coords[0], longitude: coords[1] } : null;
 }
 
+// ── Coordinates back to a town name ─────────────────────────────────────────
+//
+// The reverse of everything above, and the only way the dispatcher's map can
+// caption a driver with a place name when Google is not answering: no key
+// configured, quota exhausted, or the request timed out. The same table that
+// turns "Jounieh" into a point turns a point back into "Jounieh".
+//
+// It is an approximation and is meant to read as one — the nearest town centre
+// to the driver, not the street they are on. Over a table this dense that is
+// the right town almost always, and the alternative on the map is a blank.
+
+// Beyond this the nearest town centre stops being a useful description of
+// where someone is. A driver on the coastal motorway is within a few
+// kilometres of somewhere named; one this far from every entry in the table is
+// out in the mountains, over a border, or at sea, and no name is better than a
+// misleading one.
+const NEAREST_TOWN_MAX_KM = 15;
+
+// Table keys are lowercase slugs ("ras el metn"), but this ends up on screen.
+// The joining words stay lowercase, which is how these names are written.
+const LOWERCASE_WORDS = new Set(["el", "al", "le", "la", "de", "du"]);
+
+function titleCaseTown(key) {
+  return String(key)
+    .split(/\s+/)
+    .map((word, index) =>
+      index > 0 && LOWERCASE_WORDS.has(word)
+        ? word
+        : word.charAt(0).toUpperCase() + word.slice(1)
+    )
+    .join(" ");
+}
+
+// The table is keyed by every spelling three years of orders threw at it, so
+// one town centre often has several keys on it — "beirut", "bayrout",
+// "beyrouth", and a couple of outright typos, all on the same point. Which one
+// wins is decided below by taking the first alphabetically, which is stable
+// but occasionally lands on the odd one out. These are the places where that
+// happens often enough to be worth naming properly, since this text goes on
+// screen next to a driver's name.
+const DISPLAY_NAMES = {
+  aalay: "Aley",
+  aanout: "Deir el Qamar",
+  akar: "Akkar",
+  "ash shuwayfat": "Choueifat",
+  bayrout: "Beirut",
+  bcharre: "Bsharri",
+  dabye: "Dbayeh",
+  dekouane: "Dekwaneh",
+  "forn el chebbak": "Furn el Chebbak",
+  hadat: "Hadath",
+  jounie: "Jounieh",
+  maten: "Metn",
+  "sen el fil": "Sin el Fil",
+  zouk: "Zouk Mosbeh",
+};
+
+// Built once: the JSON carries a "_readme" key alongside the towns, and the
+// scan below runs for every driver on every poll.
+//
+// Sorted so that a coordinate shared by several spellings always resolves to
+// the same one, and the Arabic-script keys are dropped — they are there to
+// match what a customer typed at checkout, and the dashboard is in English.
+const TOWN_POINTS = Object.entries(TOWN_COORDS)
+  .filter(
+    ([town, value]) =>
+      Array.isArray(value) && value.length === 2 && /^[a-z][a-z\s'-]*$/.test(town)
+  )
+  .sort(([a], [b]) => (a < b ? -1 : 1))
+  .map(([town, [latitude, longitude]]) => ({
+    name: DISPLAY_NAMES[town] || titleCaseTown(town),
+    latitude,
+    longitude,
+  }));
+
+// The nearest known town to a coordinate, or null when nothing is close
+// enough to be worth naming.
+function nearestTown(latitude, longitude) {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  let best = null;
+  let bestKm = Infinity;
+
+  for (const point of TOWN_POINTS) {
+    const km = haversineKm(lat, lng, point.latitude, point.longitude);
+    if (km < bestKm) {
+      bestKm = km;
+      best = point;
+    }
+  }
+
+  return best && bestKm <= NEAREST_TOWN_MAX_KM ? best.name : null;
+}
+
 // Resolves an order to the point the driver is heading for.
 //
 // An exact customer pin, when one happens to exist, always wins: some orders
@@ -113,4 +209,5 @@ module.exports = {
   getTownCoords,
   getAreaCoords,
   resolveDestination,
+  nearestTown,
 };
