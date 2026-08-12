@@ -515,6 +515,28 @@ async function getCompletedOrdersByDriverId(driverId) {
   return result.rows;
 }
 
+// Orders this driver brought back. The driver app's Returned tab is built from
+// this, so an order marked RETURNED is still there after the app is restarted —
+// it is excluded from the assigned list (getOrdersByDriverId) and is not
+// DELIVERED, so without this query the app had nowhere to read it back from and
+// the tab came back empty.
+//
+// Ordered by created_at because a return stamps no completion timestamp of its
+// own: delivered_at belongs to the delivery that never happened.
+async function getReturnedOrdersByDriverId(driverId) {
+  const result = await pool.query(
+    `SELECT o.*, s.store_name, s.shop_domain
+     FROM orders o
+     LEFT JOIN stores s ON s.id = o.store_id
+     WHERE o.assigned_driver_id = $1
+       AND o.order_status = 'RETURNED'
+     ORDER BY o.created_at DESC
+     LIMIT 100`,
+    [driverId]
+  );
+  return result.rows;
+}
+
 async function createLocationUpdate({ order_id, driver_id, latitude, longitude }) {
   const result = await pool.query(
     `INSERT INTO location_updates (order_id, driver_id, latitude, longitude)
@@ -658,6 +680,7 @@ module.exports = {
   updateDriverOrderNote,
   getOrdersByDriverId,
   getCompletedOrdersByDriverId,
+  getReturnedOrdersByDriverId,
   createLocationUpdate,
   getOrderByTrackingToken,
   getTrackingTokenByShopifyOrderId,
