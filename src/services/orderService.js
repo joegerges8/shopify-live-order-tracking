@@ -509,6 +509,40 @@ async function createLocationUpdate({ order_id, driver_id, latitude, longitude }
   return result.rows[0];
 }
 
+// Resolves a Shopify order id to its tracking token, for the short /t/:id link
+// handed to WhatsApp templates.
+//
+// Interakt's message templates can only carry one variable inside a URL button,
+// and none of the attributes it exposes on the "order shipped" event hold our
+// tracking token — but shopify_order_id is on every one of them, from "order
+// placed" onwards. Resolving it here means the link in the message is built
+// from something that exists the moment the order lands, so it is never empty,
+// no matter who fulfils the order or when.
+//
+// shopify_order_id is used rather than order_number precisely because it is not
+// sequential: order numbers run 1001, 1002, 1003 and would let anyone walk the
+// list and read other customers' addresses and live driver positions.
+//
+// A token is minted on demand for orders imported before tokens existed, the
+// same as ensureTrackingToken does on the status path.
+async function getTrackingTokenByShopifyOrderId(shopifyOrderId) {
+  const result = await pool.query(
+    `SELECT id, tracking_token FROM orders WHERE shopify_order_id = $1 LIMIT 1`,
+    [shopifyOrderId]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  if (row.tracking_token) return row.tracking_token;
+
+  const minted = await pool.query(
+    `UPDATE orders SET tracking_token = $1
+     WHERE id = $2 AND tracking_token IS NULL
+     RETURNING tracking_token`,
+    [randomUUID(), row.id]
+  );
+  return minted.rows[0]?.tracking_token || null;
+}
+
 // Public tracking lookup — token is globally unique, no store filter needed.
 async function getOrderByTrackingToken(token) {
   const result = await pool.query(
@@ -611,6 +645,7 @@ module.exports = {
   getCompletedOrdersByDriverId,
   createLocationUpdate,
   getOrderByTrackingToken,
+  getTrackingTokenByShopifyOrderId,
   countStartedDeliveries,
   updateCustomerLocation,
   updateOrderArea,

@@ -18,6 +18,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const driverRoutes = require("./routes/driverRoutes");
 const mapsRoutes = require("./routes/mapsRoutes");
 const trackingRoutes = require("./routes/trackingRoutes");
+const shortLinkRoutes = require("./routes/shortLinkRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const launchRoutes = require("./routes/launchRoutes");
 const authRoutes = require("./routes/authRoutes");
@@ -155,6 +156,11 @@ app.use("/api/orders", requireAdminAuth, orderRoutes);
 app.use("/api/drivers", driverRoutes);
 app.use("/api/maps", mapsRoutes);
 app.use("/api/track", trackingRoutes);
+
+// Short tracking link for WhatsApp templates — /t/<shopify_order_id> forwards
+// to the tokenised tracking page below. Mounted before the static handler so
+// the redirect happens before anything is served off disk.
+app.use("/t", shortLinkRoutes);
 
 // Serve customer tracking page at /track/
 const trackingDir = path.join(__dirname, "../customer-tracking-frontend");
