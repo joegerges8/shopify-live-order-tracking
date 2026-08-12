@@ -226,19 +226,34 @@ async function getDriverNameById(driverId) {
   return result.rows[0]?.full_name || null;
 }
 
+// Naming the driver for an order. ASSIGNED sits before PICKED_UP in the
+// journey, so it is only applied to orders that have not got there yet:
+// fulfilling in the Shopify admin moves an order straight to PICKED_UP, and a
+// dispatcher naming the driver afterwards must not send it backwards — the
+// customer would watch their tracking page fall from "Order picked up" to
+// "Order pending". Past that point only the driver is recorded.
+const PRE_ASSIGNMENT_STATUSES = ["PENDING", "UNFULFILLED", "FULFILLED", "ASSIGNED"];
+
 async function assignDriverToOrder(orderId, driverId, storeId) {
   const result = await pool.query(
     `UPDATE orders
-     SET assigned_driver_id = $1, order_status = 'ASSIGNED'
+     SET assigned_driver_id = $1,
+         order_status = CASE
+           WHEN order_status = ANY($4::text[]) THEN 'ASSIGNED'
+           ELSE order_status
+         END
      WHERE id = $2 AND store_id = $3
      RETURNING *`,
-    [driverId, orderId, storeId]
+    [driverId, orderId, storeId, PRE_ASSIGNMENT_STATUSES]
   );
   const row = result.rows[0];
   if (row) {
     getDriverNameById(driverId)
       .then(driverName =>
-        syncOrderTagToShopify(storeId, row.shopify_order_id, "ASSIGNED", { driverName })
+        // Tag whatever the order actually is now, not a blanket "Assigned":
+        // an order already picked up keeps its Picked Up tag in Shopify, with
+        // the driver's name carried through where the tag uses it.
+        syncOrderTagToShopify(storeId, row.shopify_order_id, row.order_status, { driverName })
       )
       .catch(err =>
         console.error("[Shopify sync] assign tag failed:", err.message)
@@ -307,7 +322,7 @@ async function updateOrderStatus(orderId, status, storeId) {
     row = await ensureTrackingToken(row);
   }
   if (row) {
-    const driverName = ["ASSIGNED", "DELIVERED"].includes(status)
+    const driverName = ["ASSIGNED", "PICKED_UP", "DELIVERED"].includes(status)
       ? await getDriverNameById(row.assigned_driver_id)
       : null;
 
