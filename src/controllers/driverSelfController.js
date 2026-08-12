@@ -8,6 +8,7 @@
 const {
   getOrdersByDriverId,
   getCompletedOrdersByDriverId,
+  getReturnedOrdersByDriverId,
   getOrderByIdForDriver,
   updateDriverOrderStatus,
   updateDriverOrderNote,
@@ -40,6 +41,18 @@ async function getMyCompletedOrders(req, res) {
   } catch (error) {
     console.error("Error fetching completed orders:", error);
     return res.status(500).json({ error: "Failed to fetch completed orders" });
+  }
+}
+
+// Returns all returned orders for the authenticated driver — what the app's
+// Returned tab is rebuilt from after a restart.
+async function getMyReturnedOrders(req, res) {
+  try {
+    const orders = await getReturnedOrdersByDriverId(req.driverId);
+    return res.json(orders);
+  } catch (error) {
+    console.error("Error fetching returned orders:", error);
+    return res.status(500).json({ error: "Failed to fetch returned orders" });
   }
 }
 
@@ -333,6 +346,7 @@ async function patchMyOrderNote(req, res) {
 module.exports = {
   getMyOrders,
   getMyCompletedOrders,
+  getMyReturnedOrders,
   postMyLocation,
   postMyOrderLocation,
   patchMyOrderStatus,

@@ -19,15 +19,17 @@
 //     POST   /api/drivers/me/password                — change password
 //     GET    /api/drivers/me/orders                  — active assigned orders
 //     GET    /api/drivers/me/orders/completed        — completed (delivered) orders
+//     GET    /api/drivers/me/orders/returned         — returned orders
 //     POST   /api/drivers/me/location                — post own position (live map)
 //     POST   /api/drivers/me/orders/:id/location     — post a GPS ping
 //     PATCH  /api/drivers/me/orders/:id/status       — update delivery status
 //     PATCH  /api/drivers/me/orders/:id/note         — save the driver's own note
 //
-// IMPORTANT: The /me/orders/completed route MUST be defined before the
+// IMPORTANT: The /me/orders/completed and /me/orders/returned routes MUST be
+// defined before the
 // /me/orders/:id/location and /me/orders/:id/status routes. Express matches
 // routes in the order they are declared, so if the :id routes came first,
-// the word "completed" would be treated as an order ID.
+// the word "completed" (or "returned") would be treated as an order ID.
 
 const express = require("express");
 const router = express.Router();
@@ -45,6 +47,7 @@ const {
 const {
   getMyOrders,
   getMyCompletedOrders,
+  getMyReturnedOrders,
   postMyLocation,
   postMyOrderLocation,
   patchMyOrderStatus,
@@ -83,6 +86,11 @@ router.post("/me/location", requireDriverAuth, postMyLocation);
 // Returns completed (DELIVERED) orders for this driver.
 // Declared before /me/orders/:id/... to prevent "completed" being parsed as an ID.
 router.get("/me/orders/completed", requireDriverAuth, getMyCompletedOrders);
+
+// Returns returned orders for this driver — the app's Returned tab reads this
+// on startup, so a return survives the app being closed. Declared here for the
+// same reason as /me/orders/completed above.
+router.get("/me/orders/returned", requireDriverAuth, getMyReturnedOrders);
 
 // Posts a GPS coordinate ping for a specific order (live tracking).
 router.post("/me/orders/:id/location", requireDriverAuth, postMyOrderLocation);
