@@ -1,6 +1,7 @@
 const pool = require("../config/db");
 const { randomUUID } = require("crypto");
 const { resolveAreaOrUnknown } = require("../utils/areaLookup");
+const { syncOrderTagToShopify, markFulfilledInShopify } = require("../services/shopifyService");
 const { extractLineItems } = require("../utils/lineItems");
 const { extractOrderNote } = require("../utils/orderNote");
 
@@ -334,13 +335,19 @@ async function handleOrderDeleted(req, res) {
 }
 
 // Fired by Shopify when all items in an order are fulfilled from the Shopify admin.
-// Marks the dispatcher order as FULFILLED so both dashboards stay in sync.
 //
-// Fulfilling in Shopify means the goods are packed and ready, not that they
-// reached the customer — the delivery itself still has to happen. So this sets
-// fulfilled_at and leaves delivered_at alone: that timestamp belongs to the
-// driver or dispatcher marking the order DELIVERED, and is what
-// performanceService counts as a completed delivery.
+// Fulfilling in the Shopify admin is the moment the parcel leaves the counter,
+// so it moves the dispatcher order straight to PICKED_UP — the dispatcher does
+// not have to repeat the same step in the dashboard afterwards.
+//
+// delivered_at is deliberately left alone: the parcel is with the driver, not
+// with the customer. That timestamp belongs to the driver or dispatcher marking
+// the order DELIVERED, and is what performanceService counts as a completed
+// delivery.
+//
+// Orders already further along are not dragged backwards — an order out for
+// delivery or delivered stays where it is. Assigning a driver afterwards does
+// not regress the status either; see assignDriverToOrder.
 async function handleOrderFulfilled(req, res) {
   try {
     const order = parseWebhookOrder(req);
@@ -354,22 +361,61 @@ async function handleOrderFulfilled(req, res) {
       return res.status(200).send("Store not found");
     }
 
-    await pool.query(
-      `UPDATE orders
+    // The payment fields are refreshed whatever state the order is in, while
+    // the status only moves forward — hence the CTE, which keeps the previous
+    // status so the code below can tell an order it just advanced from one that
+    // was already on its way.
+    //
+    // fulfilled_at is set once and then left: Shopify retries a webhook it did
+    // not get a 200 for, and re-stamping it would push the order's disappearance
+    // from the dashboard further out each time.
+    const result = await pool.query(
+      `WITH prev AS (
+         SELECT id, order_status
+         FROM orders
+         WHERE shopify_order_id = $1 AND store_id = $4
+       )
+       UPDATE orders o
        SET order_status = CASE
-             WHEN order_status = 'PICKED_UP' THEN order_status
-             ELSE 'FULFILLED'
+             WHEN prev.order_status IN ('PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED')
+               THEN o.order_status
+             ELSE 'PICKED_UP'
            END,
-           fulfilled_at = NOW(),
-           financial_status = COALESCE($2, financial_status),
-           fulfillment_status = COALESCE($3, fulfillment_status)
-       WHERE shopify_order_id = $1
-         AND store_id = $4
-         AND order_status NOT IN ('FULFILLED', 'CANCELLED')`,
+           fulfilled_at = COALESCE(o.fulfilled_at, NOW()),
+           financial_status = COALESCE($2, o.financial_status),
+           fulfillment_status = COALESCE($3, o.fulfillment_status)
+       FROM prev
+       WHERE o.id = prev.id
+       RETURNING o.*, prev.order_status AS previous_status`,
       [shopifyOrderId, order.financial_status || null, order.fulfillment_status || null, storeId]
     );
 
-    console.log(`[Webhook] Order ${shopifyOrderId} fulfilled in Shopify`);
+    const row = result.rows[0];
+    if (!row) {
+      console.log(`[Webhook] Order ${shopifyOrderId} fulfilled in Shopify — not found for this store`);
+      return res.status(200).send("Webhook received");
+    }
+    if (row.previous_status === row.order_status) {
+      // Already picked up or beyond, or cancelled — nothing advanced, so the
+      // tracking link and tag are already in place from the first time round.
+      console.log(`[Webhook] Order ${shopifyOrderId} fulfilled in Shopify — already ${row.order_status}`);
+      return res.status(200).send("Webhook received");
+    }
+
+    // What clicking "Picked Up" in the dashboard used to do. Fulfilling from
+    // the Shopify admin creates a fulfilment carrying no tracking, so without
+    // this the order would never get its tracking link — the dispatcher's click
+    // was the only thing attaching it. Both calls are fire-and-forget: Shopify
+    // being slow or down must not fail the webhook, which Shopify would then
+    // retry and re-apply.
+    markFulfilledInShopify(storeId, row.shopify_order_id, row).catch(err =>
+      console.error("[Shopify sync] attach tracking on fulfil failed:", err.message)
+    );
+    syncOrderTagToShopify(storeId, row.shopify_order_id, "PICKED_UP").catch(err =>
+      console.error("[Shopify sync] picked up tag failed:", err.message)
+    );
+
+    console.log(`[Webhook] Order ${shopifyOrderId} fulfilled in Shopify — marked picked up`);
     return res.status(200).send("Webhook received");
   } catch (error) {
     console.error("Webhook fulfilled error:", error);

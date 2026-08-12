@@ -38,10 +38,17 @@ const REPLACEABLE_DELIVERY_TAGS = new Set([
   ...Object.values(STATUS_TAG_LABELS),
 ]);
 
+// PICKED_UP carries the driver's name for the same reason ASSIGNED and
+// DELIVERED do: fulfilling in the Shopify admin now moves an order straight to
+// PICKED_UP, so it is the state an order spends its delivery in and the one a
+// driver is named on. Without the name the Shopify order would never say who
+// is carrying it. The bare "Picked Up" label is kept for when no driver is
+// known yet — which is exactly the case at fulfilment time.
 function deliveryTagForStatus(status, { driverName } = {}) {
-  if (status === "ASSIGNED" || status === "DELIVERED") {
+  if (status === "ASSIGNED" || status === "DELIVERED" || status === "PICKED_UP") {
     const name = firstNonBlank(driverName);
     if (status === "ASSIGNED") return name ? `Assigned to ${name}` : "Assigned";
+    if (status === "PICKED_UP") return name ? `Picked up by ${name}` : "Picked Up";
     return name ? `Delivered by ${name}` : "Delivered";
   }
 
@@ -53,6 +60,7 @@ function isReplaceableDeliveryTag(tag) {
     REPLACEABLE_DELIVERY_TAGS.has(tag) ||
     /^assigned to\b/i.test(tag) ||
     /^delivered by\b/i.test(tag) ||
+    /^picked up by\b/i.test(tag) ||
     tag === "Assigned"
   );
 }
