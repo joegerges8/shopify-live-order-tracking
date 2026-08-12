@@ -137,10 +137,15 @@ async function getDriverLocations(req, res) {
               longitude: fix.longitude,
               updated_at: fix.updatedAt,
               age_seconds: Math.round(fix.ageSeconds),
-              // The town the driver is in. null when reverse geocoding is
-              // unconfigured or could not name the spot — the map then shows
-              // the pin without a caption rather than inventing one.
-              city: towns[index] || null,
+              // The town the driver is in. null when nothing could name the
+              // spot — the map then shows the pin without a caption rather
+              // than inventing one.
+              city: towns[index] ? towns[index].name : null,
+              // EXACT when Google named it, APPROXIMATE when it came from the
+              // local table of town centres and so may be the village next
+              // door. The dashboard words the line differently for each, and
+              // the browser has its own go at an exact name on top of this.
+              city_precision: towns[index] ? towns[index].precision : null,
             }
           : null,
         // Everything the driver is holding for this store, deliveries under

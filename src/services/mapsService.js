@@ -186,24 +186,33 @@ function pickPlaceName(results) {
   return null;
 }
 
-// The town a coordinate falls in, or null when it cannot be worked out.
+// The town a coordinate falls in, as { name, precision }, or null when it
+// cannot be worked out at all.
 //
 // Never throws and never rejects: the live map calls this for every driver on
 // every poll, and a Google outage has to cost a line of text, not the map.
 //
-// Google is asked first because it knows the street; when it cannot answer —
-// no GOOGLE_MAPS_SERVER_KEY configured, quota exhausted, request timed out,
-// nothing at those coordinates — the local town table answers instead with the
-// nearest town centre. That fallback is why the map can caption a driver at
-// all on an install that has never had a server key: "In Achrafieh" is a
-// rougher answer than Google's, and a far better one than no answer.
+// Two very different answers can come back, and the caller is told which:
+//
+//   EXACT       — Google named the place the coordinates are actually in.
+//   APPROXIMATE — Google could not be asked (no GOOGLE_MAPS_SERVER_KEY, quota
+//                 exhausted, request timed out) or had nothing there, so the
+//                 local town table answered with the nearest town centre it
+//                 knows. That table holds a few hundred points, so near a
+//                 boundary it will name the village next door: a driver in
+//                 Ballouneh comes back as Jeita. Useful, but not the truth,
+//                 and the dashboard says "Near Jeita" rather than "In Jeita"
+//                 so nobody reads it as one.
 async function reverseGeocodeCity(latitude, longitude) {
   const lat = Number(latitude);
   const lng = Number(longitude);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
   const fromGoogle = await googleReverseGeocodeCity(lat, lng);
-  return fromGoogle || nearestTown(lat, lng);
+  if (fromGoogle) return { name: fromGoogle, precision: "EXACT" };
+
+  const nearest = nearestTown(lat, lng);
+  return nearest ? { name: nearest, precision: "APPROXIMATE" } : null;
 }
 
 // Google's own answer, or null. Split out so the fallback above reads as one
