@@ -4,7 +4,8 @@ import { showToast, confirmAction } from "./ui.js";
 const tableBody = document.querySelector("#ordersTable tbody");
 
 const totalOrdersEl = document.getElementById("totalOrders");
-const pendingOrdersEl = document.getElementById("pendingOrders");
+const unfulfilledOrdersEl = document.getElementById("unfulfilledOrders");
+const inProgressOrdersEl = document.getElementById("inProgressOrders");
 const deliveredOrdersEl = document.getElementById("deliveredOrders");
 const availableDriversEl = document.getElementById("availableDrivers");
 
@@ -205,16 +206,28 @@ function createStatusBadge(status) {
    STATS
 =========================== */
 
+// The delivery lifecycle between "nobody has picked this up yet" and a
+// finished order. Kept separate from the unfulfilled count so an order already
+// on a driver's bike is not reported as still waiting for one.
+const IN_PROGRESS_STATUSES = ["ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY"];
+
 function updateStats(orders, drivers) {
   const totalOrders = orders.length;
-  const pendingOrders = orders.filter((order) =>
-    !["DELIVERED", "RETURNED", "FULFILLED", "CANCELLED"].includes(order.order_status)
+  // Counted through normalizeOrderStatus so this card means exactly what the
+  // Unfulfilled option in the status filter means — CREATED, PENDING and a
+  // missing status all land in the same bucket the table shows.
+  const unfulfilledOrders = orders.filter(
+    (order) => normalizeOrderStatus(order.order_status) === "UNFULFILLED"
+  ).length;
+  const inProgressOrders = orders.filter((order) =>
+    IN_PROGRESS_STATUSES.includes(normalizeOrderStatus(order.order_status))
   ).length;
   const deliveredOrders = orders.filter((order) => order.order_status === "DELIVERED").length;
   const availableDrivers = drivers.filter((driver) => !isDriverBusy(driver.id, orders)).length;
 
   totalOrdersEl.textContent = totalOrders;
-  pendingOrdersEl.textContent = pendingOrders;
+  unfulfilledOrdersEl.textContent = unfulfilledOrders;
+  inProgressOrdersEl.textContent = inProgressOrders;
   deliveredOrdersEl.textContent = deliveredOrders;
   availableDriversEl.textContent = availableDrivers;
 }
