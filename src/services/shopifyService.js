@@ -261,6 +261,54 @@ function buildTrackingInfo(order) {
   };
 }
 
+// Is this tracking URL one we wrote ourselves? Compared by host rather than by
+// whole string: the path and token differ per order, and APP_URL may or may not
+// carry a trailing slash or a port.
+//
+// Anything else on a fulfilment came from an outside carrier — Wakilni, say —
+// which is how an order shipped by someone else is told apart from one of ours.
+function isOwnTrackingUrl(url) {
+  const parsed = parseHttpUrl(url);
+  return Boolean(parsed) && parsed.host === new URL(APP_URL).host;
+}
+
+// A tracking URL is only usable if the customer's browser can actually be sent
+// to it, so anything that is not absolute http(s) is treated as no link at all.
+// Shopify does not validate what a carrier app writes into this field.
+function parseHttpUrl(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// The outside carrier's tracking details on an order, or null when the order
+// carries none and is therefore ours to deliver.
+//
+// Shopify's orders/fulfilled payload embeds the fulfilments, so this reads the
+// carrier straight off the webhook without a second API call. Cancelled and
+// failed fulfilments are ignored — a cancelled Wakilni booking must not keep
+// pointing the customer at Wakilni's tracker.
+function findCarrierTracking(order) {
+  const fulfillments = Array.isArray(order?.fulfillments) ? order.fulfillments : [];
+
+  for (const fulfillment of fulfillments) {
+    if (fulfillment.status === "cancelled" || fulfillment.status === "error") continue;
+
+    const url = firstNonBlank(
+      fulfillment.tracking_url,
+      Array.isArray(fulfillment.tracking_urls) ? fulfillment.tracking_urls[0] : null
+    );
+    if (!parseHttpUrl(url) || isOwnTrackingUrl(url)) continue;
+
+    return { url, company: firstNonBlank(fulfillment.tracking_company) || null };
+  }
+  return null;
+}
+
 // Adds the tracking link to a fulfillment that has none. A fulfillment that
 // already carries tracking belongs to another carrier — Wakilni, say — so it
 // is left alone rather than having its details overwritten.
@@ -767,4 +815,6 @@ module.exports = {
   markOrderPaidInShopify,
   fetchOrderCustomerFieldsFromShopify,
   importOrdersFromShopify,
+  findCarrierTracking,
+  isOwnTrackingUrl,
 };

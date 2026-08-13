@@ -540,14 +540,24 @@ async function createLocationUpdate({ order_id, driver_id, latitude, longitude }
 //
 // A token is minted on demand for orders imported before tokens existed, the
 // same as ensureTrackingToken does on the status path.
-async function getTrackingTokenByShopifyOrderId(shopifyOrderId) {
+// Returns { carrierTrackingUrl } for an order shipped by an outside carrier, or
+// { token } for one of ours. Null when no such order exists.
+async function getTrackingDestinationByShopifyOrderId(shopifyOrderId) {
   const result = await pool.query(
-    `SELECT id, tracking_token FROM orders WHERE shopify_order_id = $1 LIMIT 1`,
+    `SELECT id, tracking_token, carrier_tracking_url
+     FROM orders WHERE shopify_order_id = $1 LIMIT 1`,
     [shopifyOrderId]
   );
   const row = result.rows[0];
   if (!row) return null;
-  if (row.tracking_token) return row.tracking_token;
+
+  // An order shipped by Wakilni or the like belongs on the carrier's own
+  // tracker: our page knows nothing about a parcel no driver of ours carries,
+  // and would show a delivery that never appears to start.
+  if (row.carrier_tracking_url) {
+    return { carrierTrackingUrl: row.carrier_tracking_url };
+  }
+  if (row.tracking_token) return { token: row.tracking_token };
 
   const minted = await pool.query(
     `UPDATE orders SET tracking_token = $1
@@ -555,7 +565,8 @@ async function getTrackingTokenByShopifyOrderId(shopifyOrderId) {
      RETURNING tracking_token`,
     [randomUUID(), row.id]
   );
-  return minted.rows[0]?.tracking_token || null;
+  const token = minted.rows[0]?.tracking_token;
+  return token ? { token } : null;
 }
 
 // Public tracking lookup — token is globally unique, no store filter needed.
@@ -660,7 +671,7 @@ module.exports = {
   getCompletedOrdersByDriverId,
   createLocationUpdate,
   getOrderByTrackingToken,
-  getTrackingTokenByShopifyOrderId,
+  getTrackingDestinationByShopifyOrderId,
   countStartedDeliveries,
   updateCustomerLocation,
   updateOrderArea,

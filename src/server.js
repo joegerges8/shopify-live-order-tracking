@@ -116,6 +116,15 @@ async function startServer() {
       );
       console.log(`Added orders.prepaid and backfilled ${backfill.rowCount} undelivered paid orders`);
     }
+    // Orders shipped by an outside carrier — Wakilni and the like — rather than
+    // by our own drivers. The carrier writes its tracking link onto the Shopify
+    // fulfilment, and that link is what the customer must be sent to.
+    await pool.query(
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS carrier_tracking_url TEXT;`
+    );
+    await pool.query(
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS carrier_name VARCHAR(100);`
+    );
     await pool.query(
       `ALTER TABLE orders
        ALTER COLUMN order_status SET DEFAULT 'UNFULFILLED'`
