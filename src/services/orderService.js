@@ -284,12 +284,28 @@ async function unassignDriverFromOrder(orderId, storeId) {
 function statusUpdateQuery(status) {
   // financial_status is not set here: delivering records the payment in
   // Shopify first, and the local column only follows once that succeeds.
+  // Delivering and fulfilling both leave a fulfillment behind in Shopify, so
+  // the mirrored fulfillment_status has to follow. The dashboard's Unfulfilled
+  // card counts off that column, and only PICKED_UP used to stamp it — an
+  // order taken straight from ASSIGNED to DELIVERED kept a null there and went
+  // on being counted as unfulfilled forever.
   if (status === "DELIVERED") {
-    return `UPDATE orders SET order_status = $1, delivered_at = NOW()
+    return `UPDATE orders SET order_status = $1, delivered_at = NOW(),
+              fulfilled_at = COALESCE(fulfilled_at, NOW()),
+              fulfillment_status = 'fulfilled'
             WHERE id = $2 AND store_id = $3 RETURNING *`;
   }
   if (status === "FULFILLED") {
-    return `UPDATE orders SET order_status = $1, fulfilled_at = NOW()
+    return `UPDATE orders SET order_status = $1, fulfilled_at = NOW(),
+              fulfillment_status = 'fulfilled'
+            WHERE id = $2 AND store_id = $3 RETURNING *`;
+  }
+  // Sending an order back to Unfulfilled cancels its fulfillment in Shopify,
+  // so the mirror has to be cleared — the webhooks COALESCE a null coming back
+  // from Shopify and would never unset it on their own.
+  if (status === "UNFULFILLED") {
+    return `UPDATE orders SET order_status = $1, fulfilled_at = NULL,
+              fulfillment_status = NULL
             WHERE id = $2 AND store_id = $3 RETURNING *`;
   }
   // Cancelling releases the driver — there is nothing left for them to deliver.
