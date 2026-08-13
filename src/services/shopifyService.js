@@ -22,7 +22,9 @@ const NOTIFY_CUSTOMER = process.env.SHOPIFY_NOTIFY_CUSTOMER !== "false";
 
 const STATUS_TAG_LABELS = {
   UNFULFILLED: "Unfulfilled",
+  ASSIGNED:  "Assigned",
   PICKED_UP: "Picked Up",
+  DELIVERED: "Delivered",
   RETURNED:  "Returned",
   CANCELLED: "Cancelled",
 };
@@ -42,15 +44,20 @@ const REPLACEABLE_DELIVERY_TAGS = new Set([
 // DELIVERED do: fulfilling in the Shopify admin now moves an order straight to
 // PICKED_UP, so it is the state an order spends its delivery in and the one a
 // driver is named on. Without the name the Shopify order would never say who
-// is carrying it. The bare "Picked Up" label is kept for when no driver is
-// known yet — which is exactly the case at fulfilment time.
+// is carrying it. RETURNED is the other end of the same question — an order
+// coming back is the one someone in the shop has to chase, and the tag is
+// where they look. The bare labels are kept for when no driver is known.
+const DRIVER_NAMED_TAGS = {
+  ASSIGNED:  (name) => `Assigned to ${name}`,
+  PICKED_UP: (name) => `Picked up by ${name}`,
+  DELIVERED: (name) => `Delivered by ${name}`,
+  RETURNED:  (name) => `Returned by ${name}`,
+};
+
 function deliveryTagForStatus(status, { driverName } = {}) {
-  if (status === "ASSIGNED" || status === "DELIVERED" || status === "PICKED_UP") {
-    const name = firstNonBlank(driverName);
-    if (status === "ASSIGNED") return name ? `Assigned to ${name}` : "Assigned";
-    if (status === "PICKED_UP") return name ? `Picked up by ${name}` : "Picked Up";
-    return name ? `Delivered by ${name}` : "Delivered";
-  }
+  const named = DRIVER_NAMED_TAGS[status];
+  const name = named ? firstNonBlank(driverName) : null;
+  if (name) return named(name);
 
   return STATUS_TAG_LABELS[status] || null;
 }
@@ -61,6 +68,7 @@ function isReplaceableDeliveryTag(tag) {
     /^assigned to\b/i.test(tag) ||
     /^delivered by\b/i.test(tag) ||
     /^picked up by\b/i.test(tag) ||
+    /^returned by\b/i.test(tag) ||
     tag === "Assigned"
   );
 }

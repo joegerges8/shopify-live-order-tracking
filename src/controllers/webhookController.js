@@ -2,6 +2,7 @@ const pool = require("../config/db");
 const { randomUUID } = require("crypto");
 const { resolveAreaOrUnknown } = require("../utils/areaLookup");
 const { syncOrderTagToShopify, markFulfilledInShopify } = require("../services/shopifyService");
+const { getDriverNameById } = require("../services/orderService");
 const { extractLineItems } = require("../utils/lineItems");
 const { extractOrderNote } = require("../utils/orderNote");
 
@@ -411,9 +412,17 @@ async function handleOrderFulfilled(req, res) {
     markFulfilledInShopify(storeId, row.shopify_order_id, row).catch(err =>
       console.error("[Shopify sync] attach tracking on fulfil failed:", err.message)
     );
-    syncOrderTagToShopify(storeId, row.shopify_order_id, "PICKED_UP").catch(err =>
-      console.error("[Shopify sync] picked up tag failed:", err.message)
-    );
+    // An order fulfilled from the Shopify admin often already has a driver on
+    // it, and that is the name the Picked Up tag is supposed to carry. Looking
+    // it up here is what keeps this path from writing a bare "Picked Up" over
+    // the "Picked up by …" the dashboard would have written.
+    getDriverNameById(row.assigned_driver_id)
+      .then(driverName =>
+        syncOrderTagToShopify(storeId, row.shopify_order_id, "PICKED_UP", { driverName })
+      )
+      .catch(err =>
+        console.error("[Shopify sync] picked up tag failed:", err.message)
+      );
 
     console.log(`[Webhook] Order ${shopifyOrderId} fulfilled in Shopify — marked picked up`);
     return res.status(200).send("Webhook received");

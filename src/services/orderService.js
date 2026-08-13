@@ -338,7 +338,7 @@ async function updateOrderStatus(orderId, status, storeId) {
     row = await ensureTrackingToken(row);
   }
   if (row) {
-    const driverName = ["ASSIGNED", "PICKED_UP", "DELIVERED"].includes(status)
+    const driverName = ["ASSIGNED", "PICKED_UP", "DELIVERED", "RETURNED"].includes(status)
       ? await getDriverNameById(row.assigned_driver_id)
       : null;
 
@@ -685,6 +685,7 @@ async function updateOrderArea(orderId, area, storeId) {
 
 module.exports = {
   getAllOrders,
+  getDriverNameById,
   getOrderById,
   getOrderByIdForDriver,
   assignDriverToOrder,
