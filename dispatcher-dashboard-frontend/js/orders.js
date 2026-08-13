@@ -451,7 +451,7 @@ function renderOrders(orders, drivers) {
           <select id="status-${order.id}">
             ${createStatusOptions(orderStatus)}
           </select>
-          <button class="small-btn" data-status-order-id="${order.id}" data-order-number="${order.order_number || ""}">Update</button>
+          <button class="small-btn" data-status-order-id="${order.id}" data-order-number="${order.order_number || ""}" data-has-driver="${order.assigned_driver_id ? "1" : "0"}">Update</button>
         </div>
       </td>
     `;
@@ -643,6 +643,25 @@ function attachEventListeners() {
           button.disabled = false;
         }
         return;
+      }
+
+      // Delivering fulfills the order in Shopify and records the cash payment,
+      // so it belongs with paying and deleting: worth stopping to ask, since
+      // picking a different status afterwards will not undo either.
+      if (status === "DELIVERED") {
+        const orderLabel = button.getAttribute("data-order-number") || `#${orderId}`;
+        const hasDriver = button.getAttribute("data-has-driver") === "1";
+        const confirmed = await confirmAction({
+          title: `Mark order ${orderLabel} as delivered?`,
+          message:
+            "This fulfills the order in Shopify and records payment for cash orders.\n\n" +
+            (hasDriver
+              ? ""
+              : "No driver is assigned to this order — it will be closed out without one.\n\n") +
+            "Undoing the payment means issuing a refund.",
+          confirmLabel: "Mark as delivered",
+        });
+        if (!confirmed) return;
       }
 
       try {

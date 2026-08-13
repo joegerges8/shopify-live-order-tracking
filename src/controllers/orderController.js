@@ -94,12 +94,16 @@ async function changeOrderStatus(req, res) {
       return res.status(404).json({ error: "Order not found" });
     }
 
+    // PICKED_UP and OUT_FOR_DELIVERY describe a driver carrying the order, so
+    // they still need one named. DELIVERED does not: orders get handed over at
+    // the counter, dropped off by the owner, or delivered by someone who was
+    // never entered in the app, and the dispatcher still has to close them out.
     if (
-      (status === "PICKED_UP" || status === "OUT_FOR_DELIVERY" || status === "DELIVERED") &&
+      (status === "PICKED_UP" || status === "OUT_FOR_DELIVERY") &&
       !order.assigned_driver_id
     ) {
       return res.status(400).json({
-        error: "Cannot update status to PICKED_UP, OUT_FOR_DELIVERY, or DELIVERED without assigning a driver first",
+        error: "Cannot update status to PICKED_UP or OUT_FOR_DELIVERY without assigning a driver first",
       });
     }
 
