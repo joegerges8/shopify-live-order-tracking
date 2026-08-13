@@ -199,6 +199,14 @@ button:hover {
   text-transform: uppercase;
 }
 
+/* The driver's name inside a Picked Up / Returned badge. The badge shouts in
+   uppercase; a person's name should not, so it opts out and sits a shade
+   lighter than the status itself. */
+.status-badge-driver {
+  text-transform: none;
+  font-weight: 500;
+}
+
 /* Colors */
 
 .status-pending {
