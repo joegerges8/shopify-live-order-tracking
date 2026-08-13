@@ -266,6 +266,30 @@ button:hover {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
 }
 
+/* On the Orders page each card is a button that opens the rows behind its
+   number. It keeps the card's looks — only the affordances are added, so the
+   plain cards elsewhere are untouched. */
+button.stat-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+button.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
+  border-color: #c7d2fe;
+}
+
+button.stat-card:focus-visible {
+  outline: 2px solid #1e3a8a;
+  outline-offset: 2px;
+}
+
 .stat-title {
   color: #6b7280;
   font-size: 15px;
@@ -275,6 +299,21 @@ button:hover {
 .stat-card h3 {
   font-size: 34px;
   color: #111827;
+}
+
+/* Says the number is a way in. Quiet until the card is hovered, so a row of
+   cards does not read as a row of links. */
+.stat-hint {
+  display: block;
+  margin-top: 8px;
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+button.stat-card:hover .stat-hint,
+button.stat-card:focus-visible .stat-hint {
+  color: #1e3a8a;
 }
 
 .filters-bar {
@@ -554,10 +593,84 @@ button:hover {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
 }
 
+/* The stat-card list: wider than a confirmation, and capped in height so a
+   long list scrolls inside the dialog instead of running off the screen. */
+.modal-wide {
+  max-width: 1000px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.modal-subtitle {
+  color: #6b7280;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.modal-close {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 26px;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.modal-body {
+  overflow: auto;
+  min-height: 0;
+}
+
+/* The list already sits on the modal's own surface, so it drops the card
+   treatment the page's tables carry. */
+.stat-modal-table {
+  box-shadow: none;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  padding: 6px 14px;
+}
+
+.stat-modal-table table th,
+.stat-modal-table table td {
+  padding: 12px 10px;
+  font-size: 15px;
+}
+
+.stat-modal-table table tr:last-child td {
+  border-bottom: none;
+}
+
+.stat-modal-empty {
+  color: #6b7280;
+  font-size: 15px;
+  padding: 22px 4px;
+}
+
 .modal-title {
   font-size: 21px;
   color: #111827;
   margin-bottom: 12px;
+}
+
+.modal-header .modal-title {
+  margin-bottom: 0;
 }
 
 .modal-message {

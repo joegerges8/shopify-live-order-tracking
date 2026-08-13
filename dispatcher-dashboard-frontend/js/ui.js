@@ -174,6 +174,115 @@ export function confirmAction({
 }
 
 /* ===========================
+   DETAIL MODAL
+=========================== */
+
+/**
+ * Opens a wide modal built around content the caller supplies — used for the
+ * stat cards, where clicking a count shows the orders behind it without
+ * disturbing the filters the dispatcher has set on the table underneath.
+ *
+ * Unlike confirmAction this asks nothing: it stays open until it is dismissed,
+ * and the caller keeps the handle so it can refresh its own contents while it
+ * is on screen.
+ *
+ * @param {object} options
+ * @param {string} options.title      Headline, e.g. "Unfulfilled Orders".
+ * @param {string} [options.subtitle] Small line under the headline, e.g. a count.
+ * @param {HTMLElement} options.content  Body element, replaceable via setContent.
+ * @param {() => void} [options.onClose] Called once, after the modal is removed.
+ * @returns {{ close: () => void, setTitle: (t: string) => void,
+ *             setSubtitle: (s: string) => void,
+ *             setContent: (el: HTMLElement) => void, isOpen: () => boolean }}
+ */
+export function showDetailModal({ title, subtitle = "", content, onClose }) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+
+  const dialog = document.createElement("div");
+  dialog.className = "modal modal-wide";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", title);
+
+  const header = document.createElement("div");
+  header.className = "modal-header";
+
+  const headings = document.createElement("div");
+
+  const heading = document.createElement("h2");
+  heading.className = "modal-title";
+  heading.textContent = title;
+
+  const subheading = document.createElement("p");
+  subheading.className = "modal-subtitle";
+  subheading.textContent = subtitle;
+
+  headings.append(heading, subheading);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "modal-close";
+  closeBtn.setAttribute("aria-label", "Close");
+  closeBtn.textContent = "×";
+
+  header.append(headings, closeBtn);
+
+  const body = document.createElement("div");
+  body.className = "modal-body";
+  body.appendChild(content);
+
+  dialog.append(header, body);
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+
+  // The stat cards are buttons, so returning focus puts the dispatcher back on
+  // the card they opened rather than at the top of the page.
+  const previouslyFocused = document.activeElement;
+  let open = true;
+
+  function close() {
+    if (!open) return;
+    open = false;
+    document.removeEventListener("keydown", onKeydown, true);
+    overlay.remove();
+    if (previouslyFocused && previouslyFocused.focus) previouslyFocused.focus();
+    if (onClose) onClose();
+  }
+
+  function onKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+    }
+  }
+
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) close();
+  });
+  document.addEventListener("keydown", onKeydown, true);
+
+  closeBtn.focus();
+
+  return {
+    close,
+    isOpen: () => open,
+    setTitle(next) {
+      heading.textContent = next;
+      dialog.setAttribute("aria-label", next);
+    },
+    setSubtitle(next) {
+      subheading.textContent = next;
+    },
+    setContent(next) {
+      body.innerHTML = "";
+      body.appendChild(next);
+    },
+  };
+}
+
+/* ===========================
    COPY BOX  (replaces prompt)
 =========================== */
 
