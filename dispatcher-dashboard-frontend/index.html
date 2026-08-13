@@ -29,31 +29,39 @@
       </div>
       <p id="syncStatus" class="sync-status"></p>
 
+      <!-- Every card is a button: clicking one opens the orders (or drivers)
+           it counts, so the number is a way into the list rather than a
+           dead end. -->
       <div class="stats-grid stats-grid-5">
-        <div class="stat-card">
+        <button type="button" class="stat-card" data-stat="total">
           <p class="stat-title">Total Orders</p>
           <h3 id="totalOrders">0</h3>
-        </div>
+          <span class="stat-hint">View orders</span>
+        </button>
 
-        <div class="stat-card">
+        <button type="button" class="stat-card" data-stat="unfulfilled">
           <p class="stat-title">Unfulfilled Orders</p>
           <h3 id="unfulfilledOrders">0</h3>
-        </div>
+          <span class="stat-hint">View orders</span>
+        </button>
 
-        <div class="stat-card">
+        <button type="button" class="stat-card" data-stat="inProgress">
           <p class="stat-title">In Progress</p>
           <h3 id="inProgressOrders">0</h3>
-        </div>
+          <span class="stat-hint">View orders</span>
+        </button>
 
-        <div class="stat-card">
+        <button type="button" class="stat-card" data-stat="delivered">
           <p class="stat-title">Delivered Orders</p>
           <h3 id="deliveredOrders">0</h3>
-        </div>
+          <span class="stat-hint">View orders</span>
+        </button>
 
-        <div class="stat-card">
+        <button type="button" class="stat-card" data-stat="availableDrivers">
           <p class="stat-title">Available Drivers</p>
           <h3 id="availableDrivers">0</h3>
-        </div>
+          <span class="stat-hint">View drivers</span>
+        </button>
       </div>
 
       <div class="filters-bar">

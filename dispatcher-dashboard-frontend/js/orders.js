@@ -1,5 +1,5 @@
 import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, updateOrderArea, getAreas, importOrders, deleteOrder, markOrderPaid } from "./api.js";
-import { showToast, confirmAction } from "./ui.js";
+import { showToast, confirmAction, showDetailModal } from "./ui.js";
 
 const tableBody = document.querySelector("#ordersTable tbody");
 
@@ -236,6 +236,152 @@ function updateStats(orders, drivers) {
   deliveredOrdersEl.textContent = deliveredOrders;
   availableDriversEl.textContent = availableDrivers;
 }
+
+/* ===========================
+   STAT DETAILS
+
+   Each card is a question the dispatcher then has to answer by hand — "eleven
+   unfulfilled, but which eleven?" — so clicking one opens the rows behind the
+   number. It is a modal rather than a filter on the table so the search, city
+   and area the dispatcher already set are still there when it closes.
+=========================== */
+
+// The definition behind each card: what it counts, and how a matching row is
+// drawn. Keys match the data-stat attributes in index.html.
+const STAT_VIEWS = {
+  total: {
+    title: "Total Orders",
+    kind: "orders",
+    empty: "No orders yet.",
+    select: (orders) => orders,
+  },
+  unfulfilled: {
+    title: "Unfulfilled Orders",
+    kind: "orders",
+    empty: "Nothing unfulfilled — every order is fulfilled in Shopify.",
+    select: (orders) => orders.filter((order) => !isFulfilledInShopify(order)),
+  },
+  inProgress: {
+    title: "Orders In Progress",
+    kind: "orders",
+    empty: "No orders are out with a driver right now.",
+    select: (orders) =>
+      orders.filter((order) =>
+        IN_PROGRESS_STATUSES.includes(normalizeOrderStatus(order.order_status))
+      ),
+  },
+  delivered: {
+    title: "Delivered Orders",
+    kind: "orders",
+    empty: "No orders have been delivered yet.",
+    select: (orders) => orders.filter((order) => order.order_status === "DELIVERED"),
+  },
+  availableDrivers: {
+    title: "Available Drivers",
+    kind: "drivers",
+    empty: "Every driver is out on a delivery.",
+    select: (orders, drivers) => drivers.filter((driver) => !isDriverBusy(driver.id, orders)),
+  },
+};
+
+const ORDER_COLUMNS = ["Order #", "Customer", "Phone", "City", "Total", "Status", "Driver"];
+const DRIVER_COLUMNS = ["Driver", "Phone", "Active Orders"];
+
+function createStatOrderRow(order) {
+  const orderStatus = normalizeOrderStatus(order.order_status);
+  return `
+    <tr>
+      <td data-label="Order #">${escapeHtml(order.order_number ?? "")}</td>
+      <td data-label="Customer">${escapeHtml(getCustomerName(order))}</td>
+      <td data-label="Phone">${createPhoneCell(order)}</td>
+      <td data-label="City">${escapeHtml(getOrderCity(order))}</td>
+      <td data-label="Total">${escapeHtml(order.total_price ?? "")}</td>
+      <td data-label="Status">${createStatusBadge(orderStatus)}</td>
+      <td data-label="Driver">${escapeHtml(getDriverNameById(order.assigned_driver_id, allDrivers))}</td>
+    </tr>
+  `;
+}
+
+function createStatDriverRow(driver) {
+  const activeCount = getDriverActiveOrders(driver.id, allOrders).length;
+  return `
+    <tr>
+      <td data-label="Driver">${escapeHtml(driver.full_name ?? `Driver #${driver.id}`)}</td>
+      <td data-label="Phone">${escapeHtml(driver.phone ?? "—")}</td>
+      <td data-label="Active Orders">${activeCount}</td>
+    </tr>
+  `;
+}
+
+// The list itself, as one element the modal can swap in wholesale when the
+// 30-second refresh brings new numbers.
+function createStatContent(view, rows) {
+  const container = document.createElement("div");
+
+  if (!rows.length) {
+    container.className = "stat-modal-empty";
+    container.textContent = view.empty;
+    return container;
+  }
+
+  const isDrivers = view.kind === "drivers";
+  const columns = isDrivers ? DRIVER_COLUMNS : ORDER_COLUMNS;
+  const drawRow = isDrivers ? createStatDriverRow : createStatOrderRow;
+
+  container.className = "table-container stat-modal-table";
+  container.innerHTML = `
+    <table>
+      <thead>
+        <tr>${columns.map((column) => `<th>${column}</th>`).join("")}</tr>
+      </thead>
+      <tbody>${rows.map(drawRow).join("")}</tbody>
+    </table>
+  `;
+  return container;
+}
+
+function describeStatCount(view, count) {
+  const noun = view.kind === "drivers" ? "driver" : "order";
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+// Which card is open, so the auto-refresh can redraw it in place instead of
+// leaving a list that quietly goes stale while it is being read.
+let openStatKey = null;
+let openStatModal = null;
+
+function openStatDetails(key) {
+  const view = STAT_VIEWS[key];
+  if (!view) return;
+
+  // Clicking a second card swaps the contents rather than stacking modals.
+  if (openStatModal && openStatModal.isOpen()) openStatModal.close();
+
+  const rows = view.select(allOrders, allDrivers);
+  openStatKey = key;
+  openStatModal = showDetailModal({
+    title: view.title,
+    subtitle: describeStatCount(view, rows.length),
+    content: createStatContent(view, rows),
+    onClose: () => {
+      openStatKey = null;
+      openStatModal = null;
+    },
+  });
+}
+
+function refreshStatDetails() {
+  if (!openStatKey || !openStatModal || !openStatModal.isOpen()) return;
+
+  const view = STAT_VIEWS[openStatKey];
+  const rows = view.select(allOrders, allDrivers);
+  openStatModal.setSubtitle(describeStatCount(view, rows.length));
+  openStatModal.setContent(createStatContent(view, rows));
+}
+
+document.querySelectorAll("[data-stat]").forEach((card) => {
+  card.addEventListener("click", () => openStatDetails(card.getAttribute("data-stat")));
+});
 
 /* ===========================
    FILTERS
@@ -495,6 +641,9 @@ async function loadOrders() {
     populateCityFilter(orders);
     populateAreaFilter(orders);
     applyFilters();
+    // An open stat list follows the refresh, so it never disagrees with the
+    // card it was opened from.
+    refreshStatDetails();
   } catch (error) {
     console.error("Error loading orders:", error);
     tableBody.innerHTML = `
