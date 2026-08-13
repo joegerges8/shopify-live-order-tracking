@@ -206,19 +206,24 @@ function createStatusBadge(status) {
    STATS
 =========================== */
 
-// The delivery lifecycle between "nobody has picked this up yet" and a
-// finished order. Kept separate from the unfulfilled count so an order already
-// on a driver's bike is not reported as still waiting for one.
+// Which orders are out with a driver right now. This is the delivery
+// lifecycle, a separate axis from Shopify's fulfillment status — an assigned
+// order counts here and is still Unfulfilled in Shopify.
 const IN_PROGRESS_STATUSES = ["ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY"];
+
+// Shopify's own fulfillment status, mirrored into the orders table by the
+// webhooks and the importer. Anything short of a complete fulfillment —
+// null, "partial", "restocked" — is still unfulfilled in the Shopify admin.
+function isFulfilledInShopify(order) {
+  return String(order.fulfillment_status || "").toLowerCase() === "fulfilled";
+}
 
 function updateStats(orders, drivers) {
   const totalOrders = orders.length;
-  // Counted through normalizeOrderStatus so this card means exactly what the
-  // Unfulfilled option in the status filter means — CREATED, PENDING and a
-  // missing status all land in the same bucket the table shows.
-  const unfulfilledOrders = orders.filter(
-    (order) => normalizeOrderStatus(order.order_status) === "UNFULFILLED"
-  ).length;
+  // Read straight from Shopify's fulfillment status rather than inferred from
+  // the local delivery status, so this card always matches the number the
+  // Unfulfilled filter shows in the Shopify admin.
+  const unfulfilledOrders = orders.filter((order) => !isFulfilledInShopify(order)).length;
   const inProgressOrders = orders.filter((order) =>
     IN_PROGRESS_STATUSES.includes(normalizeOrderStatus(order.order_status))
   ).length;
