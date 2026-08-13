@@ -1,7 +1,11 @@
 const pool = require("../config/db");
 const { randomUUID } = require("crypto");
 const { resolveAreaOrUnknown } = require("../utils/areaLookup");
-const { syncOrderTagToShopify, markFulfilledInShopify } = require("../services/shopifyService");
+const {
+  syncOrderTagToShopify,
+  markFulfilledInShopify,
+  findCarrierTracking,
+} = require("../services/shopifyService");
 const { getDriverNameById } = require("../services/orderService");
 const { extractLineItems } = require("../utils/lineItems");
 const { extractOrderNote } = require("../utils/orderNote");
@@ -349,6 +353,12 @@ async function handleOrderDeleted(req, res) {
 // Orders already further along are not dragged backwards — an order out for
 // delivery or delivered stays where it is. Assigning a driver afterwards does
 // not regress the status either; see assignDriverToOrder.
+//
+// None of that applies to an order shipped by an outside carrier. Wakilni and
+// the like write their own tracking link onto the fulfilment as they create it,
+// which is how such an order is recognised: it is not ours to deliver, so it is
+// left at FULFILLED, out of the driver flow and out of the delivery figures,
+// and the carrier's link is stored for /t/<id> to forward the customer to.
 async function handleOrderFulfilled(req, res) {
   try {
     const order = parseWebhookOrder(req);
@@ -361,6 +371,8 @@ async function handleOrderFulfilled(req, res) {
     if (!storeId) {
       return res.status(200).send("Store not found");
     }
+
+    const carrier = findCarrierTracking(order);
 
     // The payment fields are refreshed whatever state the order is in, while
     // the status only moves forward — hence the CTE, which keeps the previous
@@ -380,7 +392,21 @@ async function handleOrderFulfilled(req, res) {
        SET order_status = CASE
              WHEN prev.order_status IN ('PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED')
                THEN o.order_status
+             WHEN $5::text IS NOT NULL THEN 'FULFILLED'
              ELSE 'PICKED_UP'
+           END,
+           -- An order one of our drivers is already carrying stays ours: a
+           -- carrier link arriving afterwards must not redirect the customer
+           -- away from the driver actually holding their parcel.
+           carrier_tracking_url = CASE
+             WHEN prev.order_status IN ('PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED')
+               THEN o.carrier_tracking_url
+             ELSE COALESCE($5, o.carrier_tracking_url)
+           END,
+           carrier_name = CASE
+             WHEN prev.order_status IN ('PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED')
+               THEN o.carrier_name
+             ELSE COALESCE($6, o.carrier_name)
            END,
            fulfilled_at = COALESCE(o.fulfilled_at, NOW()),
            financial_status = COALESCE($2, o.financial_status),
@@ -388,7 +414,14 @@ async function handleOrderFulfilled(req, res) {
        FROM prev
        WHERE o.id = prev.id
        RETURNING o.*, prev.order_status AS previous_status`,
-      [shopifyOrderId, order.financial_status || null, order.fulfillment_status || null, storeId]
+      [
+        shopifyOrderId,
+        order.financial_status || null,
+        order.fulfillment_status || null,
+        storeId,
+        carrier?.url || null,
+        carrier?.company || null,
+      ]
     );
 
     const row = result.rows[0];
@@ -400,6 +433,16 @@ async function handleOrderFulfilled(req, res) {
       // Already picked up or beyond, or cancelled — nothing advanced, so the
       // tracking link and tag are already in place from the first time round.
       console.log(`[Webhook] Order ${shopifyOrderId} fulfilled in Shopify — already ${row.order_status}`);
+      return res.status(200).send("Webhook received");
+    }
+
+    // Someone else's delivery. Nothing to attach — the carrier's link is
+    // already on the fulfilment and now stored here too — and nothing to tag,
+    // since the order never enters the driver flow.
+    if (carrier) {
+      console.log(
+        `[Webhook] Order ${shopifyOrderId} fulfilled by ${carrier.company || "an outside carrier"} — left out of the driver flow`
+      );
       return res.status(200).send("Webhook received");
     }
 

@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { getTrackingTokenByShopifyOrderId } = require("../services/orderService");
+const { getTrackingDestinationByShopifyOrderId } = require("../services/orderService");
 
 // Customer-facing short tracking link: GET /t/:shopifyOrderId
 //
@@ -32,13 +32,21 @@ router.get("/:shopifyOrderId", async (req, res) => {
   }
 
   try {
-    const token = await getTrackingTokenByShopifyOrderId(shopifyOrderId);
-    if (!token) return sendTrackingUnavailable(res, 404);
+    const destination = await getTrackingDestinationByShopifyOrderId(shopifyOrderId);
+    if (!destination) return sendTrackingUnavailable(res, 404);
 
-    // 302 rather than 301: the mapping is stable, but a permanent redirect
-    // would be cached by the customer's browser and by WhatsApp's link
-    // preview fetcher, leaving no way to retire a link later.
-    return res.redirect(302, `/track/track.html?token=${encodeURIComponent(token)}`);
+    // 302 rather than 301 throughout: the mapping is stable, but a permanent
+    // redirect would be cached by the customer's browser and by WhatsApp's link
+    // preview fetcher, leaving no way to retire or re-point a link later. That
+    // matters most here — an order can move to an outside carrier after the
+    // message carrying this link has already been delivered.
+    if (destination.carrierTrackingUrl) {
+      // Shipped by Wakilni or the like: hand the customer to the carrier's own
+      // tracker rather than a page that knows nothing about their parcel.
+      return res.redirect(302, destination.carrierTrackingUrl);
+    }
+
+    return res.redirect(302, `/track/track.html?token=${encodeURIComponent(destination.token)}`);
   } catch (error) {
     console.error("Short tracking link error:", error);
     return sendTrackingUnavailable(res, 500);

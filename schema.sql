@@ -117,6 +117,16 @@ CREATE TABLE orders (
     order_status VARCHAR(30) DEFAULT 'UNFULFILLED',
     assigned_driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
     tracking_token TEXT,                      -- shared with customer for live tracking
+    carrier_tracking_url TEXT,                -- set when the order ships with an outside
+                                              -- carrier (Wakilni and the like) instead of
+                                              -- our own drivers. The carrier writes its own
+                                              -- tracking link onto the Shopify fulfilment;
+                                              -- it is copied here so /t/<id> can forward the
+                                              -- customer to the right tracker. NULL means the
+                                              -- order is ours to deliver.
+    carrier_name VARCHAR(100),                -- the carrier's name as Shopify records it,
+                                              -- shown to the dispatcher so it is obvious why
+                                              -- the order never reaches a driver
     customer_latitude NUMERIC(10,7),
     customer_longitude NUMERIC(10,7),
     customer_altitude NUMERIC(10,2),
