@@ -125,15 +125,6 @@ function getDriverNameById(driverId, drivers) {
   return driver ? driver.full_name : `Driver #${driverId}`;
 }
 
-// Same lookup, but for the places that need to know whether there is a driver
-// at all rather than print something in the gap: null instead of
-// "Not assigned".
-function getAssignedDriverName(order, drivers) {
-  return order.assigned_driver_id
-    ? getDriverNameById(order.assigned_driver_id, drivers)
-    : null;
-}
-
 function createDriverOptions(drivers, orders, selectedDriverId = null) {
   let options = `<option value="">Select driver</option>`;
 
@@ -204,26 +195,11 @@ function createStatusOptions(currentStatus) {
   return options;
 }
 
-// Picked Up and Returned are the two tags a dispatcher reads as "who did
-// this?" — chasing a missing order means knowing whose van it is in, and who
-// brought it back. The Assigned Driver column already holds the name, but the
-// badge is what gets scanned, so the name rides along with it:
-// "Picked Up by Joe Gerges".
-const DRIVER_ATTRIBUTED_STATUSES = ["PICKED_UP", "RETURNED"];
-
-function createStatusBadge(status, driverName = null) {
+function createStatusBadge(status) {
   status = normalizeOrderStatus(status);
   const normalized = status.toLowerCase();
   const display = STATUS_DISPLAY[status] || status;
-
-  // The badge is uppercased by the stylesheet; a person's name is not, so it
-  // is wrapped in its own span that opts back out.
-  const attribution =
-    driverName && DRIVER_ATTRIBUTED_STATUSES.includes(status)
-      ? `<span class="status-badge-driver"> by ${escapeHtml(driverName)}</span>`
-      : "";
-
-  return `<span class="status-badge status-${normalized}">${display}${attribution}</span>`;
+  return `<span class="status-badge status-${normalized}">${display}</span>`;
 }
 
 /* ===========================
@@ -320,7 +296,7 @@ function createStatOrderRow(order) {
       <td data-label="Phone">${createPhoneCell(order)}</td>
       <td data-label="City">${escapeHtml(getOrderCity(order))}</td>
       <td data-label="Total">${escapeHtml(order.total_price ?? "")}</td>
-      <td data-label="Status">${createStatusBadge(orderStatus, getAssignedDriverName(order, allDrivers))}</td>
+      <td data-label="Status">${createStatusBadge(orderStatus)}</td>
       <td data-label="Driver">${escapeHtml(getDriverNameById(order.assigned_driver_id, allDrivers))}</td>
     </tr>
   `;
@@ -608,7 +584,7 @@ function renderOrders(orders, drivers) {
       </td>
       <td data-label="Total">${order.total_price ?? ""}</td>
       <td data-label="Financial Status">${order.financial_status ?? ""}</td>
-      <td data-label="Order Status">${createStatusBadge(orderStatus, getAssignedDriverName(order, drivers))}</td>
+      <td data-label="Order Status">${createStatusBadge(orderStatus)}</td>
       <td data-label="Assigned Driver">${assignedDriverName}</td>
       <td data-label="Assign Driver">
         <div class="action-group">
