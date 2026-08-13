@@ -21,13 +21,19 @@ const TRACKING_COMPANY = process.env.TRACKING_COMPANY_NAME || "DispatchHQ";
 const NOTIFY_CUSTOMER = process.env.SHOPIFY_NOTIFY_CUSTOMER !== "false";
 
 const STATUS_TAG_LABELS = {
-  UNFULFILLED: "Unfulfilled",
   ASSIGNED:  "Assigned",
   PICKED_UP: "Picked Up",
   DELIVERED: "Delivered",
   RETURNED:  "Returned",
   CANCELLED: "Cancelled",
 };
+
+// An order nobody is carrying is what a Shopify order looks like before this
+// app touches it, so Unfulfilled is not worth a tag of its own — it says
+// nothing the Shopify order does not already say. Going back to it clears the
+// delivery tag instead of writing one, which is also what stops a stale
+// "Assigned to …" sitting on an order whose driver was just taken off it.
+const TAG_CLEARING_STATUSES = new Set(["UNFULFILLED"]);
 
 const REPLACEABLE_DELIVERY_TAGS = new Set([
   "delivery-pending",
@@ -37,6 +43,9 @@ const REPLACEABLE_DELIVERY_TAGS = new Set([
   "delivery-delivered",
   "delivery-cancelled",
   "Delivered",
+  // No longer written, but orders tagged by an earlier version still carry it
+  // and it has to be cleaned off on their next status change.
+  "Unfulfilled",
   ...Object.values(STATUS_TAG_LABELS),
 ]);
 
@@ -219,7 +228,12 @@ async function fetchOrderCustomerFieldsFromShopify(storeId, shopifyOrderId) {
 
 async function syncOrderTagToShopify(storeId, shopifyOrderId, status, options = {}) {
   const deliveryTag = deliveryTagForStatus(status, options);
-  if (!shopifyOrderId || !deliveryTag) return;
+  // A clearing status carries no tag of its own but still has work to do:
+  // strip the delivery tag the order was wearing. Any other status without a
+  // tag — OUT_FOR_DELIVERY, FULFILLED — is one this app does not narrate, and
+  // it leaves the existing tag alone rather than wiping it.
+  const isClearing = TAG_CLEARING_STATUSES.has(status);
+  if (!shopifyOrderId || (!deliveryTag && !isClearing)) return;
 
   const store = await getStoreCredentials(storeId);
   if (!store || !store.access_token) return;
@@ -238,21 +252,33 @@ async function syncOrderTagToShopify(storeId, shopifyOrderId, status, options = 
   }
   const { order } = await getRes.json();
 
-  const existingTags = order.tags
-    ? order.tags.split(",").map(t => t.trim()).filter(t => t && !isReplaceableDeliveryTag(t))
+  const currentTags = order.tags
+    ? order.tags.split(",").map(t => t.trim()).filter(Boolean)
     : [];
-  existingTags.push(deliveryTag);
+  const tags = currentTags.filter(t => !isReplaceableDeliveryTag(t));
+  if (deliveryTag) tags.push(deliveryTag);
+
+  // Clearing an order that was never tagged — the common case, since most
+  // orders reach Unfulfilled without having been out with a driver — would
+  // otherwise spend a write putting the tags back exactly as they were.
+  if (tags.join(", ") === currentTags.join(", ")) {
+    return;
+  }
 
   const putRes = await fetch(`${base}/orders/${shopifyOrderId}.json`, {
     method: "PUT",
     headers,
-    body: JSON.stringify({ order: { id: shopifyOrderId, tags: existingTags.join(", ") } }),
+    body: JSON.stringify({ order: { id: shopifyOrderId, tags: tags.join(", ") } }),
   });
   if (!putRes.ok) {
     console.error(`[Shopify sync] PUT tags failed: ${putRes.status}`);
     return;
   }
-  console.log(`[Shopify sync] Order ${shopifyOrderId} tagged "${deliveryTag}"`);
+  console.log(
+    deliveryTag
+      ? `[Shopify sync] Order ${shopifyOrderId} tagged "${deliveryTag}"`
+      : `[Shopify sync] Order ${shopifyOrderId} delivery tag cleared`
+  );
 }
 
 // Builds the live tracking link Shopify will show on the order and put in the
