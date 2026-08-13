@@ -276,13 +276,22 @@ button.stat-card {
   font: inherit;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
+/* The card keeps its own surface at every state. Without this the page's
+   blanket button:hover rule outranks .stat-card and repaints the whole card
+   navy on the way past. */
+button.stat-card,
+button.stat-card:hover,
+button.stat-card:focus {
+  background: #ffffff;
+}
+
+/* Hover lifts the card and leaves the colours alone. */
 button.stat-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
-  border-color: #c7d2fe;
 }
 
 button.stat-card:focus-visible {
@@ -301,8 +310,8 @@ button.stat-card:focus-visible {
   color: #111827;
 }
 
-/* Says the number is a way in. Quiet until the card is hovered, so a row of
-   cards does not read as a row of links. */
+/* Says the number is a way in, quietly and at one colour — hovering a card
+   moves it, it does not repaint it. */
 .stat-hint {
   display: block;
   margin-top: 8px;
@@ -311,10 +320,6 @@ button.stat-card:focus-visible {
   font-weight: 600;
 }
 
-button.stat-card:hover .stat-hint,
-button.stat-card:focus-visible .stat-hint {
-  color: #1e3a8a;
-}
 
 .filters-bar {
   display: flex;
