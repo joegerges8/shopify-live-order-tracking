@@ -1073,6 +1073,14 @@ button.stat-card:focus-visible {
   padding: 8px 0;
 }
 
+/* The time one delivery took, next to the clock time it finished at. Quieter
+   than the timestamp it follows: it is what the card's average is made of,
+   read only when that average is being questioned. */
+.muted-inline {
+  color: #6b7280;
+  font-size: 12px;
+}
+
 @media (max-width: 1400px) {
   .stats-grid-5 {
     grid-template-columns: repeat(3, 1fr);

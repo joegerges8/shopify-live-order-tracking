@@ -11,6 +11,7 @@ const {
   getReturnedOrdersByDriverId,
   getOrderByIdForDriver,
   updateDriverOrderStatus,
+  startDriverOrderDelivery,
   updateDriverOrderNote,
   createLocationUpdate,
   markOrderPaid,
@@ -288,6 +289,40 @@ async function patchMyOrderStatus(req, res) {
   }
 }
 
+// Records that the driver has set off with one of their orders — the app
+// calls this when "Start Delivery" is tapped.
+//
+// Deliberately not a status change: which stage of the paperwork an order is
+// at (PICKED_UP, OUT_FOR_DELIVERY) stays the dispatcher's call, and the app
+// has never moved it. All this writes is the moment the trip began, which is
+// what the Performance page measures delivery time from — before it existed
+// the only start it could use was created_at, the moment Shopify took the
+// order, which counted every hour the order sat at the shop as driving time.
+//
+// Silent about failure by design on the app side: a lost start stamp costs one
+// order's contribution to an average, and blocking a driver from setting off
+// over it would be the worse trade.
+async function postMyOrderDeliveryStart(req, res) {
+  try {
+    const orderId = Number(req.params.id);
+    if (!Number.isFinite(orderId)) {
+      return res.status(400).json({ error: "Invalid order id" });
+    }
+
+    const updated = await startDriverOrderDelivery(orderId, req.driverId);
+    if (!updated) {
+      const order = await getOrderByIdForDriver(orderId, req.driverId);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+      return res.status(403).json({ error: "Not allowed for this order" });
+    }
+
+    return res.json(updated);
+  } catch (error) {
+    console.error("Error starting driver delivery:", error);
+    return res.status(500).json({ error: "Failed to start delivery" });
+  }
+}
+
 // The longest driver note the backend will store. Notes are typed on a phone
 // and read on a phone, so this is generous rather than restrictive; it exists
 // to stop a stuck key or a paste from filling the column.
@@ -350,5 +385,6 @@ module.exports = {
   postMyLocation,
   postMyOrderLocation,
   patchMyOrderStatus,
+  postMyOrderDeliveryStart,
   patchMyOrderNote,
 };

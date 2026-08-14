@@ -133,10 +133,32 @@ CREATE TABLE orders (
     google_maps_link TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     delivered_at TIMESTAMP,                   -- set automatically when status = 'DELIVERED'
+    delivery_started_at TIMESTAMP,            -- when the driver tapped "Start Delivery" in the
+                                              -- app (or the dispatcher moved the order to
+                                              -- OUT_FOR_DELIVERY). This is the clock the
+                                              -- Performance page's "avg to deliver" runs on:
+                                              -- created_at is when Shopify took the order,
+                                              -- which can be days before anyone set off with
+                                              -- it. Re-stamped each time the order goes back
+                                              -- out, so an order returned and taken out again
+                                              -- is timed from the trip that delivered it.
+    returned_at TIMESTAMP,                    -- when the order came back — stamped the moment
+                                              -- status becomes 'RETURNED', and cleared if the
+                                              -- order goes out again. The Performance page
+                                              -- dates returns by it; without it a return had
+                                              -- no timestamp of its own and fell on the day the
+                                              -- order was created instead of the day it came
+                                              -- back, which kept it out of the day being read.
     fulfilled_at TIMESTAMP                    -- set when status = 'FULFILLED'; completed orders
                                               -- drop off the dashboard once this is older than
                                               -- DASHBOARD_ORDER_RETENTION_DAYS (default 7)
 );
+-- Migration for existing databases:
+--   ALTER TABLE orders ADD COLUMN delivery_started_at TIMESTAMP;
+--   ALTER TABLE orders ADD COLUMN returned_at TIMESTAMP;
+-- Existing rows stay NULL. Orders already returned before the migration keep
+-- being dated by created_at, and deliveries that finished before it are left
+-- out of the average rather than being timed from a start nobody recorded.
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN area VARCHAR(50);
 -- Then backfill existing rows from their city: node scripts/backfill-areas.js
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN fulfilled_at TIMESTAMP;

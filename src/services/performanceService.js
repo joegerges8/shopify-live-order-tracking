@@ -70,15 +70,24 @@ function localExpr(column, tzParam) {
 // Which orders belong to the period, and what each one counts as.
 //
 // A delivered order is dated by delivered_at — the moment the money changed
-// hands. A returned order has no timestamp of its own (there is no returned_at
-// column), so it is dated by created_at: it came back the same run it went out,
-// near enough for a day sheet, and it carries no cash either way.
+// hands. A returned order is dated by returned_at, the moment it came back,
+// which is the same idea: both are stamped when the driver finished with the
+// order. Dating a return by created_at instead — which is what happened before
+// returned_at existed — put it on the day Shopify took the order, so a return
+// of anything older than the report's first day simply did not appear, and the
+// dispatcher saw a Returned count of 0 for work the driver had plainly done.
+// Orders returned before the column was added still have no stamp of their own
+// and fall back to created_at.
 const KIND_EXPR = `
   CASE
     WHEN o.delivered_at IS NOT NULL
          AND o.order_status NOT IN ('CANCELLED', 'RETURNED') THEN 'DELIVERED'
     WHEN o.order_status = 'RETURNED' THEN 'RETURNED'
   END`;
+
+// When the driver was done with the order, whichever way it ended. This is
+// what the period is measured against, for delivered and returned alike.
+const FINISHED_AT = "COALESCE(o.delivered_at, o.returned_at, o.created_at)";
 
 // Orders the driver is holding right now: assigned, not finished. Not part of
 // the period totals — this is cash on the road, not cash in the drawer — but
@@ -97,7 +106,7 @@ async function getDriverPerformance(storeId, { from, to }) {
   const fee = feePerDelivery();
 
   // $1 store, $2 timezone, $3 from (inclusive), $4 to (inclusive).
-  const finishedLocal = localExpr("COALESCE(o.delivered_at, o.created_at)", "$2");
+  const finishedLocal = localExpr(FINISHED_AT, "$2");
 
   const result = await pool.query(
     `
@@ -107,6 +116,7 @@ async function getDriverPerformance(storeId, { from, to }) {
         o.prepaid,
         COALESCE(o.total_price, 0)          AS total_price,
         o.delivered_at,
+        o.delivery_started_at,
         o.created_at,
         ${KIND_EXPR}                        AS kind,
         ${finishedLocal}                    AS finished_local,
@@ -156,8 +166,18 @@ async function getDriverPerformance(storeId, { from, to }) {
                                                                           AS first_delivery_at,
       to_char(MAX(p.delivered_local) FILTER (WHERE p.kind = 'DELIVERED'), 'YYYY-MM-DD HH24:MI')
                                                                           AS last_delivery_at,
-      (AVG(EXTRACT(EPOCH FROM (p.delivered_at - p.created_at)) / 60.0)
-        FILTER (WHERE p.kind = 'DELIVERED'))::float8                      AS avg_minutes_to_deliver,
+      -- How long the driver spent on a delivery: from tapping "Start Delivery"
+      -- to marking the order delivered. Not created_at — an order placed on
+      -- Monday and taken out on Wednesday is not a two-day drive, and dating
+      -- from it turned a half-hour run into "32h 21m". Returns are excluded
+      -- because they are not deliveries; so are orders with no start stamp
+      -- (delivered before the column existed, or dispatched without one),
+      -- which leaves the average built only from trips that were actually
+      -- timed rather than guessed at.
+      (AVG(EXTRACT(EPOCH FROM (p.delivered_at - p.delivery_started_at)) / 60.0)
+        FILTER (WHERE p.kind = 'DELIVERED'
+                  AND p.delivery_started_at IS NOT NULL
+                  AND p.delivered_at >= p.delivery_started_at))::float8    AS avg_minutes_to_deliver,
       COALESCE(a.orders_out, 0)::int                                      AS orders_out,
       COALESCE(a.cash_out, 0)::float8                                     AS cash_out
     FROM drivers d
@@ -244,7 +264,7 @@ function round2(value) {
 // summary above — this is the receipt for that row, not a second opinion.
 async function getDriverPerformanceOrders(storeId, driverId, { from, to }) {
   const tz = reportTimezone();
-  const finishedLocal = localExpr("COALESCE(o.delivered_at, o.created_at)", "$3");
+  const finishedLocal = localExpr(FINISHED_AT, "$3");
 
   const result = await pool.query(
     `
@@ -263,6 +283,15 @@ async function getDriverPerformanceOrders(storeId, driverId, { from, to }) {
       -- summary formats its timestamps in SQL.
       to_char(${localExpr("o.created_at", "$3")}, 'YYYY-MM-DD HH24:MI')   AS created_local,
       to_char(${localExpr("o.delivered_at", "$3")}, 'YYYY-MM-DD HH24:MI') AS delivered_local,
+      to_char(${localExpr("o.returned_at", "$3")}, 'YYYY-MM-DD HH24:MI')  AS returned_local,
+      -- The one order's version of the card's average: the trip that delivered
+      -- it, start to finish. NULL when it was never started on the record.
+      (CASE
+         WHEN o.delivered_at IS NOT NULL
+              AND o.delivery_started_at IS NOT NULL
+              AND o.delivered_at >= o.delivery_started_at
+         THEN ROUND(EXTRACT(EPOCH FROM (o.delivered_at - o.delivery_started_at)) / 60.0)
+       END)::int AS minutes_to_deliver,
       ${KIND_EXPR} AS kind
     FROM orders o
     WHERE o.store_id = $1
@@ -270,7 +299,7 @@ async function getDriverPerformanceOrders(storeId, driverId, { from, to }) {
       AND ${KIND_EXPR} IS NOT NULL
       AND ${finishedLocal} >= $4::date
       AND ${finishedLocal} <  ($5::date + INTERVAL '1 day')
-    ORDER BY COALESCE(o.delivered_at, o.created_at) DESC
+    ORDER BY ${FINISHED_AT} DESC
     LIMIT 500
     `,
     [storeId, driverId, tz, from, to]

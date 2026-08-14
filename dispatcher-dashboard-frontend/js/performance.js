@@ -283,7 +283,7 @@ function driverCard(driver) {
       <div><span class="perf-label">Delivered</span><strong>${driver.delivered}</strong></div>
       <div><span class="perf-label">Returned</span><strong>${driver.returned}</strong></div>
       <div><span class="perf-label">Prepaid</span><strong>${driver.prepaid_deliveries}</strong></div>
-      <div title="Average time from the order arriving to the driver marking it delivered"><span class="perf-label">Avg to deliver</span><strong>${minutesLabel(driver.avg_minutes_to_deliver)}</strong></div>
+      <div title="Average time on the road: from the driver tapping Start Delivery to marking the order delivered. Returns are not counted."><span class="perf-label">Avg to deliver</span><strong>${minutesLabel(driver.avg_minutes_to_deliver)}</strong></div>
       <div><span class="perf-label">First</span><strong>${escapeHtml(clockLabel(driver.first_delivery_at))}</strong></div>
       <div><span class="perf-label">Last</span><strong>${escapeHtml(clockLabel(driver.last_delivery_at))}</strong></div>
     </div>
@@ -393,7 +393,15 @@ async function loadOrders(driver, card) {
             [order.customer_first_name, order.customer_last_name].filter(Boolean).join(" ")
           )}</td>
           <td>${escapeHtml(order.city ?? "")}</td>
-          <td>${escapeHtml(clockLabel(order.delivered_local || order.created_local))}</td>
+          <td>${escapeHtml(
+            clockLabel(order.delivered_local || order.returned_local || order.created_local)
+          )}${
+            order.minutes_to_deliver === null || order.minutes_to_deliver === undefined
+              ? ""
+              : ` <span class="muted-inline">(${escapeHtml(
+                  minutesLabel(order.minutes_to_deliver)
+                )})</span>`
+          }</td>
           <td>${money(order.total_price)}</td>
           <td>${
             order.kind === "RETURNED"

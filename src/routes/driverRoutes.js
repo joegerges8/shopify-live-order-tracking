@@ -23,6 +23,7 @@
 //     POST   /api/drivers/me/location                — post own position (live map)
 //     POST   /api/drivers/me/orders/:id/location     — post a GPS ping
 //     PATCH  /api/drivers/me/orders/:id/status       — update delivery status
+//     POST   /api/drivers/me/orders/:id/start        — driver set off with this order
 //     PATCH  /api/drivers/me/orders/:id/note         — save the driver's own note
 //
 // IMPORTANT: The /me/orders/completed and /me/orders/returned routes MUST be
@@ -51,6 +52,7 @@ const {
   postMyLocation,
   postMyOrderLocation,
   patchMyOrderStatus,
+  postMyOrderDeliveryStart,
   patchMyOrderNote,
 } = require("../controllers/driverSelfController");
 
@@ -97,6 +99,10 @@ router.post("/me/orders/:id/location", requireDriverAuth, postMyOrderLocation);
 
 // Updates the delivery status of a specific order (e.g. DELIVERED).
 router.patch("/me/orders/:id/status", requireDriverAuth, patchMyOrderStatus);
+
+// Records that the driver has set off with this order ("Start Delivery").
+// Stamps the time only — the order's status is left to the dispatcher.
+router.post("/me/orders/:id/start", requireDriverAuth, postMyOrderDeliveryStart);
 
 // Saves the driver's own note on a specific order.
 router.patch("/me/orders/:id/note", requireDriverAuth, patchMyOrderNote);
