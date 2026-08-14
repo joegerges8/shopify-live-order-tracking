@@ -892,6 +892,142 @@ button.stat-card:focus-visible {
   cursor: pointer;
 }
 
+/* Money to collect — the whole roster on one line each.
+
+   This block answers a different question from the cards below it: not "what
+   do I settle with this driver" but "what is the store owed in total". So the
+   one figure that answers it is set at the size of a headline, and the table
+   under it is the working that produced it. */
+
+.collection-section {
+  margin: 8px 0 34px;
+}
+
+.collection-section .section-title {
+  margin-bottom: 14px;
+}
+
+.collection-headline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.collection-figure {
+  flex: 1 1 260px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-left: 5px solid #15803d;
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.collection-figure h3 {
+  font-size: 40px;
+  line-height: 1.1;
+  margin: 6px 0 0;
+  color: #15803d;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Money going the other way must not be green: the till is paying, not taking. */
+.collection-figure-owed {
+  border-left-color: #b91c1c;
+}
+
+.collection-figure-owed h3 {
+  color: #b91c1c;
+}
+
+/* The table scrolls sideways rather than squeezing twelve columns of money
+   into the page width, where the amounts would wrap mid-figure. */
+.totals-table-wrap {
+  overflow-x: auto;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.totals-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.totals-table th,
+.totals-table td {
+  padding: 12px 14px;
+  text-align: right;
+  font-size: 14px;
+  white-space: nowrap;
+  border-bottom: 1px solid #f3f4f6;
+  font-variant-numeric: tabular-nums;
+}
+
+.totals-table th {
+  font-size: 12px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* The name is the only column that is not a number, so it is the only one that
+   reads left to right. */
+.totals-table th:first-child,
+.totals-table .totals-driver {
+  text-align: left;
+}
+
+.totals-driver {
+  font-weight: 600;
+  color: #111827;
+}
+
+.totals-driver .muted-inline {
+  display: block;
+  font-weight: 400;
+}
+
+.totals-table .totals-pay {
+  color: #b91c1c;
+}
+
+.totals-table .totals-collect {
+  font-weight: 700;
+  color: #15803d;
+}
+
+.totals-table .totals-collect-owed {
+  color: #b91c1c;
+}
+
+.totals-table .empty-cell {
+  text-align: center;
+  color: #6b7280;
+  padding: 22px 14px;
+}
+
+/* The last line is the one the day is settled on, so it is ruled off from the
+   drivers above it the way a receipt's total is. */
+.totals-table tfoot td {
+  border-top: 2px solid #111827;
+  border-bottom: none;
+  font-weight: 700;
+  color: #111827;
+  background: #f9fafb;
+}
+
+.totals-table tfoot .totals-collect {
+  font-size: 18px;
+}
+
+.collection-section .driver-perf-notes {
+  margin-top: 14px;
+}
+
 /* Driver cards */
 
 .driver-perf-list {
@@ -1143,7 +1279,8 @@ button.stat-card:focus-visible {
   }
 
   .stat-card,
-  .driver-perf-card {
+  .driver-perf-card,
+  .collection-figure {
     box-shadow: none;
     border: 1px solid #d1d5db;
     break-inside: avoid;
@@ -1151,6 +1288,21 @@ button.stat-card:focus-visible {
 
   .driver-perf-list {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* On paper there is nowhere to scroll to, so the roster table has to fit the
+     sheet — it is the part that gets signed against the counted cash. */
+  .totals-table-wrap {
+    overflow-x: visible;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+
+  .totals-table th,
+  .totals-table td {
+    padding: 6px 6px;
+    font-size: 11px;
+    white-space: normal;
   }
 }
 
@@ -2073,6 +2225,24 @@ button.stat-card:focus-visible {
 
   .settlement-total span:last-child {
     font-size: 22px;
+  }
+
+  /* The headline figure still has to be the loudest thing on the section, but
+     not so loud it wraps on a phone. */
+  .collection-figure {
+    padding: 16px 18px;
+  }
+
+  .collection-figure h3 {
+    font-size: 30px;
+  }
+
+  /* Twelve money columns do not become readable by being squeezed, so the
+     table keeps its shape and scrolls sideways instead. */
+  .totals-table th,
+  .totals-table td {
+    padding: 10px 12px;
+    font-size: 13px;
   }
 
   /* --- Toasts and modals ---------------------------------------------------

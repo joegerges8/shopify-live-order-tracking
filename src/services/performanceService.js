@@ -237,6 +237,15 @@ function totalsOf(drivers, fee) {
   const cashCollected = sum("cash_collected");
   const payOwed = round2(delivered * fee);
 
+  // The store-wide settlement nets out — a driver the store owes cancels part
+  // of what another driver is bringing in — but nobody settles up that way.
+  // Cash is taken from one driver at a time, so the amount actually to be
+  // collected is the sum of the drivers who owe something, kept apart from the
+  // sum of the ones who have to be paid out of the till. Netting the two into
+  // one figure understates the notes that have to physically come back.
+  const owing = drivers.filter((d) => d.cash_to_hand_in > 0);
+  const owed = drivers.filter((d) => d.cash_to_hand_in < 0);
+
   return {
     drivers_worked: drivers.filter((d) => d.delivered > 0 || d.returned > 0).length,
     delivered,
@@ -249,6 +258,12 @@ function totalsOf(drivers, fee) {
     cash_out: sum("cash_out"),
     pay_owed: payOwed,
     cash_to_hand_in: round2(cashCollected - payOwed),
+    // What to collect, driver by driver, and from how many of them.
+    to_collect: round2(owing.reduce((acc, d) => acc + d.cash_to_hand_in, 0)),
+    drivers_owing: owing.length,
+    // The other direction, for the all-prepaid runs where fees outran cash.
+    to_pay_out: round2(owed.reduce((acc, d) => acc - d.cash_to_hand_in, 0)),
+    drivers_to_pay: owed.length,
   };
 }
 

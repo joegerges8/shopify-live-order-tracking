@@ -250,6 +250,169 @@ function renderTotals() {
     `(${report.timezone})`;
 }
 
+/* ===========================
+   MONEY TO COLLECT
+=========================== */
+
+// The whole roster on one line each, under the one figure the day ends on.
+//
+// The cards below this are for settling with one driver at a time; this table
+// is for the dispatcher who wants the store's whole position at a glance —
+// every driver, every column that feeds the money, and the total to take from
+// them at the bottom. Nothing here is recomputed: the rows are the same
+// per-driver figures the cards show, and the total row is the backend's own
+// roll-up rather than a sum of what happens to be on screen.
+const collection = {
+  section: document.querySelector("#collectionSection"),
+  total: document.querySelector("#collectTotal"),
+  note: document.querySelector("#collectNote"),
+  payOutBlock: document.querySelector("#payOutBlock"),
+  payOut: document.querySelector("#payOutTotal"),
+  payOutNote: document.querySelector("#payOutNote"),
+  table: document.querySelector("#totalsTable"),
+  notes: document.querySelector("#collectionNotes"),
+};
+
+const COLLECTION_COLUMNS = [
+  "Driver",
+  "Delivered",
+  "Returned",
+  "Prepaid",
+  "Avg to deliver",
+  "Cash collected",
+  "Prepaid value",
+  "Returned value",
+  "Driver's pay",
+  "To collect",
+  "Still out",
+  "Cash still out",
+];
+
+function renderCollection() {
+  // Focused on one driver: their own card already is the settlement, and a
+  // one-row "all drivers" table above it would only invite double-counting.
+  if (focusDriverId !== null) {
+    collection.section.hidden = true;
+    return;
+  }
+  collection.section.hidden = false;
+
+  const t = report.totals;
+
+  collection.total.textContent = money(t.to_collect);
+  collection.note.textContent = t.drivers_owing
+    ? `From ${t.drivers_owing} driver${t.drivers_owing === 1 ? "" : "s"} · ` +
+      `${money(t.cash_collected)} collected − ${money(t.pay_owed)} pay`
+    : "Nothing to collect for this period";
+
+  // The store paying a driver out is the exception, so the block only appears
+  // when it applies rather than sitting at zero next to the number that matters.
+  collection.payOutBlock.hidden = t.to_pay_out <= 0;
+  collection.payOut.textContent = money(t.to_pay_out);
+  collection.payOutNote.textContent =
+    `${t.drivers_to_pay} driver${t.drivers_to_pay === 1 ? "" : "s"} earned more in fees ` +
+    `than they collected`;
+
+  // Same roster rule as the cards: quiet drivers are hidden unless asked for,
+  // but anyone still holding the store's cash is shown however quiet the period.
+  const visible = showAllEl.checked
+    ? report.drivers
+    : report.drivers.filter(
+        (d) => d.delivered > 0 || d.returned > 0 || d.orders_out > 0
+      );
+
+  const head = COLLECTION_COLUMNS.map((label) => `<th>${label}</th>`).join("");
+
+  const rows = visible
+    .map((d) => {
+      const owed = d.cash_to_hand_in < 0;
+      return `
+        <tr>
+          <td class="totals-driver">
+            ${escapeHtml(d.full_name)}
+            ${d.phone ? `<span class="muted-inline">${escapeHtml(d.phone)}</span>` : ""}
+          </td>
+          <td>${d.delivered}</td>
+          <td>${d.returned}</td>
+          <td>${d.prepaid_deliveries}</td>
+          <td>${escapeHtml(minutesLabel(d.avg_minutes_to_deliver))}</td>
+          <td>${money(d.cash_collected)}</td>
+          <td>${money(d.prepaid_value)}</td>
+          <td>${money(d.returned_value)}</td>
+          <td class="totals-pay">${money(-d.pay_owed)}</td>
+          <td class="totals-collect${owed ? " totals-collect-owed" : ""}">
+            ${money(Math.abs(d.cash_to_hand_in))}${owed ? " <span class=\"muted-inline\">to pay</span>" : ""}
+          </td>
+          <td>${d.orders_out || "—"}</td>
+          <td>${d.orders_out ? money(d.cash_out) : "—"}</td>
+        </tr>`;
+    })
+    .join("");
+
+  const body = rows
+    ? rows
+    : `<tr><td class="empty-cell" colspan="${COLLECTION_COLUMNS.length}">
+         No driver activity in this period.
+       </td></tr>`;
+
+  collection.table.innerHTML = `
+    <thead><tr>${head}</tr></thead>
+    <tbody>${body}</tbody>
+    <tfoot>
+      <tr>
+        <td class="totals-driver">All drivers</td>
+        <td>${t.delivered}</td>
+        <td>${t.returned}</td>
+        <td>${t.prepaid_deliveries}</td>
+        <td>—</td>
+        <td>${money(t.cash_collected)}</td>
+        <td>${money(t.prepaid_value)}</td>
+        <td>${money(t.returned_value)}</td>
+        <td class="totals-pay">${money(-t.pay_owed)}</td>
+        <td class="totals-collect">${money(t.to_collect)}</td>
+        <td>${t.orders_out || "—"}</td>
+        <td>${t.orders_out ? money(t.cash_out) : "—"}</td>
+      </tr>
+    </tfoot>
+  `;
+
+  // The caveats that change what the total means, and only those. Each one is
+  // money that is real but not in the figure above.
+  collection.notes.innerHTML = "";
+  if (t.orders_out) {
+    collection.notes.appendChild(
+      note(
+        `${money(t.cash_out)} is still on the road on ${t.orders_out} undelivered ` +
+          `order${t.orders_out === 1 ? "" : "s"} — not part of the total to collect until they are delivered.`
+      )
+    );
+  }
+  if (t.prepaid_deliveries) {
+    collection.notes.appendChild(
+      note(
+        `${t.prepaid_deliveries} prepaid ${t.prepaid_deliveries === 1 ? "delivery" : "deliveries"} ` +
+          `(${money(t.prepaid_value)}) were paid online, so they brought back no cash but still earn the fee.`
+      )
+    );
+  }
+  if (t.returned) {
+    collection.notes.appendChild(
+      note(
+        `${t.returned} order${t.returned === 1 ? "" : "s"} came back (${money(t.returned_value)}) — ` +
+          `no cash and no fee, so they change nothing above.`
+      )
+    );
+  }
+  if (t.to_pay_out > 0) {
+    collection.notes.appendChild(
+      note(
+        `Collecting ${money(t.to_collect)} and paying out ${money(t.to_pay_out)} leaves ` +
+          `${money(t.cash_to_hand_in)} in the till for this period.`
+      )
+    );
+  }
+}
+
 // One driver, one card. The settlement block is the point of the card, so it
 // gets the room and the weight; the counts above it are the evidence for it.
 function driverCard(driver) {
@@ -491,6 +654,7 @@ async function load(range) {
   renderFocusChrome();
   renderTotals();
   markActivePreset();
+  renderCollection();
   renderDrivers();
 }
 
@@ -505,6 +669,17 @@ function renderFocusChrome() {
   document.querySelector("#sectionTitle").textContent = driver
     ? driver.full_name
     : "Per driver";
+}
+
+// Arriving from a driver's row is a detour out of the Drivers tab, so that is
+// the one that stays lit while the detour is open — the menu entry belongs to
+// the store-wide view. Settled before the report is fetched: which tab is lit
+// depends on the URL alone, and a slow or failed load must not leave the wrong
+// one underlined.
+function markActiveTab() {
+  const focusing = focusDriverId !== null;
+  document.querySelector("#navPerformance").classList.toggle("active", !focusing);
+  document.querySelector("#navDrivers").classList.toggle("active", focusing);
 }
 
 /* ===========================
@@ -582,6 +757,25 @@ function exportCsv() {
     "",
   ]);
 
+  // The two figures the sheet is filed for, spelled out rather than left to be
+  // read off the TOTAL row: that row nets a driver the store owes against the
+  // ones bringing cash in, and the notes counted at the table do not net.
+  if (!focused) {
+    // Written into the "Cash to hand in" column so the amount lands under the
+    // figures it belongs with instead of starting a column of its own.
+    const summaryRow = (label, amount) => {
+      const row = header.map(() => "");
+      row[0] = label;
+      row[header.indexOf("Cash to hand in")] = amount.toFixed(2);
+      return row;
+    };
+
+    rows.push(summaryRow("TO COLLECT FROM DRIVERS", t.to_collect));
+    if (t.to_pay_out > 0) {
+      rows.push(summaryRow("TO PAY OUT TO DRIVERS", t.to_pay_out));
+    }
+  }
+
   const csv = [header, ...rows]
     .map((row) => row.map(csvCell).join(","))
     .join("\r\n");
@@ -630,8 +824,14 @@ document.querySelector("#applyRange").addEventListener("click", () => {
 });
 
 showAllEl.addEventListener("change", () => {
-  if (report) renderDrivers();
+  if (!report) return;
+  // The table and the cards answer to the same checkbox — a roster that
+  // disagreed with the list under it would be read as two different rosters.
+  renderCollection();
+  renderDrivers();
 });
+
+markActiveTab();
 
 document.querySelector("#exportBtn").addEventListener("click", exportCsv);
 document.querySelector("#printBtn").addEventListener("click", () => window.print());
