@@ -39,6 +39,17 @@ async function assignDriver(req, res) {
       return res.status(404).json({ error: "Order not found" });
     }
 
+    // An order an outside carrier is already shipping is not ours to hand to a
+    // driver — the parcel is with Wakilni, not at the counter. The dashboard
+    // hides the picker for these orders; this is the same rule where it counts.
+    if (order.carrier_tracking_url) {
+      return res.status(400).json({
+        error:
+          `This order is being delivered by ${order.carrier_name || "an outside carrier"}, ` +
+          `so it cannot be assigned to a driver.`,
+      });
+    }
+
     const driverResult = await pool.query(
       `SELECT * FROM drivers WHERE id = $1 LIMIT 1`,
       [driverId]

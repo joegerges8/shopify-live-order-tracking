@@ -125,6 +125,14 @@ function getDriverNameById(driverId, drivers) {
   return driver ? driver.full_name : `Driver #${driverId}`;
 }
 
+// Who is carrying this order. "Not assigned" is the wrong answer for an order
+// a courier is already delivering — somebody is very much carrying it, just
+// not one of ours.
+function describeCarrierOrDriver(order, drivers) {
+  if (isCarrierOrder(order)) return `${getCarrierName(order)} (carrier)`;
+  return getDriverNameById(order.assigned_driver_id, drivers);
+}
+
 function createDriverOptions(drivers, orders, selectedDriverId = null) {
   let options = `<option value="">Select driver</option>`;
 
@@ -169,6 +177,96 @@ function normalizeOrderStatus(status) {
   return ["CREATED", "PENDING"].includes(status) || !status ? "UNFULFILLED" : status;
 }
 
+/* ===========================
+   OUTSIDE CARRIERS (WAKILNI)
+
+   Some orders are delivered by a courier company rather than by this shop's
+   own drivers. Shopify fulfils them the moment the courier collects, so on
+   this board they used to sit at a flat "Fulfilled" from pickup to doorstep,
+   looking exactly like an order still waiting at the counter — while the
+   courier went on posting Confirmed → In transit → Delivered against the
+   Shopify order where nobody here was looking.
+
+   The backend copies that progress into carrier_status. Everything below is
+   about showing it: the courier's own status, with the courier's name after
+   it, so a Wakilni order is recognisable at a glance and is never mistaken
+   for one of ours.
+=========================== */
+
+// An order the carrier is shipping — recognised by the tracking link they
+// wrote onto the Shopify fulfilment, which is also the link the Track button
+// sends the dispatcher to.
+function isCarrierOrder(order) {
+  return Boolean(order && order.carrier_tracking_url);
+}
+
+function getCarrierName(order) {
+  return String(order?.carrier_name || "").trim() || "Carrier";
+}
+
+// Shopify's shipment_status values, as the carrier's own dashboard words them.
+const CARRIER_STATUS_DISPLAY = {
+  label_printed:      "Label Printed",
+  label_purchased:    "Label Purchased",
+  confirmed:          "Confirmed",
+  picked_up:          "Picked Up",
+  ready_for_pickup:   "Ready for Pickup",
+  in_transit:         "In Transit",
+  out_for_delivery:   "Out for Delivery",
+  attempted_delivery: "Attempted Delivery",
+  delivered:          "Delivered",
+  failure:            "Failed",
+};
+
+// Where each carrier status sits in this dashboard's own lifecycle, so the
+// stat cards and the status filter count a Wakilni order the same way they
+// count one of ours: a parcel out with a courier is in progress, and one the
+// courier delivered is delivered. Only the counting uses this — what the badge
+// prints is the carrier's own wording above.
+const CARRIER_LIFECYCLE = {
+  label_printed:      "FULFILLED",
+  label_purchased:    "FULFILLED",
+  confirmed:          "PICKED_UP",
+  picked_up:          "PICKED_UP",
+  ready_for_pickup:   "PICKED_UP",
+  in_transit:         "OUT_FOR_DELIVERY",
+  out_for_delivery:   "OUT_FOR_DELIVERY",
+  attempted_delivery: "OUT_FOR_DELIVERY",
+  delivered:          "DELIVERED",
+  failure:            "RETURNED",
+};
+
+function getCarrierStatus(order) {
+  return String(order?.carrier_status || "").trim().toLowerCase();
+}
+
+// What the order actually is right now. For a carrier order that is whatever
+// the carrier last reported — they are the ones holding the parcel — and for
+// every other order it is the dashboard's own status, unchanged.
+function getEffectiveStatus(order) {
+  const carrierStatus = isCarrierOrder(order) ? getCarrierStatus(order) : "";
+  return (
+    CARRIER_LIFECYCLE[carrierStatus] || normalizeOrderStatus(order.order_status)
+  );
+}
+
+// The label on the badge: the carrier's wording where there is one, falling
+// back to the lifecycle wording for a carrier that has not reported yet.
+function getStatusLabel(order) {
+  const carrierStatus = isCarrierOrder(order) ? getCarrierStatus(order) : "";
+  if (carrierStatus) {
+    return (
+      CARRIER_STATUS_DISPLAY[carrierStatus] ||
+      // A status this dashboard has not seen before still reads better as
+      // words than as Shopify's snake_case.
+      carrierStatus.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    );
+  }
+
+  const status = getEffectiveStatus(order);
+  return STATUS_DISPLAY[status] || status;
+}
+
 function createStatusOptions(currentStatus) {
   const normalizedCurrentStatus = normalizeOrderStatus(currentStatus);
   // Dispatcher's preferred order. PAID and DELETED are not delivery statuses:
@@ -195,18 +293,32 @@ function createStatusOptions(currentStatus) {
   return options;
 }
 
-function createStatusBadge(status) {
-  status = normalizeOrderStatus(status);
+// The order's status as one badge. A carrier order carries the carrier's name
+// after the status — "Delivered · Wakilni" — because on a board mixing both,
+// the status alone does not say who is holding the parcel, and that is the
+// thing the dispatcher has to know before deciding whether to chase it.
+function createStatusBadge(order) {
+  const status = getEffectiveStatus(order);
   const normalized = status.toLowerCase();
-  const display = STATUS_DISPLAY[status] || status;
-  return `<span class="status-badge status-${normalized}">${display}</span>`;
+  const label = escapeHtml(getStatusLabel(order));
+
+  if (!isCarrierOrder(order)) {
+    return `<span class="status-badge status-${normalized}">${label}</span>`;
+  }
+
+  return (
+    `<span class="status-badge status-${normalized} carrier-status">` +
+    `${label}<span class="carrier-tag">${escapeHtml(getCarrierName(order))}</span>` +
+    `</span>`
+  );
 }
 
 /* ===========================
    STATS
 =========================== */
 
-// Which orders are out with a driver right now. This is the delivery
+// Which orders are on their way right now — out with one of our drivers, or
+// out with a courier who has reported collecting them. This is the delivery
 // lifecycle, a separate axis from Shopify's fulfillment status — an assigned
 // order counts here and is still Unfulfilled in Shopify.
 const IN_PROGRESS_STATUSES = ["ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY"];
@@ -225,9 +337,11 @@ function updateStats(orders, drivers) {
   // Unfulfilled filter shows in the Shopify admin.
   const unfulfilledOrders = orders.filter((order) => !isFulfilledInShopify(order)).length;
   const inProgressOrders = orders.filter((order) =>
-    IN_PROGRESS_STATUSES.includes(normalizeOrderStatus(order.order_status))
+    IN_PROGRESS_STATUSES.includes(getEffectiveStatus(order))
   ).length;
-  const deliveredOrders = orders.filter((order) => order.order_status === "DELIVERED").length;
+  const deliveredOrders = orders.filter(
+    (order) => getEffectiveStatus(order) === "DELIVERED"
+  ).length;
   const availableDrivers = drivers.filter((driver) => !isDriverBusy(driver.id, orders)).length;
 
   totalOrdersEl.textContent = totalOrders;
@@ -264,17 +378,15 @@ const STAT_VIEWS = {
   inProgress: {
     title: "Orders In Progress",
     kind: "orders",
-    empty: "No orders are out with a driver right now.",
+    empty: "No orders are on their way right now.",
     select: (orders) =>
-      orders.filter((order) =>
-        IN_PROGRESS_STATUSES.includes(normalizeOrderStatus(order.order_status))
-      ),
+      orders.filter((order) => IN_PROGRESS_STATUSES.includes(getEffectiveStatus(order))),
   },
   delivered: {
     title: "Delivered Orders",
     kind: "orders",
     empty: "No orders have been delivered yet.",
-    select: (orders) => orders.filter((order) => order.order_status === "DELIVERED"),
+    select: (orders) => orders.filter((order) => getEffectiveStatus(order) === "DELIVERED"),
   },
   availableDrivers: {
     title: "Available Drivers",
@@ -288,7 +400,6 @@ const ORDER_COLUMNS = ["Order #", "Customer", "Phone", "City", "Total", "Status"
 const DRIVER_COLUMNS = ["Driver", "Phone", "Active Orders"];
 
 function createStatOrderRow(order) {
-  const orderStatus = normalizeOrderStatus(order.order_status);
   return `
     <tr>
       <td data-label="Order #">${escapeHtml(order.order_number ?? "")}</td>
@@ -296,8 +407,8 @@ function createStatOrderRow(order) {
       <td data-label="Phone">${createPhoneCell(order)}</td>
       <td data-label="City">${escapeHtml(getOrderCity(order))}</td>
       <td data-label="Total">${escapeHtml(order.total_price ?? "")}</td>
-      <td data-label="Status">${createStatusBadge(orderStatus)}</td>
-      <td data-label="Driver">${escapeHtml(getDriverNameById(order.assigned_driver_id, allDrivers))}</td>
+      <td data-label="Status">${createStatusBadge(order)}</td>
+      <td data-label="Driver">${escapeHtml(describeCarrierOrDriver(order, allDrivers))}</td>
     </tr>
   `;
 }
@@ -451,7 +562,10 @@ function applyFilters() {
 
   const filteredOrders = allOrders.filter((order) => {
     const orderNumber = String(order.order_number ?? "").toLowerCase();
-    const orderStatus = normalizeOrderStatus(order.order_status);
+    // The carrier's status stands in for ours on their orders, so filtering
+    // for DELIVERED finds the ones Wakilni delivered too, and a Wakilni order
+    // they have delivered drops off the table like any other finished job.
+    const orderStatus = getEffectiveStatus(order);
     const city = getOrderCity(order);
     const area = getOrderArea(order);
 
@@ -560,22 +674,37 @@ function renderOrders(orders, drivers) {
 
   orders.forEach((order) => {
     const row = document.createElement("tr");
-    const assignedDriverName = getDriverNameById(order.assigned_driver_id, drivers);
+    const assignedDriverName = describeCarrierOrDriver(order, drivers);
     const customerName = getCustomerName(order);
     const city = getOrderCity(order);
+    const carrierOrder = isCarrierOrder(order);
 
-    const orderStatus = normalizeOrderStatus(order.order_status);
+    const orderStatus = getEffectiveStatus(order);
 
-    const trackingBtn = order.tracking_token && orderStatus !== "UNFULFILLED"
+    // A carrier order tracks on the carrier's own page — they generate the
+    // link and they are the only ones who know where the parcel is. Ours
+    // tracks on the page this app serves.
+    const trackingBtn = carrierOrder
+      ? `<a class="small-btn track-btn" href="${escapeHtml(order.carrier_tracking_url)}"
+             target="_blank" rel="noopener noreferrer"
+             title="Open the ${escapeHtml(getCarrierName(order))} tracking page">🔗 Track</a>`
+      : order.tracking_token && orderStatus !== "UNFULFILLED"
       ? `<a class="small-btn track-btn" href="/track/track.html?token=${encodeURIComponent(order.tracking_token)}"
              target="_blank" rel="noopener noreferrer"
              title="Open the customer's tracking page">🔗 Track</a>`
       : "";
 
-    // An assigned order offers only Unassign. The driver picker and Assign
-    // button come back once the order is free again, so assigning is a
-    // one-step action rather than something that can be silently redone.
-    const assignControls = order.assigned_driver_id
+    // Nobody here assigns a carrier order: the parcel is already with the
+    // courier, so a driver picker on it is an action that cannot be taken —
+    // it would only invite a dispatcher to send one of our drivers after a
+    // parcel that left the shop days ago. The row says who has it instead.
+    //
+    // Otherwise: an assigned order offers only Unassign, and the driver picker
+    // and Assign button come back once the order is free again, so assigning
+    // is a one-step action rather than something that can be silently redone.
+    const assignControls = carrierOrder
+      ? `<span class="carrier-note">Shipped by ${escapeHtml(getCarrierName(order))}</span>`
+      : order.assigned_driver_id
       ? `<button class="small-btn danger-btn" data-unassign-order-id="${order.id}">Unassign</button>`
       : `<select id="driver-${order.id}">
            ${createDriverOptions(drivers, allOrders, order.assigned_driver_id)}
@@ -602,8 +731,8 @@ function renderOrders(orders, drivers) {
       </td>
       <td data-label="Total">${order.total_price ?? ""}</td>
       <td data-label="Financial Status">${order.financial_status ?? ""}</td>
-      <td data-label="Order Status">${createStatusBadge(orderStatus)}</td>
-      <td data-label="Assigned Driver">${assignedDriverName}</td>
+      <td data-label="Order Status">${createStatusBadge(order)}</td>
+      <td data-label="Assigned Driver">${escapeHtml(assignedDriverName)}</td>
       <td data-label="Assign Driver">
         <div class="action-group">
           ${assignControls}

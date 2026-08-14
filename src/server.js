@@ -5,6 +5,7 @@ const http = require("http");
 const app = require("./app");
 const pool = require("./config/db");
 const { init: initSocket } = require("./socket");
+const { syncWebhookSubscriptions } = require("./controllers/authController");
 
 const PORT = process.env.PORT || 3000;
 
@@ -133,6 +134,13 @@ async function startServer() {
     await pool.query(
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS carrier_name VARCHAR(100);`
     );
+    // The carrier's own progress — Confirmed, In transit, Delivered — which is
+    // the only signal the shop gets for a delivery it is not running itself.
+    // Existing carrier orders stay NULL until the carrier's next shipment
+    // event, or until the next Shopify sync reads it off the fulfilment.
+    await pool.query(
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS carrier_status VARCHAR(40);`
+    );
     await pool.query(
       `ALTER TABLE orders
        ALTER COLUMN order_status SET DEFAULT 'UNFULFILLED'`
@@ -194,6 +202,13 @@ async function startServer() {
         ON orders (store_id, created_at DESC);
     `);
     console.log("Schema migrations applied");
+
+    // Fire-and-forget: a store missing a webhook topic added since it was
+    // installed gets subscribed now. Shopify being slow or down must not keep
+    // the server from starting.
+    syncWebhookSubscriptions().catch((error) =>
+      console.error("[Webhooks] Startup sync failed:", error.message)
+    );
 
     const server = http.createServer(app);
     initSocket(server);

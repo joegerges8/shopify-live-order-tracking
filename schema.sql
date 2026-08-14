@@ -127,6 +127,15 @@ CREATE TABLE orders (
     carrier_name VARCHAR(100),                -- the carrier's name as Shopify records it,
                                               -- shown to the dispatcher so it is obvious why
                                               -- the order never reaches a driver
+    carrier_status VARCHAR(40),               -- the carrier's own progress, copied from the
+                                              -- fulfilment's shipment_status: 'confirmed',
+                                              -- 'in_transit', 'out_for_delivery', 'delivered'
+                                              -- and the like. This is the badge Wakilni moves
+                                              -- on the Shopify order, and the dashboard shows
+                                              -- it beside the carrier's name so a delivery
+                                              -- somebody else is running does not sit at a
+                                              -- flat "Fulfilled". NULL until the carrier
+                                              -- posts its first shipment event.
     customer_latitude NUMERIC(10,7),
     customer_longitude NUMERIC(10,7),
     customer_altitude NUMERIC(10,2),
