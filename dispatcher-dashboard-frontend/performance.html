@@ -12,13 +12,15 @@
   <div class="layout">
     <aside class="sidebar">
       <h2>Dispatcher</h2>
-      <!-- No entry of its own in the menu: this page is reached from the
-           Check Performance button on a driver's row, so Drivers is the tab
-           it belongs under and the one that stays lit while it is open. -->
+      <!-- Performance is the tab that is lit here, except when the page was
+           opened from one driver's row (performance.html?driver=13) — that is
+           a detour out of the Drivers tab rather than a visit to this one, so
+           performance.js moves the highlight back. -->
       <nav>
         <a href="index.html">Orders</a>
-        <a href="drivers.html" class="active">Drivers</a>
+        <a href="drivers.html" id="navDrivers">Drivers</a>
         <a href="live-map.html">Live Map</a>
+        <a href="performance.html" id="navPerformance" class="active">Performance</a>
       </nav>
       <button class="btn-logout" onclick="logout()">Logout</button>
     </aside>
@@ -84,6 +86,34 @@
           <p class="stat-note" id="outNote"></p>
         </div>
       </div>
+
+      <!-- The whole roster on one line each, and the single figure the day ends
+           on: what has to come back across the table in total. Hidden when the
+           page is focused on one driver — there is nothing to add up then. -->
+      <section id="collectionSection" class="collection-section" hidden>
+        <h2 class="section-title">Money to collect</h2>
+
+        <div class="collection-headline">
+          <div class="collection-figure">
+            <p class="stat-title">Total to take from drivers</p>
+            <h3 id="collectTotal">$0</h3>
+            <p class="stat-note" id="collectNote"></p>
+          </div>
+          <!-- Only shown when some driver's fees outran the cash they brought
+               back, because then the till pays them rather than the reverse. -->
+          <div class="collection-figure collection-figure-owed" id="payOutBlock" hidden>
+            <p class="stat-title">Total to pay out to drivers</p>
+            <h3 id="payOutTotal">$0</h3>
+            <p class="stat-note" id="payOutNote"></p>
+          </div>
+        </div>
+
+        <div class="totals-table-wrap">
+          <table class="totals-table" id="totalsTable"></table>
+        </div>
+
+        <ul class="driver-perf-notes" id="collectionNotes"></ul>
+      </section>
 
       <div class="drivers-toolbar">
         <h2 class="section-title" id="sectionTitle">Per driver</h2>
