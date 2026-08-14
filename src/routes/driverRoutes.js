@@ -98,6 +98,11 @@ router.get("/me/orders/returned", requireDriverAuth, getMyReturnedOrders);
 router.post("/me/orders/:id/location", requireDriverAuth, postMyOrderLocation);
 
 // Updates the delivery status of a specific order (e.g. DELIVERED).
+//
+// Accepts an optional occurred_at (ISO 8601) alongside the status. The app
+// sends it when a delivery was marked with no signal and is only reaching us
+// now, so the order is dated to when the driver finished it rather than to
+// when their phone found a connection.
 router.patch("/me/orders/:id/status", requireDriverAuth, patchMyOrderStatus);
 
 // Records that the driver has set off with this order ("Start Delivery").
