@@ -226,15 +226,15 @@ async function fetchOrderCustomerFieldsFromShopify(storeId, shopifyOrderId) {
   return order ? extractOrderCustomerFields(order) : null;
 }
 
-async function syncOrderTagToShopify(storeId, shopifyOrderId, status, options = {}) {
-  const deliveryTag = deliveryTagForStatus(status, options);
-  // A clearing status carries no tag of its own but still has work to do:
-  // strip the delivery tag the order was wearing. Any other status without a
-  // tag — OUT_FOR_DELIVERY, FULFILLED — is one this app does not narrate, and
-  // it leaves the existing tag alone rather than wiping it.
-  const isClearing = TAG_CLEARING_STATUSES.has(status);
-  if (!shopifyOrderId || (!deliveryTag && !isClearing)) return;
-
+// Puts one tag on a Shopify order, taking off whatever it replaces.
+//
+// Shopify has no notion of a tag that supersedes another — tags are a flat
+// list — so "the delivery tag" is a convention this app maintains: read the
+// order's tags, drop the ones isStale recognises as the app's own previous
+// answer, add the new one. Tags the merchant wrote are never touched.
+//
+// tag may be null, which means only the stale ones come off.
+async function writeOrderTag(storeId, shopifyOrderId, { tag, isStale }) {
   const store = await getStoreCredentials(storeId);
   if (!store || !store.access_token) return;
   if (!hasScope(store.scope, "write_orders")) {
@@ -255,8 +255,8 @@ async function syncOrderTagToShopify(storeId, shopifyOrderId, status, options = 
   const currentTags = order.tags
     ? order.tags.split(",").map(t => t.trim()).filter(Boolean)
     : [];
-  const tags = currentTags.filter(t => !isReplaceableDeliveryTag(t));
-  if (deliveryTag) tags.push(deliveryTag);
+  const tags = currentTags.filter(t => !isStale(t));
+  if (tag) tags.push(tag);
 
   // Clearing an order that was never tagged — the common case, since most
   // orders reach Unfulfilled without having been out with a driver — would
@@ -275,10 +275,113 @@ async function syncOrderTagToShopify(storeId, shopifyOrderId, status, options = 
     return;
   }
   console.log(
-    deliveryTag
-      ? `[Shopify sync] Order ${shopifyOrderId} tagged "${deliveryTag}"`
+    tag
+      ? `[Shopify sync] Order ${shopifyOrderId} tagged "${tag}"`
       : `[Shopify sync] Order ${shopifyOrderId} delivery tag cleared`
   );
+}
+
+async function syncOrderTagToShopify(storeId, shopifyOrderId, status, options = {}) {
+  const deliveryTag = deliveryTagForStatus(status, options);
+  // A clearing status carries no tag of its own but still has work to do:
+  // strip the delivery tag the order was wearing. Any other status without a
+  // tag — OUT_FOR_DELIVERY, FULFILLED — is one this app does not narrate, and
+  // it leaves the existing tag alone rather than wiping it.
+  const isClearing = TAG_CLEARING_STATUSES.has(status);
+  if (!shopifyOrderId || (!deliveryTag && !isClearing)) return;
+
+  await writeOrderTag(storeId, shopifyOrderId, {
+    tag: deliveryTag,
+    isStale: isReplaceableDeliveryTag,
+  });
+}
+
+/* ===========================
+   CARRIER TAGS
+
+   The same idea for an order somebody else is delivering. Our own orders wear
+   "Picked up by Ahmad" and "Delivered by Ahmad" in the Shopify admin; a
+   Wakilni order wore nothing at all, so in Shopify it was just another
+   fulfilled order and there was no way to filter or search the ones the
+   courier still had.
+
+   The tag is written from the courier's own shipment status, so it says what
+   Shopify says: "Wakilni: In Transit", "Wakilni: Delivered".
+=========================== */
+
+// Shopify's shipment_status values in the courier's own words. The dashboard
+// keeps the same list in js/orders.js — these are what the merchant reads,
+// and they should not disagree between the two places they appear.
+const CARRIER_STATUS_LABELS = {
+  label_printed:      "Label Printed",
+  label_purchased:    "Label Purchased",
+  confirmed:          "Confirmed",
+  picked_up:          "Picked Up",
+  ready_for_pickup:   "Ready for Pickup",
+  in_transit:         "In Transit",
+  out_for_delivery:   "Out for Delivery",
+  attempted_delivery: "Attempted Delivery",
+  delivered:          "Delivered",
+  failure:            "Failed",
+};
+
+// "Wakilni: Delivered" — the courier first, so every tag they own sorts and
+// filters together in the Shopify admin, and the colon is what makes the tag
+// recognisably this app's. A merchant who tags orders "Wakilni" by hand to
+// route them keeps that tag: only "<carrier>:" prefixed ones are ours to
+// replace.
+function carrierTagFor(carrierName, carrierStatus) {
+  const name = firstNonBlank(carrierName);
+  if (!name) return null;
+
+  const status = String(carrierStatus || "").trim().toLowerCase();
+  // A courier who has taken the parcel but not yet posted a shipment status —
+  // which is every order for the first few minutes, and every order for a
+  // courier who never posts one. The order is still theirs and still worth
+  // finding in the admin, so it is tagged for what is certain about it.
+  if (!status) return `${name}: Shipped`;
+
+  const label =
+    CARRIER_STATUS_LABELS[status] ||
+    // A status Shopify adds later still reads as words rather than snake_case.
+    status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return `${name}: ${label}`;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// This courier's own previous tag on the order, plus any driver tag left from
+// when the order was ours — an order that moved to Wakilni must not keep
+// saying "Assigned to Ahmad".
+function makeCarrierTagMatcher(carrierName) {
+  const prefix = new RegExp(`^${escapeRegExp(String(carrierName).trim())}\\s*:`, "i");
+  return (tag) => prefix.test(tag) || isReplaceableDeliveryTag(tag);
+}
+
+// Writes the courier's status onto the Shopify order. Called when the status
+// actually changes, so an order sitting at "In Transit" for two days costs
+// nothing.
+async function syncCarrierTagToShopify(storeId, shopifyOrderId, { carrierName, carrierStatus }) {
+  const tag = carrierTagFor(carrierName, carrierStatus);
+  if (!shopifyOrderId || !tag) return;
+
+  await writeOrderTag(storeId, shopifyOrderId, {
+    tag,
+    isStale: makeCarrierTagMatcher(carrierName),
+  });
+}
+
+// Takes the courier's tag off — their booking was cancelled, so the order is
+// going out again and the tag no longer describes anything.
+async function clearCarrierTagInShopify(storeId, shopifyOrderId, carrierName) {
+  if (!shopifyOrderId || !firstNonBlank(carrierName)) return;
+
+  await writeOrderTag(storeId, shopifyOrderId, {
+    tag: null,
+    isStale: makeCarrierTagMatcher(carrierName),
+  });
 }
 
 // Builds the live tracking link Shopify will show on the order and put in the
@@ -890,6 +993,8 @@ async function importOrdersFromShopify(storeId, { maxPages = 8 } = {}) {
 
 module.exports = {
   syncOrderTagToShopify,
+  syncCarrierTagToShopify,
+  clearCarrierTagInShopify,
   markDeliveredInShopify,
   markFulfilledInShopify,
   markUnfulfilledInShopify,
