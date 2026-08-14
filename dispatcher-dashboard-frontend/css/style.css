@@ -49,6 +49,12 @@ body {
 .main-content {
   flex: 1;
   padding: 32px 36px;
+  /* A flex item's minimum size is its content by default, so one wide child —
+     the twelve-column performance table, the ten-column orders table — grew
+     this panel past the window instead of scrolling inside its own box, and
+     took the whole page sideways with it. Nothing here should ever be wider
+     than the space it was given. */
+  min-width: 0;
 }
 
 .main-content h1 {
@@ -277,9 +283,12 @@ button:hover {
   color: #991b1b;
 }
 
+/* Fitted rather than fixed, for the same reason as the performance row below:
+   four hard columns left the Orders page's fifth card stranded on a row of its
+   own with three empty spaces beside it. */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 18px;
   margin-bottom: 24px;
 }
@@ -847,8 +856,13 @@ button.stat-card:focus-visible {
 
 /* Totals */
 
+/* Five cards, but fitted rather than forced: at 1fr each they were carved out
+   of whatever width was going, which on a laptop left five columns too narrow
+   to hold "$1,430.50" and, once they wrapped to three, a half-empty second
+   row. Fitting to a readable minimum lets the row hold as many as the window
+   can actually show and fills the width with them. */
 .stats-grid-5 {
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
 }
 
 .stat-note {
@@ -1242,17 +1256,10 @@ button.stat-card:focus-visible {
   font-size: 12px;
 }
 
-@media (max-width: 1400px) {
-  .stats-grid-5 {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
+/* The stat row needs no breakpoints of its own any more — auto-fit above does
+   the same job continuously. The driver cards still do: below 900px two of
+   them side by side leaves neither wide enough for a settlement. */
 @media (max-width: 900px) {
-  .stats-grid-5 {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
   .driver-perf-list {
     grid-template-columns: 1fr;
   }
@@ -2287,5 +2294,192 @@ button.stat-card:focus-visible {
 
   .table-container tbody tr {
     padding: 4px 12px;
+  }
+}
+
+/* ===========================================================================
+   COLLAPSING SIDEBAR
+
+   The menu was 260px of mostly empty blue on every page, and the pages that
+   pay for it are the widest ones — the orders table and the performance
+   roster, both of which were scrolling sideways to find room. So on anything
+   bigger than a phone the menu sits as a rail: a hamburger and four icons,
+   opening to the full labelled menu on hover or keyboard focus.
+
+   It opens *over* the page rather than pushing it, because a menu that
+   reflowed the table underneath it would move the row the pointer was heading
+   for. The page is laid out against the rail width and stays there.
+
+   Below 769px none of this applies — the menu is already a bar across the top
+   of the screen there, which is the right shape for a phone and needs no
+   hovering, which phones cannot do.
+   =========================================================================== */
+
+@media (min-width: 769px) {
+  :root {
+    --rail-width: 74px;
+    --menu-width: 244px;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--rail-width);
+    padding: 20px 16px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    z-index: 950;
+    transition: width 0.16s ease;
+  }
+
+  /* focus-within so tabbing through the links opens it too: the labels are the
+     only thing that says where a link goes, and a keyboard cannot hover. */
+  .sidebar:hover,
+  .sidebar:focus-within {
+    width: var(--menu-width);
+    box-shadow: 6px 0 24px rgba(15, 23, 42, 0.28);
+  }
+
+  /* The page is positioned against the rail, not against the open menu, so
+     opening the menu never moves anything underneath it. */
+  .main-content {
+    margin-left: var(--rail-width);
+  }
+
+  /* --- The hamburger ------------------------------------------------------
+     Three lines drawn in CSS rather than added to five HTML files, and the
+     word "Dispatcher" beside it collapses to nothing by having no font size
+     to occupy. The bars keep their own dimensions, so they survive it. */
+
+  .sidebar h2 {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 28px;
+    font-size: 0;
+    white-space: nowrap;
+    transition: font-size 0.16s ease;
+  }
+
+  .sidebar:hover h2,
+  .sidebar:focus-within h2 {
+    font-size: 21px;
+  }
+
+  .sidebar h2::before {
+    content: "";
+    flex: 0 0 26px;
+    height: 16px;
+    background-image: linear-gradient(#ffffff, #ffffff),
+      linear-gradient(#ffffff, #ffffff), linear-gradient(#ffffff, #ffffff);
+    background-size: 100% 2.5px;
+    background-position: left top, left center, left bottom;
+    background-repeat: no-repeat;
+  }
+
+  /* --- The links ----------------------------------------------------------
+     Each one keeps an icon that is legible at rail width; the label rides
+     alongside it and collapses the same way the title does. The icons are
+     matched to the page by href, so the markup stays as it is. */
+
+  .sidebar nav {
+    gap: 6px;
+  }
+
+  .sidebar nav a {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 11px 10px;
+    border-radius: 10px;
+    font-size: 0;
+    white-space: nowrap;
+    transition: font-size 0.16s ease, background 0.12s ease;
+  }
+
+  .sidebar:hover nav a,
+  .sidebar:focus-within nav a {
+    font-size: 15px;
+  }
+
+  .sidebar nav a::before {
+    content: "";
+    flex: 0 0 22px;
+    height: 22px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 22px 22px;
+  }
+
+  .sidebar nav a[href="index.html"]::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3h9l4 4v14H6z'/%3E%3Cpath d='M9 12h7M9 16h7M9 8h3'/%3E%3C/svg%3E");
+  }
+
+  .sidebar nav a[href="drivers.html"]::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 16l1.6-5A2 2 0 0 1 8.5 9.6h7A2 2 0 0 1 17.4 11L19 16'/%3E%3Cpath d='M4 16h16v3h-3v-3M7 19H4z'/%3E%3Ccircle cx='7.5' cy='16.5' r='.6'/%3E%3Ccircle cx='16.5' cy='16.5' r='.6'/%3E%3C/svg%3E");
+  }
+
+  .sidebar nav a[href="live-map.html"]::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s6.5-6 6.5-11a6.5 6.5 0 1 0-13 0C5.5 15 12 21 12 21z'/%3E%3Ccircle cx='12' cy='10' r='2.4'/%3E%3C/svg%3E");
+  }
+
+  .sidebar nav a[href="performance.html"]::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20h16'/%3E%3Cpath d='M7 20v-6M12 20V7M17 20v-9'/%3E%3C/svg%3E");
+  }
+
+  /* Which page you are on has to survive the labels going away, and an
+     underline under nothing does not. The tab keeps a lit background at both
+     widths and the underline only means anything once there are words. */
+  .sidebar nav a.active {
+    background: rgba(255, 255, 255, 0.16);
+    text-decoration: none;
+  }
+
+  .sidebar:hover nav a.active,
+  .sidebar:focus-within nav a.active {
+    text-decoration: underline;
+  }
+
+  .sidebar nav a:hover {
+    background: rgba(255, 255, 255, 0.1);
+    opacity: 1;
+  }
+
+  /* --- Logout -------------------------------------------------------------
+     Collapses to its icon like everything else. Kept red at rail width: it is
+     the one control on the menu that ends the session, and it should not be
+     one unlabelled square among five. */
+
+  .btn-logout {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px 10px;
+    font-size: 0;
+    white-space: nowrap;
+    transition: font-size 0.16s ease;
+  }
+
+  .sidebar:hover .btn-logout,
+  .sidebar:focus-within .btn-logout {
+    font-size: 14px;
+  }
+
+  .btn-logout::before {
+    content: "";
+    flex: 0 0 19px;
+    height: 19px;
+    background: no-repeat center / 19px 19px
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 17l5-5-5-5'/%3E%3Cpath d='M20 12H9'/%3E%3Cpath d='M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6'/%3E%3C/svg%3E");
+  }
+}
+
+/* Printed there is no menu at all, and no rail to leave room for. */
+@media print {
+  .main-content {
+    margin-left: 0;
   }
 }
