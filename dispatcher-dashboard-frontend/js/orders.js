@@ -439,6 +439,16 @@ function applyFilters() {
   const selectedCity = cityFilterEl.value;
   const selectedArea = areaFilterEl ? areaFilterEl.value : "";
 
+  // A delivered order is finished work: it needs no driver, no status change
+  // and no row taking up the screen, so the table keeps only what still needs
+  // doing. The count stays on the Delivered Orders card, and clicking that card
+  // still opens every delivered order — nothing is lost, it just moves off the
+  // rows. The dispatcher can also pull them back into the table on purpose by
+  // choosing the DELIVERED status filter, and a search reaches them too so
+  // looking up a past order by number or phone still finds it.
+  const showsDelivered =
+    selectedStatus === "DELIVERED" || Boolean(searchValue) || Boolean(phoneQuery);
+
   const filteredOrders = allOrders.filter((order) => {
     const orderNumber = String(order.order_number ?? "").toLowerCase();
     const orderStatus = normalizeOrderStatus(order.order_status);
@@ -450,8 +460,16 @@ function applyFilters() {
     const matchesStatus = !selectedStatus || orderStatus === selectedStatus;
     const matchesCity = !selectedCity || city === selectedCity;
     const matchesArea = !selectedArea || area === selectedArea;
+    const matchesDelivered = showsDelivered || orderStatus !== "DELIVERED";
 
-    return matchesSearch && matchesPhone && matchesStatus && matchesCity && matchesArea;
+    return (
+      matchesSearch &&
+      matchesPhone &&
+      matchesStatus &&
+      matchesCity &&
+      matchesArea &&
+      matchesDelivered
+    );
   });
 
   renderOrders(filteredOrders, allDrivers);
