@@ -6,6 +6,8 @@ const {
   markFulfilledInShopify,
   findCarrierTracking,
   carrierFromFulfillment,
+  syncCarrierTagToShopify,
+  clearCarrierTagInShopify,
 } = require("../services/shopifyService");
 const { getDriverNameById } = require("../services/orderService");
 const { extractLineItems } = require("../utils/lineItems");
@@ -444,12 +446,19 @@ async function handleOrderFulfilled(req, res) {
     }
 
     // Someone else's delivery. Nothing to attach — the carrier's link is
-    // already on the fulfilment and now stored here too — and nothing to tag,
-    // since the order never enters the driver flow.
+    // already on the fulfilment and now stored here too — and no driver tag to
+    // write, since the order never enters the driver flow. It gets the
+    // carrier's tag instead, so it is as findable in the Shopify admin as one
+    // of ours: this is usually the moment a courier order is first seen, and
+    // the fulfilment webhooks take over from here as the courier reports in.
     if (carrier) {
       console.log(
         `[Webhook] Order ${shopifyOrderId} fulfilled by ${carrier.company || "an outside carrier"} — left out of the driver flow`
       );
+      syncCarrierTagToShopify(storeId, shopifyOrderId, {
+        carrierName: row.carrier_name,
+        carrierStatus: row.carrier_status,
+      }).catch(err => console.error("[Shopify sync] carrier tag failed:", err.message));
       return res.status(200).send("Webhook received");
     }
 
@@ -522,14 +531,23 @@ async function handleFulfillmentUpdated(req, res) {
     // carrier's link on it would keep sending the customer to a tracker for a
     // shipment that no longer exists.
     if (!carrier) {
+      // The CTE keeps the carrier's name from before the wipe — it is what the
+      // tag in Shopify is built from, and there is no other way to know which
+      // tag to take off once the column has been cleared.
       const cleared = await pool.query(
-        `UPDATE orders
+        `WITH prev AS (
+           SELECT id, carrier_name
+           FROM orders
+           WHERE shopify_order_id = $1 AND store_id = $2
+         )
+         UPDATE orders o
          SET carrier_tracking_url = NULL, carrier_name = NULL, carrier_status = NULL
-         WHERE shopify_order_id = $1 AND store_id = $2
-           AND carrier_tracking_url IS NOT NULL
+         FROM prev
+         WHERE o.id = prev.id
+           AND o.carrier_tracking_url IS NOT NULL
            AND $3::text IS NOT NULL
-           AND carrier_tracking_url = $3
-         RETURNING id`,
+           AND o.carrier_tracking_url = $3
+         RETURNING prev.carrier_name AS previous_carrier_name`,
         [
           shopifyOrderId,
           storeId,
@@ -541,27 +559,44 @@ async function handleFulfillmentUpdated(req, res) {
       );
       if (cleared.rowCount) {
         console.log(`[Webhook] Order ${shopifyOrderId} carrier shipment cancelled — carrier details cleared`);
+        clearCarrierTagInShopify(
+          storeId,
+          shopifyOrderId,
+          cleared.rows[0].previous_carrier_name
+        ).catch(err => console.error("[Shopify sync] clear carrier tag failed:", err.message));
       }
       return res.status(200).send("Webhook received");
     }
 
+    // The CTE keeps the status the order had before this event, so the tag in
+    // Shopify is only rewritten when the carrier actually moved the shipment.
+    // Shopify re-sends a fulfilment update for changes that have nothing to do
+    // with the shipment status, and each rewrite costs two API calls.
     const result = await pool.query(
-      `UPDATE orders
+      `WITH prev AS (
+         SELECT id, order_status, carrier_status, carrier_tracking_url
+         FROM orders
+         WHERE shopify_order_id = $1 AND store_id = $2
+       )
+       UPDATE orders o
        SET carrier_tracking_url = $3,
-           carrier_name = COALESCE($4, carrier_name),
-           carrier_status = COALESCE($5, carrier_status),
+           carrier_name = COALESCE($4, o.carrier_name),
+           carrier_status = COALESCE($5, o.carrier_status),
            -- An order handed to a carrier is fulfilled, whatever the dashboard
            -- had it at: a merchant who never fulfilled it here would otherwise
            -- keep seeing it as unfulfilled work waiting on a driver.
            order_status = CASE
-             WHEN order_status = 'CANCELLED' THEN order_status
+             WHEN prev.order_status = 'CANCELLED' THEN o.order_status
              ELSE 'FULFILLED'
            END,
-           fulfilled_at = COALESCE(fulfilled_at, NOW()),
-           fulfillment_status = COALESCE(fulfillment_status, 'fulfilled')
-       WHERE shopify_order_id = $1 AND store_id = $2
-         AND NOT (COALESCE(order_status, 'UNFULFILLED') = ANY($6::text[]))
-       RETURNING id, order_number, carrier_status`,
+           fulfilled_at = COALESCE(o.fulfilled_at, NOW()),
+           fulfillment_status = COALESCE(o.fulfillment_status, 'fulfilled')
+       FROM prev
+       WHERE o.id = prev.id
+         AND NOT (COALESCE(prev.order_status, 'UNFULFILLED') = ANY($6::text[]))
+       RETURNING o.carrier_status, o.carrier_name,
+                 prev.carrier_status AS previous_carrier_status,
+                 prev.carrier_tracking_url AS previous_carrier_url`,
       [
         shopifyOrderId,
         storeId,
@@ -579,10 +614,27 @@ async function handleFulfillmentUpdated(req, res) {
       return res.status(200).send("Webhook received");
     }
 
+    const row = result.rows[0];
     console.log(
       `[Webhook] Order ${shopifyOrderId} carrier status: ` +
-      `${result.rows[0].carrier_status || "none yet"} (${carrier.company || "outside carrier"})`
+      `${row.carrier_status || "none yet"} (${carrier.company || "outside carrier"})`
     );
+
+    // The tag the merchant sees in the Shopify admin, so a courier order can
+    // be found and filtered there the way one of ours can. Written when the
+    // carrier moved the shipment, and when the order first became theirs —
+    // never on the repeat updates Shopify sends for everything else, which
+    // would each cost two API calls to write the tag it already has.
+    //
+    // Fire-and-forget: Shopify being slow must not fail the webhook, which
+    // Shopify would then retry and re-apply.
+    const carrierIsNew = !row.previous_carrier_url;
+    if (carrierIsNew || row.carrier_status !== row.previous_carrier_status) {
+      syncCarrierTagToShopify(storeId, shopifyOrderId, {
+        carrierName: row.carrier_name,
+        carrierStatus: row.carrier_status,
+      }).catch(err => console.error("[Shopify sync] carrier tag failed:", err.message));
+    }
     return res.status(200).send("Webhook received");
   } catch (error) {
     console.error("Webhook fulfillment update error:", error);
