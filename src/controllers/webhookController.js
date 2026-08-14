@@ -5,6 +5,7 @@ const {
   syncOrderTagToShopify,
   markFulfilledInShopify,
   findCarrierTracking,
+  carrierFromFulfillment,
 } = require("../services/shopifyService");
 const { getDriverNameById } = require("../services/orderService");
 const { extractLineItems } = require("../utils/lineItems");
@@ -408,6 +409,11 @@ async function handleOrderFulfilled(req, res) {
                THEN o.carrier_name
              ELSE COALESCE($6, o.carrier_name)
            END,
+           carrier_status = CASE
+             WHEN prev.order_status IN ('PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED')
+               THEN o.carrier_status
+             ELSE COALESCE($7, o.carrier_status)
+           END,
            fulfilled_at = COALESCE(o.fulfilled_at, NOW()),
            financial_status = COALESCE($2, o.financial_status),
            fulfillment_status = COALESCE($3, o.fulfillment_status)
@@ -421,6 +427,7 @@ async function handleOrderFulfilled(req, res) {
         storeId,
         carrier?.url || null,
         carrier?.company || null,
+        carrier?.status || null,
       ]
     );
 
@@ -471,6 +478,114 @@ async function handleOrderFulfilled(req, res) {
     return res.status(200).send("Webhook received");
   } catch (error) {
     console.error("Webhook fulfilled error:", error);
+    return res.status(500).send("Server error");
+  }
+}
+
+// An order one of our own drivers is holding. A carrier's fulfilment update
+// must not touch it — see handleOrderFulfilled for why.
+const DRIVER_HELD_STATUSES = ["PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED"];
+
+// Fired by Shopify whenever a fulfilment is created or updated — including
+// every time an outside carrier moves its own shipment along.
+//
+// This is the only way a shop hears about a delivery it is not running. An
+// order handed to Wakilni is fulfilled once and then sits at "Fulfilled"
+// forever as far as orders/fulfilled is concerned, while Wakilni goes on
+// posting Confirmed → In transit → Out for delivery → Delivered against the
+// fulfilment. Copying that status here is what puts it on the dispatcher's
+// board next to the carrier's name, instead of leaving a fulfilled order
+// indistinguishable from one still sitting at the counter.
+//
+// Nothing else about the order is touched: it is not ours to deliver, so it
+// keeps its FULFILLED status, stays out of the driver flow and out of the
+// delivery figures. An order one of our own drivers is already carrying is
+// left alone entirely.
+async function handleFulfillmentUpdated(req, res) {
+  try {
+    const fulfillment = parseWebhookOrder(req);
+    const storeId = await getStoreId(req.shopDomain);
+    const shopifyOrderId = fulfillment.order_id;
+
+    if (!shopifyOrderId) {
+      return res.status(200).send("Missing order id");
+    }
+    if (!storeId) {
+      return res.status(200).send("Store not found");
+    }
+
+    const carrier = carrierFromFulfillment(fulfillment);
+
+    // A cancelled carrier booking, or one of our own fulfilments: nothing to
+    // record. Cancelled is the case worth handling rather than ignoring — the
+    // order is going out again, by us or by someone else, and leaving the old
+    // carrier's link on it would keep sending the customer to a tracker for a
+    // shipment that no longer exists.
+    if (!carrier) {
+      const cleared = await pool.query(
+        `UPDATE orders
+         SET carrier_tracking_url = NULL, carrier_name = NULL, carrier_status = NULL
+         WHERE shopify_order_id = $1 AND store_id = $2
+           AND carrier_tracking_url IS NOT NULL
+           AND $3::text IS NOT NULL
+           AND carrier_tracking_url = $3
+         RETURNING id`,
+        [
+          shopifyOrderId,
+          storeId,
+          firstNonBlank(
+            fulfillment.tracking_url,
+            Array.isArray(fulfillment.tracking_urls) ? fulfillment.tracking_urls[0] : null
+          ),
+        ]
+      );
+      if (cleared.rowCount) {
+        console.log(`[Webhook] Order ${shopifyOrderId} carrier shipment cancelled — carrier details cleared`);
+      }
+      return res.status(200).send("Webhook received");
+    }
+
+    const result = await pool.query(
+      `UPDATE orders
+       SET carrier_tracking_url = $3,
+           carrier_name = COALESCE($4, carrier_name),
+           carrier_status = COALESCE($5, carrier_status),
+           -- An order handed to a carrier is fulfilled, whatever the dashboard
+           -- had it at: a merchant who never fulfilled it here would otherwise
+           -- keep seeing it as unfulfilled work waiting on a driver.
+           order_status = CASE
+             WHEN order_status = 'CANCELLED' THEN order_status
+             ELSE 'FULFILLED'
+           END,
+           fulfilled_at = COALESCE(fulfilled_at, NOW()),
+           fulfillment_status = COALESCE(fulfillment_status, 'fulfilled')
+       WHERE shopify_order_id = $1 AND store_id = $2
+         AND NOT (COALESCE(order_status, 'UNFULFILLED') = ANY($6::text[]))
+       RETURNING id, order_number, carrier_status`,
+      [
+        shopifyOrderId,
+        storeId,
+        carrier.url,
+        carrier.company,
+        carrier.status,
+        DRIVER_HELD_STATUSES,
+      ]
+    );
+
+    if (!result.rowCount) {
+      console.log(
+        `[Webhook] Fulfilment update for order ${shopifyOrderId} ignored — order not found for this store, or one of our drivers is carrying it`
+      );
+      return res.status(200).send("Webhook received");
+    }
+
+    console.log(
+      `[Webhook] Order ${shopifyOrderId} carrier status: ` +
+      `${result.rows[0].carrier_status || "none yet"} (${carrier.company || "outside carrier"})`
+    );
+    return res.status(200).send("Webhook received");
+  } catch (error) {
+    console.error("Webhook fulfillment update error:", error);
     return res.status(500).send("Server error");
   }
 }
@@ -553,6 +668,7 @@ module.exports = {
   handleOrderCancelled,
   handleOrderDeleted,
   handleOrderFulfilled,
+  handleFulfillmentUpdated,
   handleCustomerDataRequest,
   handleCustomerRedact,
   handleShopRedact,

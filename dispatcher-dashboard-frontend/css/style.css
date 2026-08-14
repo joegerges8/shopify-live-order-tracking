@@ -227,6 +227,31 @@ button:hover {
   font-weight: 700;
 }
 
+/* An order an outside courier is delivering. The badge keeps the colour of
+   whatever stage the order is at, so it reads alongside our own orders, and
+   the courier's name rides after it — a delivery this shop is not running is
+   never mistaken for one that is. */
+.carrier-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.carrier-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.12);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* Sits where the Assign / Unassign controls would be on our own orders. */
+.carrier-note {
+  font-size: 12px;
+  color: #475569;
+  font-style: italic;
+}
+
 /* Area override control tucked under the city in each row. Deliberately small
    and muted: it is a correction tool, not something to reach for every order. */
 .area-cell {

@@ -147,20 +147,30 @@ async function oauthCallback(req, res) {
   res.redirect(`/dashboard/setup.html?name=${encodeURIComponent(storeName)}&shop=${encodeURIComponent(shop)}&token=${setupToken}`);
 }
 
+// The webhook topics this app runs on. Registered at install, and again at
+// every boot for stores installed before a topic was added to this list —
+// without that, a shop that installed the app months ago would go on missing
+// whatever was added since, and the only fix would be re-installing.
+const WEBHOOK_TOPICS = [
+  "orders/create",
+  // Carries the order note when a merchant writes or edits it on an order
+  // that already exists — the usual way a note for the driver is written.
+  "orders/updated",
+  "orders/cancelled",
+  "orders/delete",
+  "orders/fulfilled",
+  // An outside carrier — Wakilni and the like — reports its progress against
+  // the fulfilment, not the order, so these two are the only way its
+  // Confirmed / In transit / Delivered reaches the dashboard.
+  "fulfillments/create",
+  "fulfillments/update",
+  "customers/data_request",
+  "customers/redact",
+  "shop/redact",
+];
+
 async function registerWebhooks(shop, accessToken) {
-  const topics = [
-    "orders/create",
-    // Carries the order note when a merchant writes or edits it on an order
-    // that already exists — the usual way a note for the driver is written.
-    "orders/updated",
-    "orders/cancelled",
-    "orders/delete",
-    "orders/fulfilled",
-    "customers/data_request",
-    "customers/redact",
-    "shop/redact",
-  ];
-  for (const topic of topics) {
+  for (const topic of WEBHOOK_TOPICS) {
     const address = `${APP_URL}/webhooks/shopify/${topic}`;
     try {
       const r = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`, {
@@ -174,6 +184,63 @@ async function registerWebhooks(shop, accessToken) {
       console.log(`[OAuth] Webhook ${topic} → ${r.status}`);
     } catch (err) {
       console.error(`[OAuth] Failed to register ${topic}:`, err.message);
+    }
+  }
+}
+
+// Subscribes every installed store to any topic it is missing. Shopify rejects
+// a duplicate subscription rather than replacing it, so what is already there
+// is read first and only the gaps are created — on most boots that is nothing
+// at all and no write is made.
+//
+// Runs at startup so a topic added to WEBHOOK_TOPICS reaches existing stores.
+async function syncWebhookSubscriptions() {
+  const stores = await pool.query(
+    `SELECT shop_domain, access_token FROM stores
+     WHERE active = TRUE AND access_token <> ''`
+  );
+
+  for (const store of stores.rows) {
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": store.access_token,
+    };
+    try {
+      const existingRes = await fetch(
+        `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json?limit=250`,
+        { headers }
+      );
+      if (!existingRes.ok) {
+        console.error(
+          `[Webhooks] Could not list webhooks for ${store.shop_domain}: ${existingRes.status}`
+        );
+        continue;
+      }
+
+      const { webhooks } = await existingRes.json();
+      const subscribed = new Set((webhooks || []).map((webhook) => webhook.topic));
+      const missing = WEBHOOK_TOPICS.filter((topic) => !subscribed.has(topic));
+      if (missing.length === 0) continue;
+
+      for (const topic of missing) {
+        const response = await fetch(
+          `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`,
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              webhook: {
+                topic,
+                address: `${APP_URL}/webhooks/shopify/${topic}`,
+                format: "json",
+              },
+            }),
+          }
+        );
+        console.log(`[Webhooks] ${store.shop_domain} subscribed to ${topic} → ${response.status}`);
+      }
+    } catch (error) {
+      console.error(`[Webhooks] ${store.shop_domain} sync failed:`, error.message);
     }
   }
 }
@@ -207,4 +274,4 @@ async function setupPassword(req, res) {
   return res.json({ ok: true });
 }
 
-module.exports = { startOAuth, oauthCallback, setupPassword };
+module.exports = { startOAuth, oauthCallback, setupPassword, syncWebhookSubscriptions };

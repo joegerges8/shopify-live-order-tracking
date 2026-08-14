@@ -319,6 +319,32 @@ function parseHttpUrl(url) {
   }
 }
 
+// One fulfilment's carrier details, or null when it is not an outside
+// carrier's — either it carries no usable tracking link, or the link is one we
+// wrote ourselves and the order is ours to deliver.
+//
+// status is where Wakilni's own progress lives. Shopify calls it
+// shipment_status and it is the field behind the "Confirmed" / "Delivered"
+// badge on the order page: the carrier moves it as the parcel travels, which
+// is the only signal the shop gets for a delivery it is not running itself.
+// It is null until the carrier posts its first shipment event.
+function carrierFromFulfillment(fulfillment) {
+  if (!fulfillment) return null;
+  if (fulfillment.status === "cancelled" || fulfillment.status === "error") return null;
+
+  const url = firstNonBlank(
+    fulfillment.tracking_url,
+    Array.isArray(fulfillment.tracking_urls) ? fulfillment.tracking_urls[0] : null
+  );
+  if (!parseHttpUrl(url) || isOwnTrackingUrl(url)) return null;
+
+  return {
+    url,
+    company: firstNonBlank(fulfillment.tracking_company) || null,
+    status: firstNonBlank(fulfillment.shipment_status) || null,
+  };
+}
+
 // The outside carrier's tracking details on an order, or null when the order
 // carries none and is therefore ours to deliver.
 //
@@ -330,15 +356,8 @@ function findCarrierTracking(order) {
   const fulfillments = Array.isArray(order?.fulfillments) ? order.fulfillments : [];
 
   for (const fulfillment of fulfillments) {
-    if (fulfillment.status === "cancelled" || fulfillment.status === "error") continue;
-
-    const url = firstNonBlank(
-      fulfillment.tracking_url,
-      Array.isArray(fulfillment.tracking_urls) ? fulfillment.tracking_urls[0] : null
-    );
-    if (!parseHttpUrl(url) || isOwnTrackingUrl(url)) continue;
-
-    return { url, company: firstNonBlank(fulfillment.tracking_company) || null };
+    const carrier = carrierFromFulfillment(fulfillment);
+    if (carrier) return carrier;
   }
   return null;
 }
@@ -699,14 +718,19 @@ function getFulfilledAt(order) {
 
 async function upsertImportedOrder(storeId, order) {
   const fields = extractOrderCustomerFields(order);
+  // Wakilni and the like ship orders the app never sees a webhook for — an
+  // order fulfilled while the app was down, or before it was installed. The
+  // import is the second chance to notice, so the carrier is read here too.
+  const carrier = findCarrierTracking(order);
   await pool.query(
     `INSERT INTO orders (
       shopify_order_id, order_number,
       customer_first_name, customer_last_name, customer_phone, customer_email,
       shipping_address, city, area, country,
       total_price, financial_status, fulfillment_status, prepaid,
-      order_status, tracking_token, store_id, created_at, fulfilled_at, line_items, note
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18::TIMESTAMPTZ, NOW()),$19::TIMESTAMPTZ,$20::JSONB,$21)
+      order_status, tracking_token, store_id, created_at, fulfilled_at, line_items, note,
+      carrier_tracking_url, carrier_name, carrier_status
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18::TIMESTAMPTZ, NOW()),$19::TIMESTAMPTZ,$20::JSONB,$21,$22,$23,$24)
     ON CONFLICT (shopify_order_id) DO UPDATE SET
       order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
       customer_first_name = COALESCE(EXCLUDED.customer_first_name, orders.customer_first_name),
@@ -735,6 +759,28 @@ async function upsertImportedOrder(storeId, order) {
       -- so re-importing also clears notes the merchant has deleted. Importing
       -- is how orders that predate the note column get theirs.
       note = EXCLUDED.note,
+      -- An order one of our drivers is already carrying stays ours: a carrier
+      -- link found on a later import must not redirect the customer away from
+      -- the driver actually holding their parcel. Same rule the fulfilled
+      -- webhook applies.
+      carrier_tracking_url = CASE
+        WHEN orders.order_status IN ('PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED')
+          THEN orders.carrier_tracking_url
+        ELSE COALESCE(EXCLUDED.carrier_tracking_url, orders.carrier_tracking_url)
+      END,
+      carrier_name = CASE
+        WHEN orders.order_status IN ('PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED')
+          THEN orders.carrier_name
+        ELSE COALESCE(EXCLUDED.carrier_name, orders.carrier_name)
+      END,
+      -- The carrier's own progress, which is the whole point of re-importing a
+      -- Wakilni order: it is how a delivery this shop is not running gets its
+      -- status refreshed when a webhook was missed.
+      carrier_status = CASE
+        WHEN orders.order_status IN ('PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED')
+          THEN orders.carrier_status
+        ELSE COALESCE(EXCLUDED.carrier_status, orders.carrier_status)
+      END,
       tracking_token = COALESCE(orders.tracking_token, EXCLUDED.tracking_token),
       fulfilled_at = COALESCE(orders.fulfilled_at, EXCLUDED.fulfilled_at),
       store_id = EXCLUDED.store_id`,
@@ -764,6 +810,9 @@ async function upsertImportedOrder(storeId, order) {
       getFulfilledAt(order),
       JSON.stringify(extractLineItems(order)),
       extractOrderNote(order),
+      carrier?.url || null,
+      carrier?.company || null,
+      carrier?.status || null,
     ]
   );
 }
@@ -850,5 +899,6 @@ module.exports = {
   fetchOrderCustomerFieldsFromShopify,
   importOrdersFromShopify,
   findCarrierTracking,
+  carrierFromFulfillment,
   isOwnTrackingUrl,
 };

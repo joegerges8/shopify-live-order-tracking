@@ -8,6 +8,7 @@ const {
   handleOrderCancelled,
   handleOrderDeleted,
   handleOrderFulfilled,
+  handleFulfillmentUpdated,
   handleCustomerDataRequest,
   handleCustomerRedact,
   handleShopRedact,
@@ -64,6 +65,24 @@ router.post(
   express.raw({ type: "*/*" }),
   verifyShopifyWebhook,
   handleOrderFulfilled
+);
+
+// How an outside carrier's own progress reaches the dashboard: Wakilni moves
+// the shipment from Confirmed to Delivered on the fulfilment, long after
+// orders/fulfilled has had its say. Both topics land here — create carries the
+// carrier's tracking link, update carries every status change after it.
+router.post(
+  "/fulfillments/create",
+  express.raw({ type: "*/*" }),
+  verifyShopifyWebhook,
+  handleFulfillmentUpdated
+);
+
+router.post(
+  "/fulfillments/update",
+  express.raw({ type: "*/*" }),
+  verifyShopifyWebhook,
+  handleFulfillmentUpdated
 );
 
 router.post(
