@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { getOrderByTrackingToken } = require("../services/orderService");
 const { etaForTrackedOrder, hasDriverStarted } = require("../services/etaService");
+const { LIVE_PING_WINDOW_SECONDS } = require("../services/driverService");
 
 // Why there is no ETA, so a blank line on the page can be explained without
 // reading server logs. Returned alongside `eta` on every tracking response.
@@ -76,8 +77,24 @@ router.get("/:token", async (req, res) => {
               latitude: order.driver_lat,
               longitude: order.driver_lng,
               updated_at: order.location_updated_at,
+              // How old this fix is, in seconds. The page cannot work this out
+              // for itself: location_updates.created_at carries no timezone, so
+              // subtracting it from the browser's clock is wrong by however
+              // many hours lie between the visitor and the database. Postgres
+              // computes it (see getOrderByTrackingToken) and the page ages it
+              // forward a second at a time between refreshes.
+              //
+              // Without this the page had no way to tell a driver who was
+              // moving from one whose phone had stopped reporting, and showed
+              // "Live tracking" over a marker that had not moved in ten minutes
+              // — which is exactly what a driver on a phone that freezes
+              // background apps produces.
+              age_seconds: Number(order.location_age_seconds) || 0,
             }
           : null,
+      // The staleness threshold, shared with the dispatcher's map so both
+      // screens call the same silence stale at the same moment.
+      live_window_seconds: LIVE_PING_WINDOW_SECONDS,
     });
   } catch (error) {
     console.error("Tracking error:", error);

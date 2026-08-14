@@ -53,6 +53,11 @@
       margin-bottom: 8px;
     }
     .live-badge.show { display: flex; }
+    /* The driver has set off but their phone has gone quiet. Muted and still,
+       because the green pulse is a claim that the marker is moving — leaving it
+       on over a position that stopped updating ten minutes ago is the one thing
+       this badge must never do. */
+    .live-badge.stale { color: #8E8E93; }
     .live-dot {
       width: 8px;
       height: 8px;
@@ -60,6 +65,7 @@
       border-radius: 50%;
       animation: pulse 1.4s ease-in-out infinite;
     }
+    .live-badge.stale .live-dot { background: #8E8E93; animation: none; }
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1);   }
       50%       { opacity: 0.3; transform: scale(1.6); }
@@ -309,7 +315,7 @@
 
     <div class="status-section">
       <div id="live-badge" class="live-badge">
-        <span class="live-dot"></span> Live tracking
+        <span class="live-dot"></span> <span id="live-badge-text">Live tracking</span>
       </div>
       <div id="status-headline">Loading...</div>
       <div id="eta-text"></div>
@@ -393,6 +399,7 @@
     let animFrame         = null;
     let currentData       = null;
     let pollInterval      = null;
+    let ageInterval       = null;
     let bikeIconBase64    = null;
 
     // ── Socket.io ──────────────────────────────────────────────────────────
@@ -404,9 +411,18 @@
         transports: ['websocket', 'polling'],
       });
 
-      socket.on('location_update', ({ latitude, longitude, updated_at }) => {
+      socket.on('location_update', ({ latitude, longitude, updated_at, age_seconds }) => {
         if (!currentData) return;
-        currentData.driver_location = { latitude, longitude, updated_at };
+        // age_seconds is 0 on a pushed fix — it was written moments ago. Kept
+        // explicit rather than assumed so ageLocation() has something to count
+        // up from, and so the badge goes back to live the instant a driver who
+        // had gone quiet starts reporting again.
+        currentData.driver_location = {
+          latitude,
+          longitude,
+          updated_at,
+          age_seconds: age_seconds ?? 0,
+        };
         // A ping arriving now is the driver's app reporting from the road, so
         // this is the moment "Order picked up" becomes "Order on the way" —
         // without waiting for the next poll to say so.
@@ -451,6 +467,7 @@
     function cleanup() {
       document.getElementById('delivered-overlay').classList.add('show');
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      if (ageInterval)  { clearInterval(ageInterval);  ageInterval  = null; }
       if (socket) { socket.disconnect(); socket = null; }
     }
 
@@ -781,9 +798,22 @@
       // driver is right now, so it waits for the driver to actually be on the
       // road. Between the dispatcher marking the order picked up and the
       // driver tapping "Start Delivery" the card says only "Order picked up".
+      //
+      // Once they have set off there is a second question the badge used to get
+      // wrong: whether the pings are still arriving. driver_started stays true
+      // for ten minutes after the last one, so a driver whose phone stopped
+      // reporting — a background app frozen by the phone's power manager, which
+      // is the common case — left the customer watching a motionless marker
+      // under a pulsing "Live tracking". Past the freshness window the badge
+      // now says how long ago that position was, and the marker stays where it
+      // is rather than vanishing, which would read as the order being lost.
+      const badge = document.getElementById('live-badge');
       const isLive = isActive && data.driver_started === true && !!data.driver_location;
-      document.getElementById('live-badge').className =
-        'live-badge' + (isLive ? ' show' : '');
+      const stale  = isLive && isLocationStale(data);
+
+      badge.className = 'live-badge' + (isLive ? ' show' : '') + (stale ? ' stale' : '');
+      document.getElementById('live-badge-text').textContent =
+        stale ? `Last seen ${describeAge(data.driver_location.age_seconds)}` : 'Live tracking';
 
       // The ETA is shown only once the order is on the road and the driver has
       // actually set off — the backend withholds it until then, so an empty
@@ -811,6 +841,45 @@
       if (customerStatus === 'DELIVERED') cleanup();
     }
 
+    // ── Position freshness ─────────────────────────────────────────────────
+    // How long a ping keeps counting as live. Overwritten by the first response
+    // with the server's own figure, so this page and the dispatcher's map agree
+    // on when a driver has gone quiet. The default only covers the moment
+    // before that first response lands.
+    let liveWindowSeconds = 120;
+
+    function isLocationStale(data) {
+      const age = data?.driver_location?.age_seconds;
+      return Number.isFinite(age) && age > liveWindowSeconds;
+    }
+
+    function describeAge(seconds) {
+      const mins = Math.floor(seconds / 60);
+      if (mins < 1)  return 'just now';
+      if (mins === 1) return '1 min ago';
+      if (mins < 60) return `${mins} min ago`;
+      const hours = Math.floor(mins / 60);
+      return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+    }
+
+    // Ages the last known position forward a second at a time.
+    //
+    // The page would otherwise only learn a driver had gone quiet when the next
+    // poll came back, thirty seconds later — and on a socket connection that
+    // has simply gone idle, never. Counting locally is the same trick the
+    // dispatcher's map uses (ageLocations in live-map.js), and for the same
+    // reason: silence is not an event anything pushes.
+    function ageLocation() {
+      const location = currentData?.driver_location;
+      if (!location || !Number.isFinite(location.age_seconds)) return;
+
+      const wasStale = isLocationStale(currentData);
+      location.age_seconds += 1;
+      // Only redraw when the answer changes. A per-second re-render of the
+      // whole card would fight the driver marker's own animation.
+      if (isLocationStale(currentData) !== wasStale) applyCardData(currentData);
+    }
+
     // ── Fetch tracking data (initial + fallback polling) ───────────────────
 
     async function fetchTracking() {
@@ -819,6 +888,9 @@
         if (res.status === 404) { showError(); return; }
         if (!res.ok) return;
         const data = await res.json();
+        if (Number.isFinite(data.live_window_seconds)) {
+          liveWindowSeconds = data.live_window_seconds;
+        }
         currentData = data;
         applyCardData(data);
         applyMapData(data);
@@ -847,6 +919,7 @@
       hideLoading();
       // Slower poll as safety net — socket handles real-time updates
       pollInterval = setInterval(fetchTracking, socket ? 30_000 : 10_000);
+      ageInterval  = setInterval(ageLocation, 1_000);
     })();
 
     // ── Google Maps init callback ──────────────────────────────────────────
