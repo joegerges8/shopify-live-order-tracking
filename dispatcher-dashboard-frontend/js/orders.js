@@ -1,5 +1,6 @@
 import { getOrders, getDrivers, assignDriver, unassignDriver, updateOrderStatus, updateOrderArea, getAreas, importOrders, deleteOrder, markOrderPaid } from "./api.js";
 import { showToast, confirmAction, showDetailModal } from "./ui.js";
+import { toWhatsAppNumber, displayPhone } from "./phone.js";
 
 const tableBody = document.querySelector("#ordersTable tbody");
 
@@ -42,29 +43,6 @@ function getOrderArea(order) {
    CUSTOMER PHONE / WHATSAPP
 =========================== */
 
-// Country code assumed for numbers stored in local form (03 719 871).
-const DEFAULT_COUNTRY_CODE = "961"; // Lebanon
-
-// wa.me wants digits only, including the country code and without a leading +.
-function toWhatsAppNumber(rawPhone) {
-  if (!rawPhone) return null;
-
-  const trimmed = String(rawPhone).trim();
-  const digits = trimmed.replace(/\D/g, "");
-  if (!digits) return null;
-
-  // Already international: +961…
-  if (trimmed.startsWith("+")) return digits;
-  // Dialling prefix instead of a plus: 00961…
-  if (digits.startsWith("00")) return digits.slice(2);
-  // Local form, the leading 0 is dropped when the country code goes on.
-  if (digits.startsWith("0")) return DEFAULT_COUNTRY_CODE + digits.slice(1);
-  // Bare number that already carries the country code.
-  if (digits.startsWith(DEFAULT_COUNTRY_CODE)) return digits;
-
-  return DEFAULT_COUNTRY_CODE + digits;
-}
-
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -97,9 +75,13 @@ function createPhoneCell(order) {
   const waNumber = toWhatsAppNumber(phone);
   if (!waNumber) return "—";
 
+  // Shown short, dialled in full: the label drops the +961 while the link and
+  // the tooltip keep the number WhatsApp needs.
+  const label = displayPhone(phone) || phone;
+
   return `<a class="small-btn phone-btn" href="https://wa.me/${waNumber}"
              target="_blank" rel="noopener noreferrer"
-             title="Message ${escapeHtml(phone)} on WhatsApp">${WHATSAPP_ICON}<span>${escapeHtml(phone)}</span></a>`;
+             title="Message ${escapeHtml(phone)} on WhatsApp">${WHATSAPP_ICON}<span>${escapeHtml(label)}</span></a>`;
 }
 
 /* ===========================
@@ -418,7 +400,7 @@ function createStatDriverRow(driver) {
   return `
     <tr>
       <td data-label="Driver">${escapeHtml(driver.full_name ?? `Driver #${driver.id}`)}</td>
-      <td data-label="Phone">${escapeHtml(driver.phone ?? "—")}</td>
+      <td data-label="Phone">${escapeHtml(displayPhone(driver.phone) || "—")}</td>
       <td data-label="Active Orders">${activeCount}</td>
     </tr>
   `;

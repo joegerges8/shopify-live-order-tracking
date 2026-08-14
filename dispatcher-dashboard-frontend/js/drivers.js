@@ -1,5 +1,6 @@
 import { getDrivers, getOrders, deleteDriver } from "./api.js";
 import { showToast, confirmAction } from "./ui.js";
+import { displayPhone } from "./phone.js";
 
 const tableBody = document.querySelector("#driversTable tbody");
 
@@ -43,7 +44,7 @@ async function loadDrivers() {
       row.innerHTML = `
         <td data-label="ID">${driver.id ?? ""}</td>
         <td data-label="Full Name">${driver.full_name ?? ""}</td>
-        <td data-label="Phone">${driver.phone ?? ""}</td>
+        <td data-label="Phone">${displayPhone(driver.phone)}</td>
         <td data-label="Status">${createStatusBadge(driverStatus)}</td>
         <td data-label="Performance">
           <button class="btn-secondary" data-performance="${driver.id}">
