@@ -92,6 +92,14 @@ async function startServer() {
     await pool.query(`ALTER TABLE drivers ADD COLUMN IF NOT EXISTS last_location_at TIMESTAMPTZ;`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS store_id INT REFERENCES stores(id);`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;`);
+    // When the driver set off with the order, and when it came back. The
+    // Performance page runs on both: the average delivery time is measured
+    // from the start of the trip rather than from when Shopify created the
+    // order, and a return is dated by the day it happened rather than by the
+    // day the order was placed — which used to keep returns of older orders
+    // out of the day being read entirely.
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_started_at TIMESTAMP;`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS returned_at TIMESTAMP;`);
     // Drives the dashboard's retention window for completed orders.
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMP;`);
     // Records whether the customer had already paid online before delivery.

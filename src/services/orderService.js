@@ -300,12 +300,30 @@ function statusUpdateQuery(status) {
               fulfillment_status = 'fulfilled'
             WHERE id = $2 AND store_id = $3 RETURNING *`;
   }
+  // A return is stamped for the same reason a delivery is: it is the only
+  // record of when the order came back, and the Performance page dates it by
+  // that rather than by when Shopify created the order — a Monday order
+  // brought back on Wednesday belongs to Wednesday's sheet.
+  if (status === "RETURNED") {
+    return `UPDATE orders SET order_status = $1, returned_at = NOW()
+            WHERE id = $2 AND store_id = $3 RETURNING *`;
+  }
+  // The dispatcher's equivalent of the driver tapping "Start Delivery": from
+  // here on the order is on the road, and the clock the average delivery time
+  // is measured against starts.
+  if (status === "OUT_FOR_DELIVERY") {
+    return `UPDATE orders SET order_status = $1, delivery_started_at = NOW(),
+              returned_at = NULL
+            WHERE id = $2 AND store_id = $3 RETURNING *`;
+  }
   // Sending an order back to Unfulfilled cancels its fulfillment in Shopify,
   // so the mirror has to be cleared — the webhooks COALESCE a null coming back
-  // from Shopify and would never unset it on their own.
+  // from Shopify and would never unset it on their own. The order is at the
+  // shop again, so neither the return nor the trip that led to it still holds.
   if (status === "UNFULFILLED") {
     return `UPDATE orders SET order_status = $1, fulfilled_at = NULL,
-              fulfillment_status = NULL
+              fulfillment_status = NULL, returned_at = NULL,
+              delivery_started_at = NULL
             WHERE id = $2 AND store_id = $3 RETURNING *`;
   }
   // Cancelling releases the driver — there is nothing left for them to deliver.
@@ -313,7 +331,9 @@ function statusUpdateQuery(status) {
     return `UPDATE orders SET order_status = $1, assigned_driver_id = NULL
             WHERE id = $2 AND store_id = $3 RETURNING *`;
   }
-  return `UPDATE orders SET order_status = $1
+  // ASSIGNED and PICKED_UP: the order is live again, so a return recorded
+  // earlier no longer describes where it is.
+  return `UPDATE orders SET order_status = $1, returned_at = NULL
           WHERE id = $2 AND store_id = $3 RETURNING *`;
 }
 
@@ -468,16 +488,27 @@ async function deleteOrderEverywhere(orderId, storeId) {
 }
 
 // Driver-scoped updates — drivers are global, no store filter needed here.
+//
+// The same timestamps the dispatcher's path stamps (statusUpdateQuery above)
+// are stamped here, because the driver app is where most of these transitions
+// actually happen: a return marked from the app is still the moment the order
+// came back, and the Performance page reads it that way for both.
+function driverStatusUpdateSet(status) {
+  if (status === "DELIVERED") return "order_status = $1, delivered_at = NOW()";
+  if (status === "RETURNED") return "order_status = $1, returned_at = NOW()";
+  // The app sends ASSIGNED when a returned order is taken out again. That
+  // re-opens it, so the return no longer stands and the delivery clock is
+  // cleared for the new trip — the "Start Delivery" tap that follows restarts
+  // it (startDriverOrderDelivery below).
+  if (status === "ASSIGNED") {
+    return "order_status = $1, returned_at = NULL, delivery_started_at = NULL";
+  }
+  return "order_status = $1";
+}
+
 async function updateDriverOrderStatus(orderId, driverId, status) {
-  const query =
-    status === "DELIVERED"
-      ? `UPDATE orders
-         SET order_status = $1, delivered_at = NOW()
-         WHERE id = $2 AND assigned_driver_id = $3
-         RETURNING *,
-           (SELECT full_name FROM drivers WHERE id = $3) AS driver_name`
-      : `UPDATE orders
-         SET order_status = $1
+  const query = `UPDATE orders
+         SET ${driverStatusUpdateSet(status)}
          WHERE id = $2 AND assigned_driver_id = $3
          RETURNING *,
            (SELECT full_name FROM drivers WHERE id = $3) AS driver_name`;
@@ -485,6 +516,25 @@ async function updateDriverOrderStatus(orderId, driverId, status) {
   const result = await pool.query(query, [status, orderId, driverId]);
   const row = result.rows[0];
   return status === "DELIVERED" ? ensureTrackingToken(row) : row;
+}
+
+// The driver tapped "Start Delivery" — they are setting off with this order
+// now. Only the timestamp is written: order_status stays where it is because
+// moving an order to PICKED_UP or OUT_FOR_DELIVERY is the dispatcher's call,
+// and the app has always left that alone.
+//
+// This is what "avg to deliver" is measured from. It is re-stamped on every
+// start rather than kept at the first one, so an order that went out, came
+// back and went out again is timed from the trip that actually delivered it.
+async function startDriverOrderDelivery(orderId, driverId) {
+  const result = await pool.query(
+    `UPDATE orders
+     SET delivery_started_at = NOW(), returned_at = NULL
+     WHERE id = $1 AND assigned_driver_id = $2
+     RETURNING *`,
+    [orderId, driverId]
+  );
+  return result.rows[0];
 }
 
 // Saves the note the driver wrote on one of their own orders. The
@@ -705,6 +755,7 @@ module.exports = {
   markOrderPaid,
   deleteOrderEverywhere,
   updateDriverOrderStatus,
+  startDriverOrderDelivery,
   updateDriverOrderNote,
   getOrdersByDriverId,
   getCompletedOrdersByDriverId,
