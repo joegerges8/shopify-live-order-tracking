@@ -15,6 +15,7 @@ const morgan = require("morgan");
 
 const webhookRoutes = require("./routes/webhookRoutes");
 const orderRoutes = require("./routes/orderRoutes");
+const statsRoutes = require("./routes/statsRoutes");
 const driverRoutes = require("./routes/driverRoutes");
 const mapsRoutes = require("./routes/mapsRoutes");
 const trackingRoutes = require("./routes/trackingRoutes");
@@ -153,6 +154,7 @@ app.use("/webhooks/shopify", webhookRoutes);
 // Normal API routes
 app.use("/api/admin", adminRoutes);
 app.use("/api/orders", requireAdminAuth, orderRoutes);
+app.use("/api/stats", requireAdminAuth, statsRoutes);
 app.use("/api/drivers", driverRoutes);
 app.use("/api/maps", mapsRoutes);
 app.use("/api/track", trackingRoutes);

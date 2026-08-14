@@ -334,4 +334,12 @@ module.exports = {
   getDriverPerformanceOrders,
   feePerDelivery,
   reportTimezone,
+  // Shared with statisticsService so the Statistics page counts a delivery,
+  // dates it and reads the store's calendar exactly the way this page does. Two
+  // copies of these rules would eventually disagree, and the first anyone would
+  // hear of it is a dispatcher finding two different answers for one day.
+  KIND_EXPR,
+  FINISHED_AT,
+  localExpr,
+  round2,
 };
