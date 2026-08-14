@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Statistics</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="js/auth.js"></script>
+  <script>requireAuth();</script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Dispatcher</h2>
+      <nav>
+        <a href="index.html">Orders</a>
+        <a href="drivers.html">Drivers</a>
+        <a href="live-map.html">Live Map</a>
+        <a href="performance.html">Performance</a>
+        <a href="statistics.html" class="active">Statistics</a>
+      </nav>
+      <button class="btn-logout" onclick="logout()">Logout</button>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h1>Statistics</h1>
+        <div class="header-actions">
+          <button id="exportBtn" class="small-btn" type="button">Export CSV</button>
+          <button id="printBtn" class="small-btn" type="button">Print report</button>
+        </div>
+      </div>
+
+      <!-- The window everything on the page is counted over. Every figure below
+           is also shown against the window immediately before it, of the same
+           length, because a delivery count on its own says nothing. -->
+      <div class="period-bar">
+        <div class="period-presets" role="group" aria-label="Period">
+          <button type="button" class="period-btn" data-preset="today">Today</button>
+          <button type="button" class="period-btn" data-preset="week">This week</button>
+          <button type="button" class="period-btn" data-preset="last7">Last 7 days</button>
+          <button type="button" class="period-btn" data-preset="month">This month</button>
+          <button type="button" class="period-btn" data-preset="last30">Last 30 days</button>
+          <button type="button" class="period-btn" data-preset="last90">Last 90 days</button>
+        </div>
+
+        <div class="period-range">
+          <label for="fromDate">From</label>
+          <input type="date" id="fromDate" />
+          <label for="toDate">To</label>
+          <input type="date" id="toDate" />
+          <button id="applyRange" class="small-btn" type="button">Apply</button>
+        </div>
+      </div>
+
+      <p id="periodSummary" class="period-summary"></p>
+
+      <!-- The one figure the page leads with. Everything else is the working
+           behind it. -->
+      <section class="hero-band" id="heroBand">
+        <div class="hero-figure">
+          <p class="stat-title">Revenue delivered</p>
+          <p class="hero-value" id="heroValue">$0</p>
+          <p class="hero-sub" id="heroSub"></p>
+        </div>
+        <div class="hero-spark" id="heroSpark" aria-hidden="true"></div>
+        <div class="hero-splits" id="heroSplits"></div>
+      </section>
+
+      <h2 class="section-title stats-section-title">The period at a glance</h2>
+      <p class="section-lead" id="kpiLead"></p>
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <h2 class="section-title stats-section-title">Over time</h2>
+
+      <section class="viz-card">
+        <div class="viz-card-head">
+          <div>
+            <h3 class="viz-card-title">Orders placed against deliveries completed</h3>
+            <p class="viz-card-sub">
+              Placed is dated by the day the order arrived; completed by the day
+              the driver finished with it. The gap between the two lines is the
+              backlog building up or clearing.
+            </p>
+          </div>
+          <button type="button" class="viz-toggle" data-table-toggle="trend" aria-pressed="false">
+            Show table
+          </button>
+        </div>
+        <div class="viz-plot" id="trendChart"></div>
+        <div id="trendLegend"></div>
+        <div class="viz-table-wrap" id="trendTable" hidden></div>
+      </section>
+
+      <section class="viz-card">
+        <div class="viz-card-head">
+          <div>
+            <h3 class="viz-card-title">Money by day</h3>
+            <p class="viz-card-sub">
+              What delivering brought in each day, and how much of it came back
+              as cash in a driver's bag rather than having been paid online.
+            </p>
+          </div>
+          <button type="button" class="viz-toggle" data-table-toggle="money" aria-pressed="false">
+            Show table
+          </button>
+        </div>
+        <div class="viz-plot" id="moneyChart"></div>
+        <div id="moneyLegend"></div>
+        <div class="viz-table-wrap" id="moneyTable" hidden></div>
+      </section>
+
+      <h2 class="section-title stats-section-title">When the work happens</h2>
+
+      <div class="viz-row">
+        <section class="viz-card">
+          <div class="viz-card-head">
+            <div>
+              <h3 class="viz-card-title">Deliveries by hour of day</h3>
+              <p class="viz-card-sub">
+                When the fleet is actually needed. Read in
+                <span id="hourTimezone">the store's timezone</span>.
+              </p>
+            </div>
+            <button type="button" class="viz-toggle" data-table-toggle="hourly" aria-pressed="false">
+              Show table
+            </button>
+          </div>
+          <div class="viz-plot" id="hourlyChart"></div>
+          <p class="viz-note" id="hourlyNote"></p>
+          <div class="viz-table-wrap" id="hourlyTable" hidden></div>
+        </section>
+
+        <section class="viz-card">
+          <div class="viz-card-head">
+            <div>
+              <h3 class="viz-card-title">Deliveries by weekday</h3>
+              <p class="viz-card-sub">
+                The week's shape, added up across the whole period. Monday first,
+                matching the driver app's week.
+              </p>
+            </div>
+            <button type="button" class="viz-toggle" data-table-toggle="weekday" aria-pressed="false">
+              Show table
+            </button>
+          </div>
+          <div class="viz-plot" id="weekdayChart"></div>
+          <p class="viz-note" id="weekdayNote"></p>
+          <div class="viz-table-wrap" id="weekdayTable" hidden></div>
+        </section>
+      </div>
+
+      <section class="viz-card">
+        <div class="viz-card-head">
+          <div>
+            <h3 class="viz-card-title">How long a delivery takes</h3>
+            <p class="viz-card-sub">
+              Every timed trip in the period, counted into buckets — measured
+              from the driver tapping Start Delivery to the order being marked
+              delivered. The average alone hides this shape.
+            </p>
+          </div>
+          <button type="button" class="viz-toggle" data-table-toggle="duration" aria-pressed="false">
+            Show table
+          </button>
+        </div>
+        <div class="viz-plot" id="durationChart"></div>
+        <p class="viz-note" id="durationNote"></p>
+        <div class="viz-table-wrap" id="durationTable" hidden></div>
+      </section>
+
+      <h2 class="section-title stats-section-title">How orders end up</h2>
+
+      <div class="viz-row">
+        <section class="viz-card">
+          <div class="viz-card-head">
+            <div>
+              <h3 class="viz-card-title">From order to doorstep</h3>
+              <p class="viz-card-sub">
+                The orders placed in this period, followed to where each one got
+                to. Every stage is a subset of the one above it.
+              </p>
+            </div>
+            <button type="button" class="viz-toggle" data-table-toggle="funnel" aria-pressed="false">
+              Show table
+            </button>
+          </div>
+          <div class="viz-plot" id="funnelChart"></div>
+          <p class="viz-note" id="funnelNote"></p>
+          <div class="viz-table-wrap" id="funnelTable" hidden></div>
+        </section>
+
+        <section class="viz-card">
+          <div class="viz-card-head">
+            <div>
+              <h3 class="viz-card-title">What became of them</h3>
+              <p class="viz-card-sub">
+                The same orders, split by outcome. Still open means the order is
+                somewhere between the shop and the customer right now.
+              </p>
+            </div>
+            <button type="button" class="viz-toggle" data-table-toggle="outcome" aria-pressed="false">
+              Show table
+            </button>
+          </div>
+          <div class="viz-plot viz-plot-short" id="outcomeChart"></div>
+          <div id="outcomeLegend"></div>
+          <div class="viz-table-wrap" id="outcomeTable" hidden></div>
+
+          <h4 class="viz-subtitle">How the money arrived</h4>
+          <p class="viz-card-sub">
+            Prepaid orders bring in no cash at the door — the driver is still
+            paid for the trip, which is the gap someone counting the bag notices.
+          </p>
+          <div class="viz-plot viz-plot-short" id="paymentChart"></div>
+          <div id="paymentLegend"></div>
+          <div class="viz-table-wrap" id="paymentTable" hidden></div>
+        </section>
+      </div>
+
+      <h2 class="section-title stats-section-title">Where the work is</h2>
+
+      <div class="viz-row">
+        <section class="viz-card">
+          <div class="viz-card-head">
+            <div>
+              <h3 class="viz-card-title">Deliveries by area</h3>
+              <p class="viz-card-sub">
+                The caza each order was classified into. Hover a bar for the
+                money and the average trip behind it.
+              </p>
+            </div>
+            <button type="button" class="viz-toggle" data-table-toggle="areas" aria-pressed="false">
+              Show table
+            </button>
+          </div>
+          <div class="viz-plot" id="areaChart"></div>
+          <div class="viz-table-wrap" id="areasTable" hidden></div>
+        </section>
+
+        <section class="viz-card">
+          <div class="viz-card-head">
+            <div>
+              <h3 class="viz-card-title">Deliveries by city</h3>
+              <p class="viz-card-sub">
+                The ten busiest towns, as written on the order.
+              </p>
+            </div>
+            <button type="button" class="viz-toggle" data-table-toggle="cities" aria-pressed="false">
+              Show table
+            </button>
+          </div>
+          <div class="viz-plot" id="cityChart"></div>
+          <div class="viz-table-wrap" id="citiesTable" hidden></div>
+        </section>
+      </div>
+
+      <h2 class="section-title stats-section-title">Drivers</h2>
+
+      <section class="viz-card">
+        <div class="viz-card-head">
+          <div>
+            <h3 class="viz-card-title">Deliveries completed, by driver</h3>
+            <p class="viz-card-sub">
+              The same figures the Performance page settles up on, so the two
+              pages can be read against each other.
+              <a href="performance.html" class="viz-link">Open Performance →</a>
+            </p>
+          </div>
+          <button type="button" class="viz-toggle" data-table-toggle="drivers" aria-pressed="false">
+            Show table
+          </button>
+        </div>
+        <div class="viz-plot" id="driverChart"></div>
+        <div class="viz-table-wrap" id="driversTable" hidden></div>
+      </section>
+
+      <h2 class="section-title stats-section-title">Right now</h2>
+      <p class="section-lead">
+        The backlog as it stands this second — not part of the period above,
+        because "unassigned" is a fact about now rather than about a date.
+      </p>
+      <div class="stats-grid stats-grid-5" id="liveGrid"></div>
+
+      <h2 class="section-title stats-section-title">Day by day</h2>
+      <p class="section-lead">
+        Every figure on this page, one row per day. This is also what the CSV
+        export writes.
+      </p>
+      <div class="viz-table-wrap viz-table-tall" id="dailyTable"></div>
+    </main>
+  </div>
+
+  <script type="module" src="js/statistics.js"></script>
+</body>
+</html>

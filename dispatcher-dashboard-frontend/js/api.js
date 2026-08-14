@@ -171,6 +171,29 @@ export async function getDriverPerformanceOrders(driverId, range) {
   return handleResponse(response);
 }
 
+// Everything the Statistics page draws, for one period: the headline figures,
+// the same figures for the window before it, and every series and breakdown
+// behind them.
+//
+// Takes either a { from, to } range or { days: 30 }, which asks the backend for
+// the last N days ending on the store's own today. The second form exists
+// because the browser cannot work out which day that is until a response has
+// told it which timezone the store keeps.
+export async function getStatistics(range) {
+  const query = new URLSearchParams();
+  if (range && range.days) query.set("days", String(range.days));
+  else if (range) {
+    if (range.from) query.set("from", range.from);
+    if (range.to) query.set("to", range.to);
+  }
+  const suffix = query.toString();
+
+  const response = await fetch(`${BASE_URL}/stats${suffix ? `?${suffix}` : ""}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse(response);
+}
+
 // Every driver's latest GPS fix, for the live map. Drivers with no ping yet
 // come back with location: null rather than being left out, so the fleet list
 // beside the map is the whole fleet.

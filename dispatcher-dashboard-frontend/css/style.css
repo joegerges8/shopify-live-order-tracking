@@ -1311,6 +1311,46 @@ button.stat-card:focus-visible {
     font-size: 11px;
     white-space: normal;
   }
+
+  /* The statistics report on paper. The charts are SVG, so they print as
+     drawings rather than as screenshots — what has to go is the chrome around
+     them: the table toggles do nothing on paper, and a card that breaks across
+     two sheets loses its axis. */
+  .viz-toggle,
+  .viz-tip {
+    display: none !important;
+  }
+
+  .viz-card,
+  .kpi-card,
+  .hero-band {
+    box-shadow: none;
+    border: 1px solid #d1d5db;
+    break-inside: avoid;
+  }
+
+  .viz-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* On screen the day-by-day sheet scrolls in its own box; on paper it has to
+     run to its full length or half the report is missing. */
+  .viz-table-tall {
+    max-height: none;
+    overflow: visible;
+    box-shadow: none;
+    border: 1px solid #d1d5db;
+  }
+
+  /* Printed, the marks have to survive a browser that strips backgrounds. */
+  .viz-svg {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .stats-section-title {
+    break-after: avoid;
+  }
 }
 
 /* When the fees outran the cash collected, the settlement runs the other way
@@ -1671,6 +1711,424 @@ button.stat-card:focus-visible {
 }
 
 /* ===========================================================================
+   STATISTICS
+
+   The reporting page: one headline figure, a row of tiles under it, and then a
+   column of chart cards. Everything here is drawn against the same idea — the
+   data is the only thing on the page allowed to be loud, so the cards are white
+   and quiet, the grid is a hairline, and the ink for every label is the same
+   grey the rest of the dashboard writes in. A chart's colour lives in its marks
+   and in the swatch beside its label, never in the words themselves: three of
+   the palette's hues are too light to read as text on white, which is also why
+   every chart here ships with a table twin.
+   =========================================================================== */
+
+.stats-section-title {
+  margin: 34px 0 6px;
+}
+
+.section-lead {
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+  max-width: 76ch;
+}
+
+/* --- The headline ---------------------------------------------------------
+   Exactly one hero figure on the page. The two lines under it and the three
+   splits beside it are what it is made of, so nobody has to open a chart to
+   find out how the money arrived. */
+
+.hero-band {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex-wrap: wrap;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px 26px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  margin-bottom: 8px;
+}
+
+.hero-figure {
+  min-width: 220px;
+}
+
+/* Proportional figures, not tabular: at this size equal-width digits leave the
+   number looking gappy. Tabular is for columns that have to line up. */
+.hero-value {
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: #111827;
+  margin: 4px 0 8px;
+}
+
+.hero-sub {
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 46ch;
+}
+
+.hero-spark {
+  flex: 0 0 auto;
+}
+
+.hero-splits {
+  display: flex;
+  gap: 26px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.hero-split-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111827;
+  margin-top: 4px;
+}
+
+.hero-split .stat-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+/* --- The tiles ------------------------------------------------------------ */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.kpi-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.kpi-value {
+  font-size: 30px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.15;
+}
+
+.kpi-value-good {
+  color: #15803d;
+}
+
+.kpi-value-bad {
+  color: #b91c1c;
+}
+
+/* The direction is written out — "better" / "worse" — rather than left to the
+   colour, so the comparison survives a colourblind reader and a grayscale
+   printer. The arrow and the colour are the fast read; the word is the true
+   one. */
+.kpi-delta {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-top: 8px;
+}
+
+.kpi-delta-up {
+  color: #15803d;
+}
+
+.kpi-delta-down {
+  color: #b91c1c;
+}
+
+.kpi-delta-flat {
+  color: #9ca3af;
+}
+
+.kpi-spark {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+/* --- Chart cards ---------------------------------------------------------- */
+
+.viz-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 22px 24px 18px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  margin-bottom: 18px;
+  /* A grid item's minimum size is its content, so a wide chart would push the
+     row rather than fit inside it. Nothing on this page is allowed to be wider
+     than the space it was given. */
+  min-width: 0;
+}
+
+/* Two cards abreast where there is room, one where there is not. Charts are
+   drawn at the width they actually have, so a card that changes width redraws
+   rather than stretching. */
+.viz-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 18px;
+}
+
+.viz-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.viz-card-title {
+  font-size: 17px;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.viz-subtitle {
+  font-size: 15px;
+  color: #111827;
+  margin: 22px 0 4px;
+  padding-top: 18px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.viz-card-sub {
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 68ch;
+}
+
+.viz-note {
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 10px;
+  max-width: 76ch;
+}
+
+.viz-link {
+  color: #1e3a8a;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* The table twin's switch. Quiet: it is an alternative reading of the card, not
+   an action on the data. */
+.viz-toggle {
+  flex: 0 0 auto;
+  background: #ffffff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+.viz-toggle:hover {
+  background: #eef2ff;
+  color: #1e3a8a;
+}
+
+.viz-toggle[aria-pressed="true"] {
+  background: #1e3a8a;
+  border-color: #1e3a8a;
+  color: #ffffff;
+}
+
+.viz-plot {
+  width: 100%;
+  min-width: 0;
+}
+
+.viz-svg {
+  display: block;
+  max-width: 100%;
+  /* Charts are re-measured and redrawn on resize; touch-action keeps a hover
+     read on a phone from fighting the page scroll. */
+  touch-action: pan-y;
+}
+
+.viz-capture {
+  cursor: crosshair;
+  outline: none;
+}
+
+.viz-capture:focus-visible {
+  outline: 2px solid #1e3a8a;
+  outline-offset: -2px;
+}
+
+/* --- Legends -------------------------------------------------------------- */
+
+.viz-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  list-style: none;
+  margin-top: 12px;
+}
+
+.viz-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.viz-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
+.viz-legend-value {
+  font-weight: 700;
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Table twins ---------------------------------------------------------- */
+
+.viz-table-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+/* The day-by-day sheet is the one long table on the page; it scrolls in its own
+   box rather than making the page taller than the report it summarises. */
+.viz-table-tall {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 8px 18px 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.viz-table {
+  width: 100%;
+  border-collapse: collapse;
+  /* Columns of figures have to line up, which is exactly where equal-width
+     digits belong. */
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-table th,
+.viz-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 13px;
+  text-align: right;
+}
+
+.viz-table th:first-child,
+.viz-table td:first-child {
+  text-align: left;
+  font-variant-numeric: normal;
+}
+
+.viz-table thead th {
+  color: #6b7280;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+}
+
+.viz-table tbody th {
+  font-weight: 600;
+  color: #111827;
+}
+
+.viz-table tbody td {
+  color: #374151;
+}
+
+.viz-table tbody tr:last-child th,
+.viz-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* --- Tooltip -------------------------------------------------------------- */
+
+/* Fixed to the viewport so it is never clipped by a card's own overflow, and
+   pointer-events off so it can never sit between the pointer and the mark it
+   is describing. */
+.viz-tip {
+  position: fixed;
+  z-index: 1200;
+  pointer-events: none;
+  background: #111827;
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.28);
+  max-width: 260px;
+}
+
+.viz-tip[hidden] {
+  display: none;
+}
+
+.viz-tip-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.viz-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-tip-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.viz-tip-label {
+  color: #d1d5db;
+}
+
+.viz-tip-value {
+  margin-left: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Refetching ----------------------------------------------------------- */
+
+/* The previous render is held at reduced opacity while a new period loads.
+   Blanking a page this tall would throw the reader's place away along with the
+   numbers, and a skeleton would jump the layout twice. */
+.main-content.is-loading {
+  opacity: 0.55;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+/* ===========================================================================
    LAPTOP SCREENS
 
    The dashboard was drawn against a desktop monitor: a 260px sidebar, a 54px
@@ -1725,6 +2183,29 @@ button.stat-card:focus-visible {
 
   .section-title {
     font-size: 19px;
+  }
+
+  /* The statistics page loses the same chrome as everything else here — type
+     scale and padding come down, the charts keep their heights. */
+  .hero-value {
+    font-size: 40px;
+  }
+
+  .hero-band {
+    padding: 18px 20px;
+    gap: 20px;
+  }
+
+  .kpi-value {
+    font-size: 26px;
+  }
+
+  .viz-card {
+    padding: 18px 18px 14px;
+  }
+
+  .viz-card-title {
+    font-size: 16px;
   }
 
   .sync-status {
@@ -1988,13 +2469,16 @@ button.stat-card:focus-visible {
     margin-right: auto;
   }
 
-  /* Second line, full width: the three tabs read as a row of their own rather
-     than being squeezed in beside the title and the logout button. */
+  /* Second line, full width: the tabs read as a row of their own rather than
+     being squeezed in beside the title and the logout button. Five of them no
+     longer fit across a 390px phone, so the row wraps onto a second line
+     instead of pushing the last tab off the screen. */
   .sidebar nav {
     order: 3;
     width: 100%;
     flex-direction: row;
-    gap: 20px;
+    flex-wrap: wrap;
+    gap: 10px 18px;
   }
 
   .sidebar nav a {
@@ -2033,6 +2517,67 @@ button.stat-card:focus-visible {
 
   .stat-card h3 {
     font-size: 22px;
+  }
+
+  /* Statistics on a phone. The charts already redraw to whatever width they are
+     given; what has to change is everything that was laid out in columns beside
+     them — the hero's splits, the two-abreast card rows, and the toggle, which
+     drops under the title rather than squeezing it into two words a line. */
+  .hero-band {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .hero-value {
+    font-size: 34px;
+  }
+
+  .hero-splits {
+    margin-left: 0;
+    gap: 16px;
+  }
+
+  .hero-split-value {
+    font-size: 18px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .kpi-card {
+    padding: 14px;
+  }
+
+  .kpi-value {
+    font-size: 22px;
+  }
+
+  .viz-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .viz-card {
+    padding: 16px 14px 12px;
+    margin-bottom: 12px;
+  }
+
+  .viz-card-head {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .viz-toggle {
+    min-height: 40px;
+  }
+
+  .viz-table-tall {
+    max-height: 380px;
+    padding: 6px 12px 10px;
   }
 
   .filters-bar {
@@ -2427,6 +2972,13 @@ button.stat-card:focus-visible {
 
   .sidebar nav a[href="performance.html"]::before {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20h16'/%3E%3Cpath d='M7 20v-6M12 20V7M17 20v-9'/%3E%3C/svg%3E");
+  }
+
+  /* A pie is the one chart shape nobody mistakes for anything else at 22px,
+     which is what this icon has to survive being shrunk to. The bar-chart
+     glyph next door already speaks for Performance. */
+  .sidebar nav a[href="statistics.html"]::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3a9 9 0 1 0 9 9h-9z'/%3E%3Cpath d='M14.5 2.5A8 8 0 0 1 21.5 9.5h-7z'/%3E%3C/svg%3E");
   }
 
   /* Which page you are on has to survive the labels going away, and an
