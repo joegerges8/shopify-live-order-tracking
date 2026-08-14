@@ -168,6 +168,10 @@ async function postMyOrderLocation(req, res) {
         latitude,
         longitude,
         updated_at: created.created_at,
+        // Zero by construction — the row was written a moment ago. The page
+        // ages it forward itself, so a pushed fix resets its "last seen" clock
+        // the same way a polled one does.
+        age_seconds: 0,
       });
 
       // Push a fresh ETA alongside the position so the customer's page updates
