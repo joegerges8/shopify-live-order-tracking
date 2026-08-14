@@ -202,13 +202,44 @@ async function postMyOrderLocation(req, res) {
   }
 }
 
+// How far back a driver-supplied timestamp is still believed. A delivery
+// marked with no signal can sit on the phone for a long time — overnight, or
+// over a weekend if the driver does not open the app — and all of that should
+// be recorded when it happened. Past a week it is far more likely to be a
+// phone with a wrong date than a genuinely week-old delivery, and the
+// server's own clock is the safer answer.
+const MAX_BACKDATE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Phone clocks are not perfectly in step with the server's, so a stamp a
+// little in the future is normal and simply read as "now". Anything beyond
+// this is wrong enough to ignore — a future delivered_at would sort ahead of
+// every real one on the dashboard and never fall out of "today".
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+// The moment the driver actually marked the order, when the app is telling us
+// it is not now: an outcome recorded offline and retried once the connection
+// came back. Returns null — meaning "use the server clock" — for anything
+// missing, unparseable, or outside the window above.
+function parseOccurredAt(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+
+  const at = new Date(value);
+  if (Number.isNaN(at.getTime())) return null;
+
+  const now = Date.now();
+  if (at.getTime() > now + MAX_CLOCK_SKEW_MS) return null;
+  if (at.getTime() < now - MAX_BACKDATE_MS) return null;
+
+  return at;
+}
+
 // Updates an order status from the driver app. The ownership check is folded
 // into the UPDATE query so the normal "Mark as Picked Up" path uses one DB call.
 async function patchMyOrderStatus(req, res) {
   try {
     const orderId = Number(req.params.id);
     const driverId = req.driverId;
-    const { status } = req.body || {};
+    const { status, occurred_at: occurredAtRaw } = req.body || {};
 
     const validStatuses = [
       "ASSIGNED",
@@ -231,7 +262,12 @@ async function patchMyOrderStatus(req, res) {
       return res.status(400).json({ error: "Invalid status value" });
     }
 
-    const updated = await updateDriverOrderStatus(orderId, driverId, status);
+    const updated = await updateDriverOrderStatus(
+      orderId,
+      driverId,
+      status,
+      parseOccurredAt(occurredAtRaw)
+    );
     if (!updated) {
       const order = await getOrderByIdForDriver(orderId, driverId);
       if (!order) {

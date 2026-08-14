@@ -493,9 +493,21 @@ async function deleteOrderEverywhere(orderId, storeId) {
 // are stamped here, because the driver app is where most of these transitions
 // actually happen: a return marked from the app is still the moment the order
 // came back, and the Performance page reads it that way for both.
-function driverStatusUpdateSet(status) {
-  if (status === "DELIVERED") return "order_status = $1, delivered_at = NOW()";
-  if (status === "RETURNED") return "order_status = $1, returned_at = NOW()";
+//
+// occurredAt is when the driver actually marked it, and is only ever different
+// from now for a delivery the app could not send at the time: marked in a
+// basement or a dead spot, queued on the phone, and retried when the signal
+// came back. Stamping NOW() on those would date every one of them to whenever
+// the phone next found a connection — a delivery finished at 6pm and synced
+// the next morning would land in the wrong day's takings and drag the
+// dispatcher's average delivery time out with it.
+//
+// The controller is what decides whether the timestamp it was handed is
+// believable; by the time it reaches here it has already been vetted.
+function driverStatusUpdateSet(status, occurredAt) {
+  const stamp = occurredAt ? "$4" : "NOW()";
+  if (status === "DELIVERED") return `order_status = $1, delivered_at = ${stamp}`;
+  if (status === "RETURNED") return `order_status = $1, returned_at = ${stamp}`;
   // The app sends ASSIGNED when a returned order is taken out again. That
   // re-opens it, so the return no longer stands and the delivery clock is
   // cleared for the new trip — the "Start Delivery" tap that follows restarts
@@ -506,14 +518,25 @@ function driverStatusUpdateSet(status) {
   return "order_status = $1";
 }
 
-async function updateDriverOrderStatus(orderId, driverId, status) {
+async function updateDriverOrderStatus(orderId, driverId, status, occurredAt = null) {
+  // Only DELIVERED and RETURNED write a timestamp, so a time sent with any
+  // other status has nothing to bind to and its placeholder would go unused —
+  // which Postgres rejects outright.
+  const stamped =
+    occurredAt && (status === "DELIVERED" || status === "RETURNED")
+      ? occurredAt
+      : null;
+
   const query = `UPDATE orders
-         SET ${driverStatusUpdateSet(status)}
+         SET ${driverStatusUpdateSet(status, stamped)}
          WHERE id = $2 AND assigned_driver_id = $3
          RETURNING *,
            (SELECT full_name FROM drivers WHERE id = $3) AS driver_name`;
 
-  const result = await pool.query(query, [status, orderId, driverId]);
+  const params = [status, orderId, driverId];
+  if (stamped) params.push(stamped);
+
+  const result = await pool.query(query, params);
   const row = result.rows[0];
   return status === "DELIVERED" ? ensureTrackingToken(row) : row;
 }
