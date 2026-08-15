@@ -116,6 +116,17 @@ CREATE TABLE orders (
                                               -- order can write it. NULL until they do.
     order_status VARCHAR(30) DEFAULT 'UNFULFILLED',
     assigned_driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
+    route_sequence INT,                       -- where this order falls in its driver's run,
+                                              -- counting from 1. Written by
+                                              -- src/services/routeOrderService.js whenever the
+                                              -- run changes shape: Google's optimised driving
+                                              -- order from the warehouse when the Directions
+                                              -- API can be reached, straight-line distance from
+                                              -- the warehouse otherwise. NULL for an order not
+                                              -- assigned to anyone, one whose city resolves to
+                                              -- no coordinates, and for the few seconds between
+                                              -- an assignment and the resequence it schedules —
+                                              -- those sort last rather than disappearing.
     tracking_token TEXT,                      -- shared with customer for live tracking
     carrier_tracking_url TEXT,                -- set when the order ships with an outside
                                               -- carrier (Wakilni and the like) instead of
@@ -175,6 +186,11 @@ CREATE TABLE orders (
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN line_items JSONB NOT NULL DEFAULT '[]'::JSONB;
 -- Existing rows stay empty until the order is re-imported from Shopify
 -- (the dashboard's "import orders" action backfills them).
+-- Migration for existing databases: ALTER TABLE orders ADD COLUMN route_sequence INT;
+-- Existing rows stay NULL and sort to the bottom of their driver's list until the
+-- next assignment for that driver triggers a resequence, or until
+--   node scripts/resequence-routes.js --all
+-- is run to fill them in one pass.
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN driver_note TEXT;
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN note TEXT;
 -- Existing rows stay NULL until the order is updated in Shopify (the orders/updated

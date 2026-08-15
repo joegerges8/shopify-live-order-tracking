@@ -11,6 +11,7 @@ const {
   fetchOrderCustomerFieldsFromShopify,
   importOrdersFromShopify,
 } = require("./shopifyService");
+const { scheduleResequence } = require("./routeOrderService");
 
 // How recent a GPS ping must be for an order to count as "the driver is on the
 // road with it". Matches ETA_START_WINDOW_SECONDS in etaService — both answer
@@ -258,24 +259,45 @@ async function assignDriverToOrder(orderId, driverId, storeId) {
       .catch(err =>
         console.error("[Shopify sync] assign tag failed:", err.message)
       );
+
+    // The driver's run just changed shape, so the order it should be driven in
+    // has to be worked out again. Scheduled rather than awaited: a dispatcher
+    // handing over a morning's work clicks a dozen orders in a row, and the
+    // route is only worth computing once they have finished. See
+    // routeOrderService for why this can never fail the assignment.
+    scheduleResequence(driverId);
   }
   return row;
 }
 
 async function unassignDriverFromOrder(orderId, storeId) {
+  // The driver being taken off the order is read in a CTE rather than from the
+  // RETURNING row, which by then holds the NULL this statement just wrote. The
+  // CTE sees the table as it was before the update, so it names the driver
+  // whose run needs reordering. Their route also loses a stop, so the order's
+  // own sequence goes with it: back in the pool it belongs to no run.
   const result = await pool.query(
-    `UPDATE orders
-     SET assigned_driver_id = NULL, order_status = 'UNFULFILLED'
+    `WITH previous AS (
+       SELECT assigned_driver_id FROM orders WHERE id = $1 AND store_id = $2
+     )
+     UPDATE orders
+     SET assigned_driver_id = NULL, order_status = 'UNFULFILLED', route_sequence = NULL
      WHERE id = $1 AND store_id = $2
-     RETURNING *`,
+     RETURNING *, (SELECT assigned_driver_id FROM previous) AS previous_driver_id`,
     [orderId, storeId]
   );
-  const row = result.rows[0];
-  if (row) {
-    syncOrderTagToShopify(storeId, row.shopify_order_id, "UNFULFILLED").catch(err =>
-      console.error("[Shopify sync] unassign tag failed:", err.message)
-    );
-  }
+  if (!result.rows[0]) return undefined;
+
+  // previous_driver_id belongs to this function, not to the API: the dashboard
+  // is handed the order, and an extra column invented by the query would read
+  // as one of its fields.
+  const { previous_driver_id: previousDriverId, ...row } = result.rows[0];
+
+  syncOrderTagToShopify(storeId, row.shopify_order_id, "UNFULFILLED").catch(err =>
+    console.error("[Shopify sync] unassign tag failed:", err.message)
+  );
+  scheduleResequence(previousDriverId);
+
   return row;
 }
 
@@ -326,9 +348,13 @@ function statusUpdateQuery(status) {
               delivery_started_at = NULL
             WHERE id = $2 AND store_id = $3 RETURNING *`;
   }
-  // Cancelling releases the driver — there is nothing left for them to deliver.
+  // Cancelling releases the driver — there is nothing left for them to deliver,
+  // so the order leaves their route as well. The stops left behind keep the
+  // numbers they had: dropping one out of a sequence leaves a gap, and a gap
+  // sorts exactly the same as no gap.
   if (status === "CANCELLED") {
-    return `UPDATE orders SET order_status = $1, assigned_driver_id = NULL
+    return `UPDATE orders SET order_status = $1, assigned_driver_id = NULL,
+              route_sequence = NULL
             WHERE id = $2 AND store_id = $3 RETURNING *`;
   }
   // ASSIGNED and PICKED_UP: the order is live again, so a return recorded
@@ -577,6 +603,18 @@ async function updateDriverOrderNote(orderId, driverId, note) {
   return result.rows[0];
 }
 
+// The driver's run, in the order it should be driven.
+//
+// route_sequence is written by routeOrderService whenever the run changes
+// shape — Google's optimised order when it can be had, straight-line distance
+// from the warehouse otherwise. Orders it could not place keep a null and fall
+// to the bottom on created_at, where they are still visible and still
+// deliverable; the same is true of every order in the seconds between an
+// assignment and the resequence it schedules.
+//
+// The driver app filters this list by area but does not reorder it beyond
+// lifting the delivery under way to the top, so each area's chip shows a slice
+// of this route — still in route order, because a slice of an ordered list is.
 async function getOrdersByDriverId(driverId) {
   const result = await pool.query(
     `SELECT o.*, s.store_name, s.shop_domain
@@ -584,7 +622,7 @@ async function getOrdersByDriverId(driverId) {
      LEFT JOIN stores s ON s.id = o.store_id
      WHERE o.assigned_driver_id = $1
        AND o.order_status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED')
-     ORDER BY o.created_at DESC`,
+     ORDER BY o.route_sequence ASC NULLS LAST, o.created_at DESC`,
     [driverId]
   );
   return result.rows;
