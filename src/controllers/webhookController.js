@@ -1,6 +1,6 @@
 const pool = require("../config/db");
 const { randomUUID } = require("crypto");
-const { resolveAreaOrUnknown } = require("../utils/areaLookup");
+const { resolveAreaWithCorrections } = require("../services/areaCorrectionsService");
 const {
   syncOrderTagToShopify,
   markFulfilledInShopify,
@@ -151,9 +151,11 @@ async function handleOrderCreated(req, res) {
 
     // Delivery area (caza) derived from the free-text city. Shopify's province
     // field is null on Lebanese orders, so the city string is the only signal.
-    // Falls back to 'Other' rather than null so the dashboard filter and the
-    // driver app always have something to group by.
-    const area = resolveAreaOrUnknown(city);
+    // The dispatcher's stored corrections are consulted first — a city they
+    // once filed by hand files itself from then on — and the static table
+    // covers the rest. Falls back to 'Other' rather than null so the
+    // dashboard filter and the driver app always have something to group by.
+    const area = await resolveAreaWithCorrections(city);
     const totalPrice = order.total_price || 0;
     const financialStatus = order.financial_status || null;
     const fulfillmentStatus = order.fulfillment_status || null;

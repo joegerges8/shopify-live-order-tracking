@@ -436,6 +436,40 @@ function resolveAreaOrUnknown(city) {
   return resolveArea(city) || UNKNOWN_AREA;
 }
 
+// What a dispatcher's area correction should teach the system, if anything.
+//
+// The static table above classifies ~96% of orders; the dashboard lets the
+// dispatcher fix the rest by hand, and this decides whether that fix is worth
+// remembering so the next order with the same city files itself. Pure —
+// storage is areaCorrectionsService's problem — so the rules live in one
+// testable place:
+//
+//   * 'save'   — the table gets this city wrong (or not at all) and the
+//                dispatcher named a real area. Exactly the case worth
+//                learning: "Fraikeh" filed under Metn once means every later
+//                "Fraikeh" order files itself.
+//   * 'forget' — the correction adds nothing the table does not already know,
+//                or the dispatcher moved the order back to the unknown bucket,
+//                disowning whatever was learned before. Either way a stored
+//                row for this city is stale and should go.
+//   * 'none'   — nothing usable to key on: a blank city can only match blank,
+//                and remembering it would stamp one area onto every order
+//                that arrives without a city at all.
+//
+// The key is the whole normalized city string, exact-match only. "Fraikeh
+// dekene l zaytoun" is a different key from "Fraikeh" — narrow on purpose, so
+// a learned correction can never reach past the exact text it was taught on.
+function decideAreaCorrection(city, area) {
+  const key = normalize(city);
+  if (!key || NOT_A_PLACE.has(key)) return { action: "none", key: null };
+
+  if (area === UNKNOWN_AREA || resolveAreaOrUnknown(city) === area) {
+    return { action: "forget", key };
+  }
+
+  return { action: "save", key };
+}
+
 module.exports = {
   AREAS,
   UNKNOWN_AREA,
@@ -444,4 +478,5 @@ module.exports = {
   resolveTown,
   resolveArea,
   resolveAreaOrUnknown,
+  decideAreaCorrection,
 };
