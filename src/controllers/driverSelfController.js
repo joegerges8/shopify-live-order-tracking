@@ -20,6 +20,36 @@ const { syncOrderTagToShopify, markDeliveredInShopify } = require("../services/s
 const { etaForTrackedOrder, clearEta } = require("../services/etaService");
 const { getIO, emitToDispatch, emitToAllDispatch } = require("../socket");
 const { updateDriverLocation } = require("../services/driverService");
+const { resolveCityCentre } = require("../utils/townCoords");
+
+// Adds the centre of each order's town to the rows the driver app receives.
+//
+// The app pins the day's orders on its home map, and almost none of them carry
+// a customer pin: the coordinates columns are empty for most orders, so pinning
+// what we have would leave the map nearly blank while the driver is holding a
+// dozen orders. The town centre is known for practically every order — the same
+// table the ETA has routed to for years — and it answers the question the map is
+// actually being asked: how many orders, and in which towns.
+//
+// Attached here rather than in the SQL because it is a lookup over a static
+// table, not a column, and all three list endpoints want it identically.
+//
+// Orders whose city matches no town and whose area is unknown get nulls, and
+// the app leaves them off the map rather than inventing a location.
+function withCityCentre(orders) {
+  return orders.map((order) => {
+    const centre = resolveCityCentre(order);
+    return {
+      ...order,
+      city_latitude: centre ? centre.latitude : null,
+      city_longitude: centre ? centre.longitude : null,
+      // 'TOWN' when the city text resolved to a known town, 'AREA' when only
+      // the caza could be placed — a much coarser point, and the app says so
+      // rather than letting a caza centroid pass for a town.
+      city_precision: centre ? centre.precision : null,
+    };
+  });
+}
 
 // Returns all active orders assigned to the authenticated driver.
 // "Active" means any status except DELIVERED or CANCELLED, so the driver
@@ -27,7 +57,7 @@ const { updateDriverLocation } = require("../services/driverService");
 async function getMyOrders(req, res) {
   try {
     const orders = await getOrdersByDriverId(req.driverId);
-    return res.json(orders);
+    return res.json(withCityCentre(orders));
   } catch (error) {
     console.error("Error fetching driver orders:", error);
     return res.status(500).json({ error: "Failed to fetch orders" });
@@ -38,7 +68,7 @@ async function getMyOrders(req, res) {
 async function getMyCompletedOrders(req, res) {
   try {
     const orders = await getCompletedOrdersByDriverId(req.driverId);
-    return res.json(orders);
+    return res.json(withCityCentre(orders));
   } catch (error) {
     console.error("Error fetching completed orders:", error);
     return res.status(500).json({ error: "Failed to fetch completed orders" });
@@ -50,7 +80,7 @@ async function getMyCompletedOrders(req, res) {
 async function getMyReturnedOrders(req, res) {
   try {
     const orders = await getReturnedOrdersByDriverId(req.driverId);
-    return res.json(orders);
+    return res.json(withCityCentre(orders));
   } catch (error) {
     console.error("Error fetching returned orders:", error);
     return res.status(500).json({ error: "Failed to fetch returned orders" });
