@@ -18,7 +18,7 @@
 // window to match: a town centre earns a tighter range than a caza centroid.
 
 const TOWN_COORDS = require("../data/town-coords.json");
-const { resolveTown } = require("./areaLookup");
+const { resolveTown, TOWN_TO_AREA, normalize } = require("./areaLookup");
 
 // Centre of each caza, used when the city text resolves to no known town.
 // Deliberately coarse — this is the "we know roughly where, not where" tier.
@@ -172,6 +172,67 @@ function nearestTown(latitude, longitude) {
   return best && bestKm <= NEAREST_TOWN_MAX_KM ? best.name : null;
 }
 
+// ── Which town an order is actually in ──────────────────────────────────────
+//
+// The city column is the obvious place to look, and for most orders it is
+// enough. But two real orders showed its limits on the same day:
+//
+//   * city "Beirut", address "Achrafieh, Bourj elghazel …" — the city resolves
+//     cleanly, to the centre of municipal Beirut, and the driver sees a pin in
+//     Bachoura for a customer in Achrafieh. The customer put the real
+//     neighbourhood in the address, where nothing was reading it.
+//
+//   * city "Fanar next to bonjus company" — customers type sentences into the
+//     city field, and the address ("Fanar Lebanon") is sometimes the cleaner
+//     of the two.
+//
+// So the town is resolved from both, and the address is allowed to override
+// the city only under strict conditions:
+//
+//   * The city's town must be caza-wide — a key like "beirut" that IS its own
+//     area. A customer who wrote a specific town ("Jounieh") is believed over
+//     whatever their street address happens to mention; one who wrote a whole
+//     caza almost always lives somewhere more specific inside it.
+//
+//   * The address's town must be near the city's — within [MAX_REFINEMENT_KM].
+//     Streets are named after far-away places ("Tripoli street" exists in
+//     Beirut), and a refinement that can move a pin 80 km is worse than none.
+//     The cap keeps the worst case inside the same urban area.
+//
+// When the city resolves to nothing at all, the address is taken as-is — the
+// alternative today is a caza centroid or no pin whatsoever.
+
+// Generous for one urban area, far too small to reach another region's
+// namesake street victimlessly — Beirut to Tripoli is ~80 km.
+const MAX_REFINEMENT_KM = 12;
+
+// True for a town key that is just its own caza — normalize('Beirut') is
+// 'beirut', so city "Beirut" says which caza, not which neighbourhood.
+function isCazaWideTown(town) {
+  return town != null && normalize(TOWN_TO_AREA[town]) === town;
+}
+
+function resolveOrderTown(order) {
+  const cityTown = resolveTown(order?.city);
+  const addressTown = resolveTown(order?.shipping_address);
+
+  if (!cityTown) return addressTown;
+  if (!addressTown || addressTown === cityTown) return cityTown;
+  if (!isCazaWideTown(cityTown)) return cityTown;
+
+  const cityCoords = getTownCoords(cityTown);
+  const addressCoords = getTownCoords(addressTown);
+  if (!cityCoords || !addressCoords) return cityTown;
+
+  const km = haversineKm(
+    cityCoords.latitude,
+    cityCoords.longitude,
+    addressCoords.latitude,
+    addressCoords.longitude
+  );
+  return km <= MAX_REFINEMENT_KM ? addressTown : cityTown;
+}
+
 // Resolves an order to the point the driver is heading for.
 //
 // An exact customer pin, when one happens to exist, always wins: some orders
@@ -189,7 +250,7 @@ function resolveDestination(order) {
     };
   }
 
-  const town = resolveTown(order?.city);
+  const town = resolveOrderTown(order);
   const townCoords = getTownCoords(town);
   if (townCoords) {
     return { ...townCoords, precision: "TOWN", town };
@@ -216,7 +277,7 @@ function resolveDestination(order) {
 // Nothing here promises a doorstep, so the app never routes to it. It is a
 // picture of the run, and the address on the card is what the driver drives to.
 function resolveCityCentre(order) {
-  const town = resolveTown(order?.city);
+  const town = resolveOrderTown(order);
   const townCoords = getTownCoords(town);
   if (townCoords) {
     return { ...townCoords, precision: "TOWN", town };
@@ -232,6 +293,7 @@ function resolveCityCentre(order) {
 
 module.exports = {
   AREA_CENTROIDS,
+  resolveOrderTown,
   haversineKm,
   getTownCoords,
   getAreaCoords,
