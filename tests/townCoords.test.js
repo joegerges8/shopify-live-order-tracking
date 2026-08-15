@@ -133,17 +133,31 @@ test("order #2720: Fraikeh resolves to Freike, not the Metn centroid", () => {
   });
 
   assert.strictEqual(centre.precision, "TOWN");
-  // On the Mar Chaaya ridge: west of Roumieh, northeast of Ain Saadeh.
-  const roumieh = getTownCoords("roumieh");
-  assert.ok(centre.longitude < roumieh.longitude);
+  // The upper-Metn village between Qornet el Hamra and Beit Chabab — its two
+  // adjacent neighbours, both seeded long before it and confirmed against the
+  // real map. The first seeding of Freike put it on the Mar Chaaya ridge, four
+  // kilometres southwest, and a driver caught it; anchoring to both
+  // neighbours means a coordinate that drifts toward the wrong ridge again
+  // fails here instead of on a driver's phone.
+  const qornet = getTownCoords("qornet el hamra");
+  const beitChabab = getTownCoords("beit chabeb");
+  for (const [name, anchor] of [
+    ["Qornet el Hamra", qornet],
+    ["Beit Chabab", beitChabab],
+  ]) {
+    assert.ok(
+      haversineKm(
+        centre.latitude,
+        centre.longitude,
+        anchor.latitude,
+        anchor.longitude
+      ) < 2.5,
+      `Freike neighbours ${name}`
+    );
+  }
   assert.ok(
-    haversineKm(
-      centre.latitude,
-      centre.longitude,
-      roumieh.latitude,
-      roumieh.longitude
-    ) < 2,
-    "Freike and Roumieh are neighbouring villages"
+    centre.latitude > qornet.latitude,
+    "Freike sits north of Qornet el Hamra, as the map draws them"
   );
 
   for (const spelling of ["Friekeh", "Freike", "Frayke"]) {
