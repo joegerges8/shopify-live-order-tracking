@@ -120,3 +120,35 @@ test("a city naming its town exactly is untouched by the refinement", () => {
   });
   assert.strictEqual(town, "jounieh");
 });
+
+test("order #2720: Fraikeh resolves to Freike, not the Metn centroid", () => {
+  // The village was absent from the table entirely, so the order fell to the
+  // caza centroid and the driver read the pin as Roumieh. The customer spelled
+  // it two ways in one checkout — both must resolve, along with the common
+  // variants and one-letter typos the fuzzy tier covers.
+  const centre = resolveCityCentre({
+    city: "Fraikeh",
+    shipping_address: "Fraikeh, Friekeh valley residence, house nb 4",
+    area: "Other",
+  });
+
+  assert.strictEqual(centre.precision, "TOWN");
+  // On the Mar Chaaya ridge: west of Roumieh, northeast of Ain Saadeh.
+  const roumieh = getTownCoords("roumieh");
+  assert.ok(centre.longitude < roumieh.longitude);
+  assert.ok(
+    haversineKm(
+      centre.latitude,
+      centre.longitude,
+      roumieh.latitude,
+      roumieh.longitude
+    ) < 2,
+    "Freike and Roumieh are neighbouring villages"
+  );
+
+  for (const spelling of ["Friekeh", "Freike", "Frayke"]) {
+    const c = resolveCityCentre({ city: spelling, area: "Metn" });
+    assert.strictEqual(c.precision, "TOWN", spelling);
+    assert.strictEqual(c.latitude, centre.latitude, spelling);
+  }
+});
