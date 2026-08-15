@@ -110,6 +110,141 @@ async function getRoute({ originLat, originLng, destLat, destLng }) {
   };
 }
 
+// ── Waypoint optimisation ───────────────────────────────────────────────────
+//
+// The order to drive a set of stops in, which is what puts a driver's list in
+// route order instead of in the order the dispatcher happened to assign them.
+//
+// Google solves this itself: `waypoints=optimize:true|...` on a Directions
+// request returns `waypoint_order`, the stops resequenced into the shortest
+// driving route. It is a real travelling-salesman solve over the road network,
+// so it accounts for the motorway, the one-ways and the mountain that a
+// straight-line sort cannot see.
+//
+// The route is modelled as a round trip: origin and destination are both the
+// warehouse, because the van leaves from there and comes back. That is also
+// what makes every stop optimisable — naming one of them as the destination
+// would pin it last however far out of the way it is.
+
+// Google's cap on waypoints in a single Directions request. Callers are
+// expected to have collapsed stops onto distinct points first (see
+// routeOrderService), which keeps all but the largest runs under it.
+const MAX_WAYPOINTS = 25;
+
+// Returns { ok: true, order } where `order` is the indexes of `stops` in the
+// sequence they should be driven, or { ok: false, status, message }.
+//
+// Like getRoute it never throws: the caller has a straight-line fallback and a
+// Google outage must cost route ordering, not the assignment that triggered it.
+async function optimizeStopOrder({ originLat, originLng, stops }) {
+  const key = serverKey();
+  if (!key) {
+    return {
+      ok: false,
+      status: "NOT_CONFIGURED",
+      message: "GOOGLE_MAPS_SERVER_KEY is not set on the server.",
+    };
+  }
+
+  if (!Array.isArray(stops) || stops.length === 0) {
+    return { ok: true, order: [] };
+  }
+
+  // One stop has only one possible order, and asking Google to confirm that
+  // costs a request. Two stops likewise: whichever is nearer the warehouse
+  // comes first either way, and the caller has already sorted by that.
+  if (stops.length <= 2) {
+    return { ok: true, order: stops.map((_, index) => index) };
+  }
+
+  if (stops.length > MAX_WAYPOINTS) {
+    return {
+      ok: false,
+      status: "TOO_MANY_WAYPOINTS",
+      message: `${stops.length} stops exceeds Google's limit of ${MAX_WAYPOINTS} per request.`,
+    };
+  }
+
+  const coordinates = [originLat, originLng, ...stops.flatMap((s) => [s.latitude, s.longitude])];
+  if (coordinates.some((n) => !Number.isFinite(Number(n)))) {
+    return {
+      ok: false,
+      status: "INVALID_REQUEST",
+      message: "Coordinates must be finite numbers.",
+    };
+  }
+
+  const origin = `${originLat},${originLng}`;
+  const url = new URL(DIRECTIONS_URL);
+  url.searchParams.set("origin", origin);
+  url.searchParams.set("destination", origin);
+  url.searchParams.set("mode", "driving");
+  url.searchParams.set(
+    "waypoints",
+    `optimize:true|${stops.map((s) => `${s.latitude},${s.longitude}`).join("|")}`
+  );
+  url.searchParams.set("key", key);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(url.toString(), { signal: controller.signal });
+  } catch (error) {
+    return {
+      ok: false,
+      status: "UNREACHABLE",
+      message: error?.name === "AbortError" ? "Optimisation request timed out" : "Optimisation request failed",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: `HTTP_${response.status}`,
+      message: data?.error_message || `Optimisation request failed (HTTP ${response.status})`,
+    };
+  }
+
+  if (!data || data.status !== "OK" || !Array.isArray(data.routes) || data.routes.length === 0) {
+    return {
+      ok: false,
+      status: data?.status ?? "UNKNOWN",
+      message: data?.error_message ?? "",
+    };
+  }
+
+  const order = data.routes[0]?.waypoint_order;
+
+  // A route without waypoint_order, or one naming a stop twice or not at all,
+  // would silently drop orders off the driver's list if it were trusted. The
+  // caller's fallback ordering is wrong-but-complete, which is the better of
+  // the two failures.
+  if (!Array.isArray(order) || order.length !== stops.length) {
+    return {
+      ok: false,
+      status: "NO_WAYPOINT_ORDER",
+      message: "Google returned a route without a usable waypoint order.",
+    };
+  }
+
+  const seen = new Set(order);
+  if (seen.size !== stops.length || order.some((i) => !Number.isInteger(i) || i < 0 || i >= stops.length)) {
+    return {
+      ok: false,
+      status: "BAD_WAYPOINT_ORDER",
+      message: "Google's waypoint order did not cover every stop exactly once.",
+    };
+  }
+
+  return { ok: true, order };
+}
+
 // ── Reverse geocoding ───────────────────────────────────────────────────────
 //
 // Turning a driver's coordinates into the name of the town they are in, for
@@ -264,4 +399,10 @@ async function googleReverseGeocodeCity(lat, lng) {
   }
 }
 
-module.exports = { getRoute, isConfigured, reverseGeocodeCity };
+module.exports = {
+  getRoute,
+  isConfigured,
+  reverseGeocodeCity,
+  optimizeStopOrder,
+  MAX_WAYPOINTS,
+};

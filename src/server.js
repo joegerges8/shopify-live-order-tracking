@@ -99,6 +99,11 @@ async function startServer() {
     // order, and a return is dated by the day it happened rather than by the
     // day the order was placed — which used to keep returns of older orders
     // out of the day being read entirely.
+    // Where each order falls in its driver's run. Existing rows stay NULL and
+    // sort to the bottom of the driver's list until the next assignment for
+    // that driver reorders it, so no backfill is required to deploy this —
+    // scripts/resequence-routes.js --all fills them in one pass if wanted.
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS route_sequence INT;`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_started_at TIMESTAMP;`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS returned_at TIMESTAMP;`);
     // Drives the dashboard's retention window for completed orders.
