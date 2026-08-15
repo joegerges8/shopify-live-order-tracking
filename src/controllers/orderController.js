@@ -10,6 +10,7 @@ const {
   updateOrderArea,
 } = require("../services/orderService");
 const { AREAS, UNKNOWN_AREA } = require("../utils/areaLookup");
+const { learnAreaCorrection } = require("../services/areaCorrectionsService");
 const { parseMapLink } = require("../utils/parseMapLink");
 const { importOrdersFromShopify } = require("../services/shopifyService");
 const { getIO, emitToDispatch } = require("../socket");
@@ -184,6 +185,13 @@ async function changeOrderArea(req, res) {
     if (!updated) {
       return res.status(404).json({ error: "Order not found" });
     }
+
+    // The correction also teaches the classifier, so the next order with this
+    // same city files itself instead of landing in 'Other' for the dispatcher
+    // to fix again. Awaited so the mapping is live before the dashboard hears
+    // back; it logs-and-swallows its own failures, so the correction the
+    // dispatcher asked for stands even if the learning does not.
+    await learnAreaCorrection(updated.city, area);
 
     return res.json(updated);
   } catch (error) {

@@ -77,6 +77,17 @@ async function startServer() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    // What the dispatcher's area corrections have taught the classifier: an
+    // unrecognized city string, filed by hand once, files itself from then on.
+    // Keyed by the normalized city text and global across stores — a city is
+    // a place on the ground, not a property of whoever sold the order.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS area_corrections (
+        city_key TEXT PRIMARY KEY,
+        area VARCHAR(50) NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
     await pool.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS store_name VARCHAR(255);`);
     await pool.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();`);
     // Expiring offline tokens: Shopify's access tokens now last 60 minutes and

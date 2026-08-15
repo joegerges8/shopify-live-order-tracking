@@ -1,7 +1,7 @@
 const pool = require("../config/db");
 const { randomUUID } = require("crypto");
 const { getStoreAccess } = require("./shopifyTokens");
-const { resolveAreaOrUnknown } = require("../utils/areaLookup");
+const { resolveAreaWithCorrections } = require("../services/areaCorrectionsService");
 const { extractLineItems } = require("../utils/lineItems");
 const { extractOrderNote } = require("../utils/orderNote");
 
@@ -821,6 +821,9 @@ function getFulfilledAt(order) {
 
 async function upsertImportedOrder(storeId, order) {
   const fields = extractOrderCustomerFields(order);
+  // Same classification as the webhook, corrections first — an import must
+  // not refile a city the dispatcher already taught the system.
+  const area = await resolveAreaWithCorrections(fields.city);
   // Wakilni and the like ship orders the app never sees a webhook for — an
   // order fulfilled while the app was down, or before it was installed. The
   // import is the second chance to notice, so the carrier is read here too.
@@ -896,7 +899,7 @@ async function upsertImportedOrder(storeId, order) {
       fields.customer_email,
       fields.shipping_address,
       fields.city,
-      resolveAreaOrUnknown(fields.city),
+      area,
       fields.country,
       fields.total_price ?? 0,
       fields.financial_status,
