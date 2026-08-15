@@ -203,11 +203,39 @@ function resolveDestination(order) {
   return null;
 }
 
+// Where an order sits on a map that is showing towns rather than doorsteps.
+//
+// This is resolveDestination with its first tier deliberately removed. The ETA
+// wants the most precise point it can get and takes the customer's own pin
+// whenever one exists; the driver app's home map wants the opposite — one
+// consistent point per town, so a driver can read "four in Jounieh, two in
+// Zahle" off the map at a glance. Mixing the two tiers there would scatter the
+// orders that happen to carry a pin away from the town marker their neighbours
+// share, and the count stops being readable.
+//
+// Nothing here promises a doorstep, so the app never routes to it. It is a
+// picture of the run, and the address on the card is what the driver drives to.
+function resolveCityCentre(order) {
+  const town = resolveTown(order?.city);
+  const townCoords = getTownCoords(town);
+  if (townCoords) {
+    return { ...townCoords, precision: "TOWN", town };
+  }
+
+  const areaCoords = getAreaCoords(order?.area);
+  if (areaCoords) {
+    return { ...areaCoords, precision: "AREA", town: null };
+  }
+
+  return null;
+}
+
 module.exports = {
   AREA_CENTROIDS,
   haversineKm,
   getTownCoords,
   getAreaCoords,
   resolveDestination,
+  resolveCityCentre,
   nearestTown,
 };
