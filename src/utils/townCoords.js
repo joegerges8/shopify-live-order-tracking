@@ -126,6 +126,7 @@ const DISPLAY_NAMES = {
   dabye: "Dbayeh",
   dekouane: "Dekwaneh",
   "forn el chebbak": "Furn el Chebbak",
+  fraike: "Freike",
   hadat: "Hadath",
   jounie: "Jounieh",
   maten: "Metn",

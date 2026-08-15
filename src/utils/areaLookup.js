@@ -133,6 +133,12 @@ const TOWN_TO_AREA = {
   sfayleh: "Metn", sfaileh: "Metn", mansourieh: "Metn", mansouriye: "Metn",
   "ain saadeh": "Metn", "ain saade": "Metn", "ain aalak": "Metn",
   "ain alak": "Metn", bsalim: "Metn", mezher: "Metn", roumieh: "Metn",
+  // Freike, the village on the Mar Chaaya ridge between Ain Saade and
+  // Roumieh. One real order spelled it two ways in the same checkout
+  // ("Fraikeh" as the city, "Friekeh" in the address), so the variants are
+  // seeded as generously as the other towns'.
+  freike: "Metn", freikeh: "Metn", fraike: "Metn", fraikeh: "Metn",
+  frayke: "Metn", fraykeh: "Metn", friekeh: "Metn",
   bikfaiya: "Metn", bikfaya: "Metn", beskinta: "Metn",
   "dhour el choueir": "Metn", monteverde: "Metn", montiverdi: "Metn",
   "mar roukoz": "Metn", "mar roukouz": "Metn", sabtieh: "Metn",
