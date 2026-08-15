@@ -182,9 +182,22 @@ function scheduleResequence(driverId) {
 
   const timer = setTimeout(() => {
     pending.delete(key);
-    resequenceDriverRoute(key).catch((error) =>
-      console.error(`[Route order] Driver ${key}: scheduled resequence failed:`, error.message)
-    );
+    resequenceDriverRoute(key)
+      // Logged on the way past, success included. The fallbacks below this are
+      // quiet by design — no Maps key configured is not a warning, it is a
+      // deployment that has not turned Google on — so without a line here the
+      // only way to tell an optimised run from a distance-ordered one would be
+      // to read the database. One line per run is cheap: a run is a
+      // dispatcher's handover, not a request.
+      .then((report) =>
+        console.log(
+          `[Route order] Driver ${key}: ${report.orders} orders over ` +
+            `${report.stops} stops — ${report.source}`
+        )
+      )
+      .catch((error) =>
+        console.error(`[Route order] Driver ${key}: scheduled resequence failed:`, error.message)
+      );
   }, COALESCE_MS);
 
   if (typeof timer.unref === "function") timer.unref();
