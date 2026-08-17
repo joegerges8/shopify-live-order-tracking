@@ -38,6 +38,18 @@ api_version = "2026-04"
   topics = ["orders/fulfilled"]
   uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/orders/fulfilled"
 
+  # An outside carrier — Wakilni and the like — reports its progress against the
+  # fulfilment rather than the order, so orders/fulfilled only ever sees the
+  # first moment. Everything after it — Confirmed, In transit, Delivered —
+  # arrives on these two topics and nowhere else.
+  [[webhooks.subscriptions]]
+  topics = ["fulfillments/create"]
+  uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/fulfillments/create"
+
+  [[webhooks.subscriptions]]
+  topics = ["fulfillments/update"]
+  uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/fulfillments/update"
+
   [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request"]
   uri = "https://dispatcher-dashboard.up.railway.app/webhooks/shopify/customers/data_request"

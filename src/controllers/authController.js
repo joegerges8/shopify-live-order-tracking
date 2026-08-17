@@ -218,9 +218,31 @@ async function syncWebhookSubscriptions() {
       }
 
       const { webhooks } = await existingRes.json();
-      const subscribed = new Set((webhooks || []).map((webhook) => webhook.topic));
+      const subscribed = new Map((webhooks || []).map((w) => [w.topic, w.address]));
+
+      // A subscription pointing somewhere else is the failure that looks like
+      // no failure at all: Shopify reports the topic as subscribed and sends
+      // every event to a host that is not this one. It happens when APP_URL is
+      // wrong or has changed, and the only symptom downstream is data that
+      // never updates. Left in place — deleting another deployment's
+      // subscription would be worse — but said out loud.
+      for (const [topic, address] of subscribed) {
+        if (!WEBHOOK_TOPICS.includes(topic)) continue;
+        const expected = `${APP_URL}/webhooks/shopify/${topic}`;
+        if (address && address !== expected) {
+          console.warn(
+            `[Webhooks] ${store.shop_domain} ${topic} points at ${address}, not ${expected} — ` +
+            `events for it are not reaching this deployment (check APP_URL)`
+          );
+        }
+      }
+
       const missing = WEBHOOK_TOPICS.filter((topic) => !subscribed.has(topic));
       if (missing.length === 0) continue;
+
+      console.log(
+        `[Webhooks] ${store.shop_domain} missing ${missing.length} topic(s): ${missing.join(", ")} — subscribing at ${APP_URL}`
+      );
 
       for (const topic of missing) {
         const response = await fetch(
@@ -237,7 +259,17 @@ async function syncWebhookSubscriptions() {
             }),
           }
         );
-        console.log(`[Webhooks] ${store.shop_domain} subscribed to ${topic} → ${response.status}`);
+        if (response.ok) {
+          console.log(`[Webhooks] ${store.shop_domain} subscribed to ${topic}`);
+          continue;
+        }
+        // Worth the noise: a topic Shopify refuses — a missing scope, an
+        // address it will not accept — is silent otherwise, and the symptom
+        // turns up days later as a status that never updates.
+        const body = (await response.text()).slice(0, 300);
+        console.error(
+          `[Webhooks] ${store.shop_domain} could NOT subscribe to ${topic}: ${response.status} ${body}`
+        );
       }
     } catch (error) {
       console.error(`[Webhooks] ${store.shop_domain} sync failed:`, error.message);

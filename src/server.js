@@ -6,6 +6,29 @@ const app = require("./app");
 const pool = require("./config/db");
 const { init: initSocket } = require("./socket");
 const { syncWebhookSubscriptions } = require("./controllers/authController");
+const { refreshAllCarrierOrders } = require("./services/shopifyService");
+
+// How often unfinished courier orders are read back from Shopify. Frequent
+// enough that a missed webhook costs minutes rather than days, rare enough
+// that it is a rounding error against Shopify's rate limit.
+const CARRIER_REFRESH_MINUTES =
+  Number(process.env.CARRIER_REFRESH_MINUTES) > 0
+    ? Number(process.env.CARRIER_REFRESH_MINUTES)
+    : 10;
+
+function startCarrierRefresh() {
+  const run = () =>
+    refreshAllCarrierOrders().catch((error) =>
+      console.error("[Carrier refresh] Run failed:", error.message)
+    );
+
+  // Once at boot as well: a deploy is exactly when webhooks were missed.
+  run();
+  const timer = setInterval(run, CARRIER_REFRESH_MINUTES * 60 * 1000);
+  // Nothing here should hold the process open on its own.
+  if (typeof timer.unref === "function") timer.unref();
+  console.log(`Courier status refresh running every ${CARRIER_REFRESH_MINUTES} minutes`);
+}
 
 const PORT = process.env.PORT || 3000;
 
@@ -231,6 +254,13 @@ async function startServer() {
     syncWebhookSubscriptions().catch((error) =>
       console.error("[Webhooks] Startup sync failed:", error.message)
     );
+
+    // The safety net under the courier webhooks. They are the fast path and
+    // usually the only one that does anything; this is what makes an order
+    // frozen at "Confirmed" — because a webhook was never subscribed, or was
+    // delivered while the app was down — correct itself instead of staying
+    // wrong until someone notices. Costs one Shopify call per store per run.
+    startCarrierRefresh();
 
     const server = http.createServer(app);
     initSocket(server);
