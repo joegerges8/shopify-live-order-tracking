@@ -295,6 +295,17 @@ function createStatusBadge(order) {
   );
 }
 
+// What the Financial Status column reads. Shopify's own value ('pending',
+// 'paid') except when the driver recorded a Whish transfer at the door — a
+// bare 'paid' would hide the one detail that matters when reconciling cash:
+// this order's money is in the Whish account, not in the driver's bag.
+function financialStatusLabel(order) {
+  if ((order.payment_method || "").toUpperCase() === "WHISH") {
+    return "Paid by Whish";
+  }
+  return order.financial_status ?? "";
+}
+
 /* ===========================
    STATS
 =========================== */
@@ -712,7 +723,7 @@ function renderOrders(orders, drivers) {
         </div>
       </td>
       <td data-label="Total">${order.total_price ?? ""}</td>
-      <td data-label="Financial Status">${order.financial_status ?? ""}</td>
+      <td data-label="Financial Status">${escapeHtml(financialStatusLabel(order))}</td>
       <td data-label="Order Status">${createStatusBadge(order)}</td>
       <td data-label="Assigned Driver">${escapeHtml(assignedDriverName)}</td>
       <td data-label="Assign Driver">

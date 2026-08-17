@@ -92,6 +92,17 @@ CREATE TABLE orders (
                                               -- orders from earnings: no cash is collected
                                               -- for them, so counting them would report the
                                               -- same money twice.
+    payment_method VARCHAR(20),               -- how the customer actually paid, when it
+                                              -- was not the default for the order:
+                                              -- 'WHISH' when the driver recorded a Whish
+                                              -- transfer at the door instead of taking
+                                              -- cash. NULL for ordinary COD / online
+                                              -- payments — financial_status alone covers
+                                              -- those. The dashboard uses it to label the
+                                              -- order "Paid by Whish", and marking it
+                                              -- also sets prepaid = TRUE, because no cash
+                                              -- entered the driver's bag and the earnings
+                                              -- totals must not count it.
     fulfillment_status VARCHAR(50),
     line_items JSONB NOT NULL DEFAULT '[]'::JSONB,  -- what is actually in the bag:
                                               -- [{ title, variant_title, quantity }, …]
@@ -199,6 +210,8 @@ CREATE TABLE orders (
 -- Then backfill the rows that were still undelivered at migration time — for those,
 -- financial_status = 'paid' can only mean the customer paid online:
 --   UPDATE orders SET prepaid = TRUE WHERE financial_status = 'paid' AND delivered_at IS NULL;
+-- Migration for existing databases: ALTER TABLE orders ADD COLUMN payment_method VARCHAR(20);
+-- No backfill needed: NULL simply means the order was paid the ordinary way.
 -- Migration for existing databases: ALTER TABLE orders ADD COLUMN store_id INT REFERENCES stores(id) ON DELETE CASCADE;
 -- After backfilling existing rows, run: ALTER TABLE orders ALTER COLUMN store_id SET NOT NULL;
 
