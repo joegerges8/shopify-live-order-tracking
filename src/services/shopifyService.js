@@ -994,8 +994,132 @@ async function importOrdersFromShopify(storeId, { maxPages = 8 } = {}) {
   return { imported, fetched: seen, failed: failures.length, failures: failures.slice(0, 5) };
 }
 
+/* ===========================
+   CARRIER STATUS REFRESH
+
+   Webhooks are how a courier's progress is meant to arrive, and when they
+   work they arrive in seconds. They are also the part of this that can fail
+   quietly: a subscription that was never created, a topic added after the app
+   was installed, a delivery Shopify gave up retrying, a deploy that was down
+   at the wrong minute. The symptom is an order frozen at "Confirmed" on the
+   board while Shopify has said "Delivered" for days, and nothing in the app
+   ever notices, because nothing ever asks.
+
+   So it asks. Every few minutes the courier orders that have not finished yet
+   are read back from Shopify in a single call, and any whose status moved is
+   brought up to date and tagged. Webhooks stay the fast path; this is the one
+   that guarantees the board is eventually right either way.
+=========================== */
+
+// A courier order stops being worth asking about once it is finished.
+const CARRIER_FINAL_STATUSES = new Set(["delivered", "failure"]);
+
+// How far back to keep asking. An order the courier has not closed out in a
+// month is not going to move because we polled it again.
+const CARRIER_REFRESH_WINDOW_DAYS = 30;
+
+// One Shopify call carries 250 orders, which is far more than any shop has in
+// flight with a courier at once.
+const CARRIER_REFRESH_BATCH = 250;
+
+// Brings one store's unfinished courier orders up to date with Shopify.
+// Returns what it did, so the caller can log it.
+async function refreshCarrierOrderStatuses(storeId) {
+  const open = await pool.query(
+    `SELECT shopify_order_id, carrier_status
+     FROM orders
+     WHERE store_id = $1
+       AND carrier_tracking_url IS NOT NULL
+       AND NOT (LOWER(COALESCE(carrier_status, '')) = ANY($2::text[]))
+       AND COALESCE(fulfilled_at, created_at) >= NOW() - make_interval(days => $3::int)
+     ORDER BY COALESCE(fulfilled_at, created_at) DESC
+     LIMIT ${CARRIER_REFRESH_BATCH}`,
+    [storeId, [...CARRIER_FINAL_STATUSES], CARRIER_REFRESH_WINDOW_DAYS]
+  );
+  if (open.rows.length === 0) return { checked: 0, updated: 0 };
+
+  const store = await getStoreCredentials(storeId);
+  if (!store || !store.access_token) return { checked: 0, updated: 0 };
+
+  const ids = open.rows.map((row) => row.shopify_order_id).join(",");
+  const url =
+    `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders.json` +
+    `?ids=${ids}&status=any&limit=${CARRIER_REFRESH_BATCH}&fields=id,fulfillments`;
+
+  const response = await fetch(url, {
+    headers: { "X-Shopify-Access-Token": store.access_token },
+  });
+  if (!response.ok) {
+    const body = (await response.text()).slice(0, 300);
+    throw new Error(`Shopify GET /orders.json returned ${response.status}: ${body}`);
+  }
+
+  const { orders } = await response.json();
+  const storedStatus = new Map(
+    open.rows.map((row) => [String(row.shopify_order_id), row.carrier_status])
+  );
+
+  let updated = 0;
+  for (const order of orders || []) {
+    const carrier = findCarrierTracking(order);
+    if (!carrier?.status) continue;
+
+    const previous = storedStatus.get(String(order.id));
+    if (carrier.status === previous) continue;
+
+    const result = await pool.query(
+      `UPDATE orders
+       SET carrier_status = $3,
+           carrier_name = COALESCE($4, carrier_name),
+           carrier_tracking_url = COALESCE($5, carrier_tracking_url)
+       WHERE shopify_order_id = $1 AND store_id = $2
+       RETURNING carrier_name`,
+      [order.id, storeId, carrier.status, carrier.company, carrier.url]
+    );
+    if (!result.rowCount) continue;
+
+    updated++;
+    console.log(
+      `[Carrier refresh] Order ${order.id}: ${previous || "none"} → ${carrier.status}`
+    );
+    // Awaited rather than fired off, so a shop with several orders moving at
+    // once does not put a burst of tag writes through Shopify's rate limit.
+    await syncCarrierTagToShopify(storeId, order.id, {
+      carrierName: result.rows[0].carrier_name,
+      carrierStatus: carrier.status,
+    }).catch((error) =>
+      console.error(`[Carrier refresh] Tagging order ${order.id} failed:`, error.message)
+    );
+  }
+
+  return { checked: open.rows.length, updated };
+}
+
+// Every installed store, one after another. One store's Shopify being
+// unreachable must not stop the others from being refreshed.
+async function refreshAllCarrierOrders() {
+  const stores = await pool.query(
+    `SELECT id, shop_domain FROM stores WHERE active = TRUE AND access_token <> ''`
+  );
+
+  for (const store of stores.rows) {
+    try {
+      const { checked, updated } = await refreshCarrierOrderStatuses(store.id);
+      if (updated > 0) {
+        console.log(
+          `[Carrier refresh] ${store.shop_domain}: ${updated} of ${checked} courier orders moved`
+        );
+      }
+    } catch (error) {
+      console.error(`[Carrier refresh] ${store.shop_domain} failed:`, error.message);
+    }
+  }
+}
+
 module.exports = {
   syncOrderTagToShopify,
+  refreshCarrierOrderStatuses,
+  refreshAllCarrierOrders,
   syncCarrierTagToShopify,
   clearCarrierTagInShopify,
   markDeliveredInShopify,
