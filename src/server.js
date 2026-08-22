@@ -164,12 +164,6 @@ async function startServer() {
       );
       console.log(`Added orders.prepaid and backfilled ${backfill.rowCount} undelivered paid orders`);
     }
-    // How the customer actually paid, when it was not the default for the
-    // order: 'WHISH' when the driver recorded a Whish transfer at the door
-    // instead of taking cash. NULL means the ordinary case, so no backfill.
-    await pool.query(
-      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20);`
-    );
     // Orders shipped by an outside carrier — Wakilni and the like — rather than
     // by our own drivers. The carrier writes its tracking link onto the Shopify
     // fulfilment, and that link is what the customer must be sent to.
