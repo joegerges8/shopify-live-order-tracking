@@ -393,49 +393,6 @@ async function postMyOrderDeliveryStart(req, res) {
   }
 }
 
-// The customer decided at the door to pay by Whish transfer instead of cash.
-//
-// The driver taps "Paid by Whish" on the order detail screen and this records
-// it: paid in Shopify and locally, payment_method = 'WHISH' so the dashboard
-// reads "Paid by Whish" rather than a bare "paid", and prepaid = TRUE so the
-// amount stays out of the cash totals — the driver is carrying no money for
-// this order, and counting it would tell the dispatcher to collect cash that
-// was never in the bag. The delivery status is untouched; marking the order
-// delivered is still its own step.
-//
-// Shopify is written first (inside markOrderPaid) and a refusal fails the
-// request, so the app never shows "Paid by Whish" for an order the store
-// still holds as payment pending.
-async function postMyOrderWhishPayment(req, res) {
-  try {
-    const orderId = Number(req.params.id);
-    if (!Number.isFinite(orderId)) {
-      return res.status(400).json({ error: "Invalid order id" });
-    }
-
-    // Ownership check first: markOrderPaid is store-scoped, not driver-scoped,
-    // so the driver's claim to this order has to be settled here.
-    const order = await getOrderByIdForDriver(orderId, req.driverId);
-    if (!order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    const updated = await markOrderPaid(order.id, order.store_id, {
-      method: "WHISH",
-    });
-    if (!updated) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    return res.json(updated);
-  } catch (error) {
-    console.error("Error recording Whish payment:", error);
-    return res
-      .status(502)
-      .json({ error: error.message || "Failed to record the Whish payment" });
-  }
-}
-
 // The longest driver note the backend will store. Notes are typed on a phone
 // and read on a phone, so this is generous rather than restrictive; it exists
 // to stop a stuck key or a paste from filling the column.
@@ -499,6 +456,5 @@ module.exports = {
   postMyOrderLocation,
   patchMyOrderStatus,
   postMyOrderDeliveryStart,
-  postMyOrderWhishPayment,
   patchMyOrderNote,
 };

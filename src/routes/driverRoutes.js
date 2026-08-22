@@ -24,7 +24,6 @@
 //     POST   /api/drivers/me/orders/:id/location     — post a GPS ping
 //     PATCH  /api/drivers/me/orders/:id/status       — update delivery status
 //     POST   /api/drivers/me/orders/:id/start        — driver set off with this order
-//     POST   /api/drivers/me/orders/:id/whish-payment — customer paid by Whish at the door
 //     PATCH  /api/drivers/me/orders/:id/note         — save the driver's own note
 //
 // IMPORTANT: The /me/orders/completed and /me/orders/returned routes MUST be
@@ -54,7 +53,6 @@ const {
   postMyOrderLocation,
   patchMyOrderStatus,
   postMyOrderDeliveryStart,
-  postMyOrderWhishPayment,
   patchMyOrderNote,
 } = require("../controllers/driverSelfController");
 
@@ -110,11 +108,6 @@ router.patch("/me/orders/:id/status", requireDriverAuth, patchMyOrderStatus);
 // Records that the driver has set off with this order ("Start Delivery").
 // Stamps the time only — the order's status is left to the dispatcher.
 router.post("/me/orders/:id/start", requireDriverAuth, postMyOrderDeliveryStart);
-
-// Records that the customer paid this order by Whish transfer at the door.
-// Marks the order paid in Shopify and locally, labels it 'Paid by Whish' on
-// the dashboard, and keeps its amount out of the cash/earnings totals.
-router.post("/me/orders/:id/whish-payment", requireDriverAuth, postMyOrderWhishPayment);
 
 // Saves the driver's own note on a specific order.
 router.patch("/me/orders/:id/note", requireDriverAuth, patchMyOrderNote);
