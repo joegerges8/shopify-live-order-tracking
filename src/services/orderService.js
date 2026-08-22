@@ -468,19 +468,32 @@ async function updateOrderStatus(orderId, status, storeId) {
 //     either recorded automatically when the driver marks the order
 //     delivered or entered by hand afterwards if that sync failed. That
 //     money is real, so prepaid stays as it was.
-async function markOrderPaid(orderId, storeId) {
+//
+// method — 'WHISH' when the customer paid by Whish transfer at the door
+// instead of handing over cash. That is stored in payment_method so the
+// dashboard can say "Paid by Whish" rather than a bare "paid", and prepaid is
+// set TRUE regardless of delivery state: no matter when the driver taps the
+// button, no cash entered their bag, so the amount must stay out of the cash
+// and earnings totals on both the dashboard and the app.
+async function markOrderPaid(orderId, storeId, { method = null } = {}) {
   const order = await getOrderById(orderId, storeId);
   if (!order) return null;
 
   await markOrderPaidInShopify(storeId, order.shopify_order_id);
 
+  const isWhish = method === "WHISH";
   const result = await pool.query(
     `UPDATE orders
      SET financial_status = 'paid',
-         prepaid = CASE WHEN delivered_at IS NULL THEN TRUE ELSE prepaid END
+         payment_method = COALESCE($3, payment_method),
+         prepaid = CASE
+           WHEN $4 THEN TRUE
+           WHEN delivered_at IS NULL THEN TRUE
+           ELSE prepaid
+         END
      WHERE id = $1 AND store_id = $2
      RETURNING *`,
-    [orderId, storeId]
+    [orderId, storeId, isWhish ? "WHISH" : null, isWhish]
   );
   return result.rows[0];
 }

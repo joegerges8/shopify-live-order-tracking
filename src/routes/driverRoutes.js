@@ -103,6 +103,11 @@ router.post("/me/orders/:id/location", requireDriverAuth, postMyOrderLocation);
 // sends it when a delivery was marked with no signal and is only reaching us
 // now, so the order is dated to when the driver finished it rather than to
 // when their phone found a connection.
+//
+// Also accepts an optional payment_method ('WHISH') with DELIVERED — the
+// "Delivered & Paid by Whish" button. The order is marked paid in Shopify as
+// a Whish transfer, labelled 'Paid by Whish' on the dashboard, and its amount
+// is kept out of the cash/earnings totals since no cash was collected.
 router.patch("/me/orders/:id/status", requireDriverAuth, patchMyOrderStatus);
 
 // Records that the driver has set off with this order ("Start Delivery").

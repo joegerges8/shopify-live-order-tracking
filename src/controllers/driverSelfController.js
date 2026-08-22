@@ -269,7 +269,11 @@ async function patchMyOrderStatus(req, res) {
   try {
     const orderId = Number(req.params.id);
     const driverId = req.driverId;
-    const { status, occurred_at: occurredAtRaw } = req.body || {};
+    const {
+      status,
+      occurred_at: occurredAtRaw,
+      payment_method: paymentMethodRaw,
+    } = req.body || {};
 
     const validStatuses = [
       "ASSIGNED",
@@ -290,6 +294,22 @@ async function patchMyOrderStatus(req, res) {
 
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: "Invalid status value" });
+    }
+
+    // How the customer paid, when it was not cash: the app sends 'WHISH' with
+    // DELIVERED when the driver used the "Delivered & Paid by Whish" button —
+    // the customer decided at the door to transfer instead of handing over
+    // cash. Carried on the status request rather than as its own endpoint so
+    // it rides the app's offline queue: a Whish delivery marked in a dead
+    // spot reaches us whenever the signal returns, payment method intact.
+    const paymentMethod = paymentMethodRaw == null ? null : String(paymentMethodRaw);
+    if (paymentMethod !== null && paymentMethod !== "WHISH") {
+      return res.status(400).json({ error: "Invalid payment_method value" });
+    }
+    if (paymentMethod && status !== "DELIVERED") {
+      return res
+        .status(400)
+        .json({ error: "payment_method is only accepted with status DELIVERED" });
     }
 
     const updated = await updateDriverOrderStatus(
@@ -340,12 +360,18 @@ async function patchMyOrderStatus(req, res) {
       markDeliveredInShopify(updated.store_id, updated.shopify_order_id, updated).catch(err =>
         console.error("[Shopify sync] driver mark delivered failed:", err.message)
       );
-      // The driver marking a delivery done is when cash on delivery is
-      // collected, so record the payment in Shopify. A failure is logged
-      // rather than shown to the driver — the dispatcher sees the order still
-      // reading as unpaid on the dashboard and can mark it there.
+      // The driver marking a delivery done is when the payment happens, so
+      // record it in Shopify — as a Whish transfer when the driver said so,
+      // as the ordinary cash payment otherwise. A Whish payment also sets
+      // payment_method and prepaid on the row (see markOrderPaid), which is
+      // what labels the dashboard "Paid by Whish" and keeps the amount out
+      // of the cash totals. A failure is logged rather than shown to the
+      // driver — the dispatcher sees the order still reading as unpaid on
+      // the dashboard and can mark it there.
       try {
-        const paidRow = await markOrderPaid(updated.id, updated.store_id);
+        const paidRow = await markOrderPaid(updated.id, updated.store_id, {
+          method: paymentMethod,
+        });
         if (paidRow) Object.assign(updated, paidRow);
       } catch (error) {
         console.error("[Shopify sync] driver mark paid failed:", error.message);
