@@ -19,7 +19,7 @@
 //     not in the bag. The driver app draws the same line (OrderModel.earnedPrice)
 //     and the two must not disagree.
 //
-//  3. Driver pay is a flat fee per completed delivery — the "$2 rule". It is
+//  3. Driver pay is a flat fee per completed delivery — the "$2.50 rule". It is
 //     paid for making the trip, so a prepaid order earns the fee like any
 //     other even though it brought in no cash. This mirrors driverPayFor() in
 //     the driver app; DRIVER_FEE_PER_DELIVERY changes both only if it is
@@ -31,10 +31,11 @@
 
 const pool = require("../config/db");
 
-// What the store pays a driver for one completed delivery, in whole currency
-// units. Overridable so a store on a different rate does not have to fork the
-// code, but the default is the arrangement the driver app ships with.
-const DEFAULT_FEE_PER_DELIVERY = 2;
+// What the store pays a driver for one completed delivery. Not necessarily a
+// whole number of currency units. Overridable so a store on a different rate
+// does not have to fork the code, but the default is the arrangement the
+// driver app ships with.
+const DEFAULT_FEE_PER_DELIVERY = 2.5;
 
 function feePerDelivery() {
   const configured = Number(process.env.DRIVER_FEE_PER_DELIVERY);
@@ -203,7 +204,7 @@ async function getDriverPerformance(storeId, { from, to }) {
 
 // The two derived figures the dispatcher actually acts on.
 //
-// pay_owed is the $2 rule applied to the period's deliveries. cash_to_hand_in
+// pay_owed is the $2.50 rule applied to the period's deliveries. cash_to_hand_in
 // is what should physically come back across the table: the cash the driver
 // collected, minus the pay they keep out of it. Paying the driver from the bag
 // they are already holding is how this is settled in practice, so the number is
