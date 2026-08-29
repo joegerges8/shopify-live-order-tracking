@@ -4,6 +4,7 @@ const { getStoreAccess } = require("./shopifyTokens");
 const { resolveAreaWithCorrections } = require("../services/areaCorrectionsService");
 const { extractLineItems } = require("../utils/lineItems");
 const { extractOrderNote } = require("../utils/orderNote");
+const { resolveOrderTotal } = require("../utils/orderTotal");
 
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-04";
 
@@ -183,7 +184,10 @@ function extractOrderCustomerFields(order) {
       getAnyNoteAttribute(order, ["city", "delivery_city", "delivery city", "shipping_city", "shipping city"])
     ),
     country: firstNonBlank(...addresses.map((item) => item.country)),
-    total_price: order.total_price ?? null,
+    // The amount the order is worth after any edit or refund, not the one it
+    // was placed at — see resolveOrderTotal. Re-importing is how an order
+    // edited while the app was down gets its price put right.
+    total_price: resolveOrderTotal(order),
     financial_status: order.financial_status ?? null,
     fulfillment_status: order.fulfillment_status ?? null,
   };
@@ -209,6 +213,7 @@ async function fetchOrderCustomerFieldsFromShopify(storeId, shopifyOrderId) {
     "billing_address",
     "note_attributes",
     "total_price",
+    "current_total_price",
     "financial_status",
     "fulfillment_status",
   ].join(",");
