@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "node --test scripts/check-route-order.js tests/townCoords.test.js tests/areaCorrections.test.js"
+    "test": "node --test scripts/check-route-order.js tests/townCoords.test.js tests/areaCorrections.test.js tests/orderEdits.test.js"
   },
   "keywords": [],
   "author": "",

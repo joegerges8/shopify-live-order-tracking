@@ -12,6 +12,7 @@ const {
 const { getDriverNameById } = require("../services/orderService");
 const { extractLineItems } = require("../utils/lineItems");
 const { extractOrderNote } = require("../utils/orderNote");
+const { resolveOrderTotal } = require("../utils/orderTotal");
 
 function parseWebhookOrder(req) {
   return JSON.parse(req.body.toString("utf8"));
@@ -156,7 +157,7 @@ async function handleOrderCreated(req, res) {
     // covers the rest. Falls back to 'Other' rather than null so the
     // dashboard filter and the driver app always have something to group by.
     const area = await resolveAreaWithCorrections(city);
-    const totalPrice = order.total_price || 0;
+    const totalPrice = resolveOrderTotal(order) ?? 0;
     const financialStatus = order.financial_status || null;
     const fulfillmentStatus = order.fulfillment_status || null;
 
@@ -250,17 +251,27 @@ async function handleOrderCreated(req, res) {
   }
 }
 
-// orders/updated fires on every edit to an order, which is how a note written
-// in the Shopify admin after the order was placed reaches the driver — the
+// orders/updated fires on every edit to an order. Two things are read from it,
+// and nothing else.
+//
+// The note, written in the Shopify admin after the order was placed — the
 // normal case, since the merchant reads the order first and then writes the
 // instructions for the driver.
 //
-// The handler deliberately touches nothing but the note. This topic also fires
-// for the app's own writes (delivery tags, fulfilment, marking COD orders
-// paid), and the payload of those echoes would otherwise fight the dispatcher's
-// state: a driver's status, a corrected area or the prepaid flag would be
-// rewritten from a stale Shopify snapshot. Orders unknown to the database are
-// ignored rather than inserted — orders/create owns that.
+// And what the order is made of: the products and the amount due. A customer
+// ringing up to drop an item is an order edit in the Shopify admin, and this
+// topic is the only notice of it. Without it the dashboard kept quoting the
+// price the order was placed at and the driver went out to collect it, cash in
+// hand, for a bag that no longer matched.
+//
+// Everything else in the payload is deliberately ignored. This topic also
+// fires for the app's own writes (delivery tags, fulfilment, marking COD
+// orders paid), and those echoes would otherwise fight the dispatcher's state:
+// a driver's status, a corrected area or the prepaid flag would be rewritten
+// from a stale Shopify snapshot. The contents and the total are safe to take
+// from any of them — an echo carries the order as Shopify currently has it,
+// which for those two columns is exactly the truth we want. Orders unknown to
+// the database are ignored rather than inserted — orders/create owns that.
 async function handleOrderUpdated(req, res) {
   try {
     const order = parseWebhookOrder(req);
@@ -275,13 +286,36 @@ async function handleOrderUpdated(req, res) {
       return res.status(200).send("Store not found");
     }
 
-    // Written straight through, null included: the merchant deleting a note in
-    // Shopify has to remove it from the driver's screen too, so this is the
-    // one path that clears the column.
-    await pool.query(
-      `UPDATE orders SET note = $1 WHERE shopify_order_id = $2 AND store_id = $3`,
-      [extractOrderNote(order), shopifyOrderId, storeId]
+    const lineItems = extractLineItems(order);
+    const totalPrice = resolveOrderTotal(order);
+
+    // The note is written straight through, null included: the merchant
+    // deleting a note in Shopify has to remove it from the driver's screen
+    // too, so this is the one path that clears the column.
+    //
+    // The total and the products are only written when the payload carries
+    // them. Shopify sends trimmed payloads for some updates, and an order that
+    // still has products must not be emptied because one arrived without them
+    // — but a genuine edit that removes a product leaves the others in place,
+    // so a non-empty list always wins outright rather than being merged.
+    const result = await pool.query(
+      `UPDATE orders
+       SET note = $1,
+           total_price = COALESCE($4, total_price),
+           line_items = CASE
+             WHEN jsonb_array_length($5::JSONB) > 0 THEN $5::JSONB
+             ELSE line_items
+           END
+       WHERE shopify_order_id = $2 AND store_id = $3
+       RETURNING total_price`,
+      [extractOrderNote(order), shopifyOrderId, storeId, totalPrice, JSON.stringify(lineItems)]
     );
+
+    if (result.rowCount && totalPrice !== null) {
+      console.log(
+        `[Webhook] Order ${shopifyOrderId} updated — total now ${result.rows[0].total_price}, ${lineItems.length} item(s)`
+      );
+    }
 
     return res.status(200).send("Webhook received");
   } catch (error) {

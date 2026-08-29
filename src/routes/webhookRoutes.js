@@ -22,7 +22,8 @@ router.post(
   handleOrderCreated
 );
 
-// Carries the order note when it is written or edited in the Shopify admin.
+// Carries the order note, and the products and total after an order is edited
+// in the Shopify admin.
 router.post(
   "/orders/updated",
   express.raw({ type: "*/*" }),
