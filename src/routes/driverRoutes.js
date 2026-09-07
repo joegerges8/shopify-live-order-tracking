@@ -16,6 +16,7 @@
 //
 //   Protected routes (JWT required via requireDriverAuth middleware):
 //     GET    /api/drivers/me                         — get own profile
+//     POST   /api/drivers/me/refresh                 — renew the session token
 //     POST   /api/drivers/me/password                — change password
 //     GET    /api/drivers/me/orders                  — active assigned orders
 //     GET    /api/drivers/me/orders/completed        — completed (delivered) orders
@@ -42,6 +43,7 @@ const {
   signupDriver,
   loginDriver,
   getMe,
+  refreshToken,
   changePassword,
 } = require("../controllers/driverAuthController");
 
@@ -75,6 +77,9 @@ router.post("/login", loginDriver);
 // ── Protected self-service routes ─────────────────────────────────────────
 // requireDriverAuth verifies the Bearer token and sets req.driverId.
 router.get("/me", requireDriverAuth, getMe);
+// Hands back a new 30-day token while the current one is still valid. The app
+// calls it on every launch so a working driver's session never runs out.
+router.post("/me/refresh", requireDriverAuth, refreshToken);
 router.post("/me/password", requireDriverAuth, changePassword);
 
 // Returns only active (non-delivered, non-cancelled) orders for this driver.

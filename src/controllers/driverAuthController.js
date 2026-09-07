@@ -129,6 +129,36 @@ async function loginDriver(req, res) {
   }
 }
 
+// Issues a fresh token to a driver whose current one still verifies.
+//
+// Tokens expire 30 days after login, and until this existed nothing renewed
+// them: a driver who stayed logged in simply stopped being able to reach the
+// backend one day, with every request answering 401 and the app blaming their
+// phone's location settings. The app now calls this on every launch, so a
+// driver who opens the app at least once a month never sees the expiry at all,
+// and one who does not is sent back to the login screen with a clear message
+// rather than left with a dead session.
+//
+// Sits behind requireDriverAuth, so an expired or tampered token cannot be
+// used to mint a new one — only a valid one can be extended.
+async function refreshToken(req, res) {
+  try {
+    const driver = await getPublicDriverById(req.driverId);
+    if (!driver) {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+
+    return res.json({ token: signDriverToken(driver.id), driver });
+  } catch (error) {
+    console.error("Error refreshing driver token:", error);
+    const msg =
+      (error && error.message === "Server misconfigured: missing JWT_SECRET")
+        ? error.message
+        : "Failed to refresh session";
+    return res.status(500).json({ error: msg });
+  }
+}
+
 async function getMe(req, res) {
   try {
     const driverId = req.driverId;
@@ -205,5 +235,6 @@ module.exports = {
   signupDriver,
   loginDriver,
   getMe,
+  refreshToken,
   changePassword,
 };
