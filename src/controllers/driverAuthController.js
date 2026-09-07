@@ -16,6 +16,40 @@ const {
   getPublicDriverById,
   updateDriverPassword,
 } = require("../services/driverService");
+const { phonesMatch } = require("../utils/driverPhone");
+
+const MIN_PASSWORD_LENGTH = 6;
+
+// How many times one email may be tried on the forgot-password endpoint before
+// it is told to wait. The check behind that endpoint is email + phone, and a
+// phone number is a short thing to guess, so the endpoint cannot be left open
+// to unlimited tries. Five in a quarter of an hour is plenty for a driver who
+// mistyped their number once or twice, and useless for a script.
+//
+// Kept in memory on purpose: the backend runs as a single Railway instance, a
+// restart resetting the counters costs nothing, and a table for this would be
+// more machinery than the problem deserves.
+const RESET_ATTEMPT_LIMIT = 5;
+const RESET_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+const resetAttempts = new Map(); // lower-cased email -> { count, windowStart }
+
+function tooManyResetAttempts(emailKey) {
+  const now = Date.now();
+  const entry = resetAttempts.get(emailKey);
+
+  if (!entry || now - entry.windowStart > RESET_ATTEMPT_WINDOW_MS) {
+    resetAttempts.set(emailKey, { count: 1, windowStart: now });
+    return false;
+  }
+
+  entry.count += 1;
+  return entry.count > RESET_ATTEMPT_LIMIT;
+}
+
+// Exposed for tests only, so a run does not inherit another test's counter.
+function clearResetAttempts() {
+  resetAttempts.clear();
+}
 
 function signDriverToken(driverId) {
   const secret = (process.env.JWT_SECRET || "").trim();
@@ -231,10 +265,106 @@ async function changePassword(req, res) {
   }
 }
 
+// Sets a new password for a driver who has forgotten theirs, from the login
+// screen, with no session.
+//
+// The proof that the person is the driver is that they know both the email and
+// the phone number on the account. That is deliberately the free option — no
+// email sending, no dispatcher in the loop — and it is weaker than an emailed
+// code: anyone who knows a driver's email and phone can take the account. The
+// owner chose it knowing that. What limits the damage is the rate limit above
+// and the phone being compared in full, not just its last digits.
+//
+// One 401 message covers "no such email" and "phone does not match", so the
+// endpoint cannot be used to find out which emails have accounts.
+//
+// Only password_hash changes. The driver's id, name, email, phone, orders and
+// history stay exactly as they were — this is a reset, not a re-creation.
+// Sessions already open on other phones stay valid: tokens are not tied to the
+// hash, and forcing them out would need a token version column for a case
+// that does not arise for a one-driver-one-phone team.
+async function resetForgottenPassword(req, res) {
+  try {
+    const { email, phone, new_password } = req.body || {};
+
+    if (!email || !phone || !new_password) {
+      return res
+        .status(400)
+        .json({ error: "email, phone and new_password are required" });
+    }
+
+    if (String(new_password).length < MIN_PASSWORD_LENGTH) {
+      return res
+        .status(400)
+        .json({ error: `new_password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    }
+
+    const emailKey = String(email).trim().toLowerCase();
+    if (tooManyResetAttempts(emailKey)) {
+      return res.status(429).json({ error: "Too many attempts. Try again later." });
+    }
+
+    const driver = await getDriverByEmail(String(email).trim());
+    if (!driver || !phonesMatch(driver.phone, phone)) {
+      return res.status(401).json({ error: "Email and phone number do not match" });
+    }
+
+    const newHash = await bcrypt.hash(String(new_password), 10);
+    await updateDriverPassword(driver.id, newHash);
+    resetAttempts.delete(emailKey);
+
+    return res.json({ message: "Password reset" });
+  } catch (error) {
+    console.error("Error resetting driver password:", error);
+    return res.status(500).json({ error: "Failed to reset password" });
+  }
+}
+
+// Sets a new password for a logged-in driver who does not know their current
+// one — the "Forgot your current password?" link on the profile screen.
+//
+// No current password is asked for because the session is the proof: the
+// request carries a token that requireDriverAuth has just verified, which is
+// stronger evidence than a password typed into a form. changePassword keeps
+// asking for the current one so that a phone left unlocked cannot have its
+// password quietly changed; this route accepts that trade for the driver who
+// is locked out of their own settings.
+async function resetOwnPassword(req, res) {
+  try {
+    const { new_password } = req.body || {};
+
+    if (!new_password) {
+      return res.status(400).json({ error: "new_password is required" });
+    }
+
+    if (String(new_password).length < MIN_PASSWORD_LENGTH) {
+      return res
+        .status(400)
+        .json({ error: `new_password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    }
+
+    const driver = await getPublicDriverById(req.driverId);
+    if (!driver) {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+
+    const newHash = await bcrypt.hash(String(new_password), 10);
+    await updateDriverPassword(driver.id, newHash);
+
+    return res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    console.error("Error resetting own driver password:", error);
+    return res.status(500).json({ error: "Failed to reset password" });
+  }
+}
+
 module.exports = {
   signupDriver,
   loginDriver,
   getMe,
   refreshToken,
   changePassword,
+  resetForgottenPassword,
+  resetOwnPassword,
+  clearResetAttempts,
 };

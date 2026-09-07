@@ -6,6 +6,7 @@
 //   Public routes (no authentication required):
 //     POST /api/drivers/signup  — register a new driver account
 //     POST /api/drivers/login   — log in and receive a JWT token
+//     POST /api/drivers/reset-password — forgot password: email + phone → new password
 //     GET  /api/drivers/        — list all drivers (dispatcher panel)
 //     POST /api/drivers/        — create a driver (dispatcher panel)
 //
@@ -18,6 +19,7 @@
 //     GET    /api/drivers/me                         — get own profile
 //     POST   /api/drivers/me/refresh                 — renew the session token
 //     POST   /api/drivers/me/password                — change password
+//     POST   /api/drivers/me/password/reset          — set a new password without the current one
 //     GET    /api/drivers/me/orders                  — active assigned orders
 //     GET    /api/drivers/me/orders/completed        — completed (delivered) orders
 //     GET    /api/drivers/me/orders/returned         — returned orders
@@ -45,6 +47,8 @@ const {
   getMe,
   refreshToken,
   changePassword,
+  resetForgottenPassword,
+  resetOwnPassword,
 } = require("../controllers/driverAuthController");
 
 const {
@@ -73,6 +77,10 @@ const {
 // ── Public auth routes ─────────────────────────────────────────────────────
 router.post("/signup", signupDriver);
 router.post("/login", loginDriver);
+// Forgot password from the login screen. Public by nature — the driver has no
+// session — and guarded by an email + phone match and a per-email attempt
+// limit inside the controller.
+router.post("/reset-password", resetForgottenPassword);
 
 // ── Protected self-service routes ─────────────────────────────────────────
 // requireDriverAuth verifies the Bearer token and sets req.driverId.
@@ -81,6 +89,9 @@ router.get("/me", requireDriverAuth, getMe);
 // calls it on every launch so a working driver's session never runs out.
 router.post("/me/refresh", requireDriverAuth, refreshToken);
 router.post("/me/password", requireDriverAuth, changePassword);
+// The same, for a logged-in driver who has forgotten their current password:
+// the verified token stands in for it.
+router.post("/me/password/reset", requireDriverAuth, resetOwnPassword);
 
 // Returns only active (non-delivered, non-cancelled) orders for this driver.
 router.get("/me/orders", requireDriverAuth, getMyOrders);
